@@ -17,7 +17,6 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
@@ -31,6 +30,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PlannedAgainst;
+import pl.skidam.automodpack_core.update.UpdateJournal;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -63,7 +63,7 @@ class BootRecoveryStaleReviewTest {
 					new ClientConfigJsons.ClientConfigFieldsV3(), modpackId, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			ClientConfigJsons.ClientConfigFieldsV3 expectedConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-			ConfigTools.writeAtomic(storage.transactionFile(), UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
+			new UpdateJournal(storage).write(UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
 
 			new ClientSelectionStore(storage.selectionFile()).remove(modpackId);
 			BootRecovery.BootDecision decision = new BootRecovery(storage, TestEnvironment.noopLoader()).recover();

@@ -145,8 +145,9 @@ public final class ClientGenerationStore {
 	private void addPendingPaths(PackOwnedFiles.Builder owned, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
 		Set<String> planned = new TreeSet<>();
 		try {
-			UpdateTransaction pending = UpdateTransaction.readWithoutRepair(storage.transactionFile());
-			if (pending == null) return;
+			UpdateJournal.Cursor cursor = new UpdateJournal(storage).readWithoutRepair();
+			if (cursor == null) return;
+			UpdateTransaction pending = cursor.transaction();
 			Set<String> ships = pending.ownershipLedger == null ? Set.of() : shippedPaths(OwnershipLedger.fromFields(pending.ownershipLedger));
 			for (UpdatePlan.ProjectedFile row : pending.plan().projectedFinalState()) {
 				String path = LogicalPath.normalize(row.relativePath());

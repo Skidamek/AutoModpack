@@ -1,11 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -14,7 +9,6 @@ import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
@@ -26,15 +20,15 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 /**
  * The single write-ahead record for one client update. It carries the reviewed {@link UpdatePlan} itself - the one
  * durable spelling of what this update means - plus the transactional context the plan cannot know (the observed
- * client state it was planned against, the selection intents, the target's ledger) and the execution lifecycle.
+ * client state it was planned against, the selection intents, the target's ledger) and the execution result. The
+ * execution phase is not part of it: {@link UpdateJournal} owns that, one file, one carrier.
  */
 public final class UpdateTransaction {
-	public static final int CURRENT_SCHEMA_VERSION = 1;
+	public static final int CURRENT_SCHEMA_VERSION = 2;
 
 	public int schemaVersion;
 	public String transactionId;
 	public Purpose purpose;
-	public Phase phase;
 	/** The durable plan. A class tree, not records: the Gson shipped in Minecraft 1.18 cannot deserialize records. */
 	public UpdatePlan plan;
 	public String targetPlatform;
@@ -59,27 +53,6 @@ public final class UpdateTransaction {
 	public String resultMessage;
 
 	public UpdateTransaction() {}
-
-	/**
-	 * Reads the persisted transaction file, returning null when none exists; unusable content is set aside as evidence
-	 * and treated as absent, since the replan recovery rebuilds from the leftover directories, while read failures propagate.
-	 */
-	public static UpdateTransaction read(Path path) throws IOException {
-		return ConfigTools.readState(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
-	}
-
-	/**
-	 * Reads the persisted transaction for an observer: unusable content throws and stays where recovery will find it,
-	 * and a journal a finishing commit retires during the read is no pending update.
-	 */
-	public static UpdateTransaction readWithoutRepair(Path path) throws IOException {
-		try {
-			return ConfigTools.readUnique(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
-		} catch (IOException e) {
-			if (e instanceof NoSuchFileException || !Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
-			throw e;
-		}
-	}
 
 	/**
 	 * The document's completeness contract: a transaction without a whole, constructor-validated plan is unusable
@@ -161,7 +134,6 @@ public final class UpdateTransaction {
 		transaction.schemaVersion = CURRENT_SCHEMA_VERSION;
 		transaction.transactionId = UUID.randomUUID().toString();
 		transaction.purpose = purpose;
-		transaction.phase = Phase.PLANNED;
 		return transaction;
 	}
 
@@ -228,10 +200,7 @@ public final class UpdateTransaction {
 		PREPARING,
 		/** Every live operation landed and the projection convergence may have begun: persisted before its first write. */
 		PROJECTED,
-		/** Written only by older versions, between the two moves of their incoming/backup swap; read as PROJECTED. */
-		SWAPPING,
-		COMMITTED,
-		DEFERRED
+		COMMITTED
 	}
 
 	public enum Purpose {

@@ -36,8 +36,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * <p>
  * The committed {@code active/} tree is the projection the game loads. A pending
  * transaction is only treated as that projection after publication has started
- * (the phase is PROJECTED or later, or an older version's incoming/backup directory
- * still marks its swap). An unpublished
+ * (the journal's phase is PROJECTED or later). An unpublished
  * deferred request keeps live observation so extras and missing files stay
  * visible. Game-directory mutations remain an independent observation, with
  * pending live paths attached so a replan can skip work the transaction already
@@ -46,25 +45,29 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  */
 public final class ClientProjectionView {
 	private final ClientStorage storage;
-	private final UpdateTransaction pending;
+	private final UpdateJournal.Cursor observation;
 	private boolean stagedTargetResolved;
 	private ModpackJsons.ModpackContentFields stagedTarget;
 
-	private ClientProjectionView(ClientStorage storage, UpdateTransaction pending) {
+	private ClientProjectionView(ClientStorage storage, UpdateJournal.Cursor observation) {
 		this.storage = Objects.requireNonNull(storage, "storage");
-		this.pending = pending;
+		this.observation = observation;
 	}
 
 	/** Observes the journal once; every answer this instance gives is that observation. */
 	public static ClientProjectionView observe(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		return new ClientProjectionView(storage, UpdateTransaction.read(storage.transactionFile()));
+		return new ClientProjectionView(storage, new UpdateJournal(storage).observe());
+	}
+
+	private UpdateTransaction pending() {
+		return observation == null ? null : observation.transaction();
 	}
 
 	/** Returns the target represented by the published projection. */
 	public ModpackJsons.ModpackContentFields target() throws IOException {
-		if (mutationStarted(storage, pending)) {
-			ModpackJsons.ModpackContentFields staged = stagedTarget(pending);
+		if (mutationStarted(observation)) {
+			ModpackJsons.ModpackContentFields staged = stagedTarget(pending());
 			if (staged != null) return staged;
 		}
 		return committedTarget(storage);
@@ -77,6 +80,7 @@ public final class ClientProjectionView {
 	 */
 	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current) throws IOException {
 		Objects.requireNonNull(current, "current config");
+		UpdateTransaction pending = pending();
 		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persistedClientConfig(), pending);
 	}
@@ -86,6 +90,7 @@ public final class ClientProjectionView {
 			ClientConfigJsons.ClientConfigFieldsV3 persisted) throws IOException {
 		Objects.requireNonNull(current, "current config");
 		Objects.requireNonNull(persisted, "persisted config");
+		UpdateTransaction pending = pending();
 		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persisted, pending);
 	}
@@ -99,6 +104,7 @@ public final class ClientProjectionView {
 
 	public String logicalSelectedModpackId() throws IOException {
 		String current = storage.selectedModpackId();
+		UpdateTransaction pending = pending();
 		if (pending == null || pending.plan().plannedSelectedModpackId() == null) return current;
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean mayUpdateSelectedModpack = active == null || Objects.equals(current, active.modpackId);
@@ -119,9 +125,9 @@ public final class ClientProjectionView {
 	/** Captures the projection observation for one planning pass. */
 	public Snapshot snapshot(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
-		if (mutationStarted(storage, pending)) return stagedSnapshot(pending);
+		if (mutationStarted(observation)) return stagedSnapshot(observation);
 		if (liveSnapshotMemo != null) return liveSnapshotMemo;
-		liveSnapshotMemo = liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
+		liveSnapshotMemo = liveSnapshot(cache, isProjectionTransaction(pending()) ? observation : null);
 		return liveSnapshotMemo;
 	}
 
@@ -144,33 +150,17 @@ public final class ClientProjectionView {
 	 * Whether the pending transaction may already have written something: every apply persists PREPARING before its first
 	 * write and never returns to PLANNED, so from here on the pending target is what the instance converges to.
 	 */
-	public static boolean mutationStarted(ClientStorage storage, UpdateTransaction transaction) {
-		UpdateTransaction.Phase phase = transaction == null ? null : transaction.phase;
-		if (phase == UpdateTransaction.Phase.PREPARING || phase == UpdateTransaction.Phase.PROJECTED || phase == UpdateTransaction.Phase.SWAPPING
-				|| phase == UpdateTransaction.Phase.COMMITTED)
-			return true;
-		return publicationStarted(storage, transaction);
+	public static boolean mutationStarted(UpdateJournal.Cursor observation) {
+		return observation != null && observation.started();
 	}
 
-	/**
-	 * Whether the projection convergence may have begun, which proves every live operation landed: PROJECTED is persisted
-	 * only after them and before the first projection write. An older version's swap marked the same point only by its
-	 * {@code incoming/} or {@code backup/} directory, so a journal it left behind is still read that way.
-	 */
-	public static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
-		if (!isProjectionTransaction(transaction)) return false;
-		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
-				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
-			return true;
-		try {
-			return Files.exists(storage.legacyIncomingDirectory(), LinkOption.NOFOLLOW_LINKS)
-					|| Files.exists(storage.legacyBackupDirectory(), LinkOption.NOFOLLOW_LINKS);
-		} catch (RuntimeException e) {
-			return false;
-		}
+	/** Whether the projection convergence may have begun, which proves every live operation landed: PROJECTED is persisted only after them and before the first projection write. */
+	public static boolean publicationStarted(UpdateJournal.Cursor observation) {
+		return observation != null && isProjectionTransaction(observation.transaction()) && observation.published();
 	}
 
-	private Snapshot stagedSnapshot(UpdateTransaction pending) throws IOException {
+	private Snapshot stagedSnapshot(UpdateJournal.Cursor observation) throws IOException {
+		UpdateTransaction pending = observation.transaction();
 		if (pending.plan().packTarget().contentToken() == null) throw new IOException("Pending projection target generation is missing");
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState()) {
@@ -178,12 +168,13 @@ public final class ClientProjectionView {
 			if (!HashUtils.isSha1(projected.expectedHash()) || projected.expectedSize() < 0) throw new IOException("Pending projection file metadata is invalid");
 			files.put(LogicalPath.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
 		}
-		return new Snapshot(stagedTarget(pending), files, pendingGameStates(pending), pending);
+		return new Snapshot(stagedTarget(pending), files, pendingGameStates(pending), observation);
 	}
 
-	private Snapshot liveSnapshot(FileCache cache, UpdateTransaction pending) throws IOException {
+	private Snapshot liveSnapshot(FileCache cache, UpdateJournal.Cursor observation) throws IOException {
+		UpdateTransaction pending = observation == null ? null : observation.transaction();
 		ModpackJsons.ModpackContentFields committed = committedTarget(storage);
-		return new Snapshot(committed, readLiveFiles(storage, cache, committed), pendingGameStates(pending), pending);
+		return new Snapshot(committed, readLiveFiles(storage, cache, committed), pendingGameStates(pending), observation);
 	}
 
 	private static Map<String, UpdatePlan.FileState> readLiveFiles(ClientStorage storage, FileCache cache, ModpackJsons.ModpackContentFields committed) throws IOException {
@@ -278,16 +269,20 @@ public final class ClientProjectionView {
 		private final ModpackJsons.ModpackContentFields target;
 		private final Map<String, UpdatePlan.FileState> files;
 		private final Map<String, List<UpdatePlan.FileState>> pendingGameStates;
-		private final UpdateTransaction pending;
+		private final UpdateJournal.Cursor observation;
 
 		private Snapshot(ModpackJsons.ModpackContentFields target, Map<String, UpdatePlan.FileState> files,
-				Map<String, List<UpdatePlan.FileState>> pendingGameStates, UpdateTransaction pending) {
+				Map<String, List<UpdatePlan.FileState>> pendingGameStates, UpdateJournal.Cursor observation) {
 			this.target = target;
 			this.files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Map<String, List<UpdatePlan.FileState>> states = new LinkedHashMap<>();
 			for (Map.Entry<String, List<UpdatePlan.FileState>> entry : pendingGameStates.entrySet()) states.put(entry.getKey(), List.copyOf(entry.getValue()));
 			this.pendingGameStates = Collections.unmodifiableMap(states);
-			this.pending = pending;
+			this.observation = observation;
+		}
+
+		private UpdateTransaction pending() {
+			return observation == null ? null : observation.transaction();
 		}
 
 		public ModpackJsons.ModpackContentFields target() {
@@ -300,8 +295,9 @@ public final class ClientProjectionView {
 
 		/** What the pending transaction owes once it started writing: until its projection publishes, its live operations may not all have landed. */
 		public UpdatePlanner.Owed owed() {
-			if (pending == null || !mutationStarted(storage, pending)) return UpdatePlanner.Owed.NOTHING;
-			return new UpdatePlanner.Owed(pending.plan().modpackId(), publicationStarted(storage, pending) ? List.of() : pending.plan().operations());
+			UpdateTransaction pending = pending();
+			if (!mutationStarted(observation)) return UpdatePlanner.Owed.NOTHING;
+			return new UpdatePlanner.Owed(pending.plan().modpackId(), publicationStarted(observation) ? List.of() : pending.plan().operations());
 		}
 
 		/**
@@ -309,13 +305,14 @@ public final class ClientProjectionView {
 		 * so while one is owed the instance's launcher records are not yet the result of the actions taken. Null when none is owed.
 		 */
 		public LauncherVersionSwapper.Switch owedLauncherSwitch() {
-			if (pending == null || !mutationStarted(storage, pending)) return null;
+			UpdateTransaction pending = pending();
+			if (!mutationStarted(observation)) return null;
 			return pending.plan().launcherSwitch(target);
 		}
 
 		/** Returns whether the observed live state is one of the states already owned by a pending transaction. */
 		public boolean matchesPendingGameState(String relativePath, UpdatePlan.FileState observed) {
-			if (pending == null || observed == null) return false;
+			if (pending() == null || observed == null) return false;
 			String relative = LogicalPath.normalize(relativePath);
 			return pendingGameStates.getOrDefault(relative, List.of()).stream().anyMatch(expected -> expected.regularFile() == observed.regularFile()
 					&& expected.size() == observed.size() && Objects.equals(expected.sha1(), observed.sha1()));
@@ -323,6 +320,7 @@ public final class ClientProjectionView {
 
 		/** Returns pending managed live paths so a replan can observe their real filesystem state. */
 		public Set<String> gamePaths() throws IOException {
+			UpdateTransaction pending = pending();
 			if (pending == null) return Set.of();
 			try {
 				TreeSet<String> paths = new TreeSet<>();
@@ -336,6 +334,7 @@ public final class ClientProjectionView {
 
 		/** Returns the generated-copy state for this logical projection, including an unpublished pending state. */
 		public GeneratedCopyState generatedCopies() throws IOException {
+			UpdateTransaction pending = pending();
 			if (pending != null) {
 				try {
 					return GeneratedCopyState.fromCopies(pending.plan().modpackId(), pending.plan().packTarget().contentToken(), pending.selectionDigest(), pending.plan().generatedCopies());
@@ -361,6 +360,7 @@ public final class ClientProjectionView {
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
 			if (expected != null && expected.sha1() != null) candidates.add(storage.objectFile(expected.sha1()));
+			UpdateTransaction pending = pending();
 			if (pending != null && pending.plan().projectedFinalState() != null) {
 				for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState()) {
 					if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;

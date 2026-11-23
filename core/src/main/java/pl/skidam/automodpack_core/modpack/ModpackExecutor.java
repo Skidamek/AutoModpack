@@ -226,8 +226,9 @@ public class ModpackExecutor {
 		return generationStore.history(limit);
 	}
 
-	public List<JournalEntry> journalEntries() throws IOException {
-		return generationStore.journalEntries();
+	/** The revert preview: the target entry and exactly the changes a revert would publish. */
+	public GenerationStore.RevertPreview revertPreview(long targetSeq) throws IOException {
+		return generationStore.revertPreview(targetSeq);
 	}
 
 	public ReplaceNotesResult replaceNotes() {

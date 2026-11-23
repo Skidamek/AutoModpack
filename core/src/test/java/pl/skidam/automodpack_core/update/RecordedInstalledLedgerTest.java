@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -52,7 +51,7 @@ class RecordedInstalledLedgerTest {
 
 		// The mailbox now names the replacement, and nothing is active either, so the staged journal that proved the
 		// ledger cleanup is gone: only the projection the plan recorded can still answer for it.
-		ConfigTools.writeAtomic(storage.transactionFile(), replacement.transaction());
+		new UpdateJournal(storage).write(replacement.transaction());
 		assertNull(storage.readActiveState());
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
@@ -70,7 +69,7 @@ class RecordedInstalledLedgerTest {
 		// The journal the plan was planned against is gone before the commit even starts, and the answer the ledger
 		// proof needs is no longer derivable from anything but the transaction itself.
 		Files.delete(storage.transactionFile());
-		assertNull(UpdateTransaction.read(storage.transactionFile()));
+		assertNull(new UpdateJournal(storage).read());
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> new UpdateCommit.Built(replacement.transaction(), replacement.target()), null));
 
@@ -103,8 +102,9 @@ class RecordedInstalledLedgerTest {
 				List.of(new ProjectedFile(Root.PROJECTION, preservedPath, true, stagedHash, stagedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, preservedPath, true, stagedHash, stagedBytes.length))),
 				stagedTarget);
-		staged.phase = UpdateTransaction.Phase.PROJECTED;
-		ConfigTools.writeAtomic(storage.transactionFile(), staged);
+		UpdateJournal journal = new UpdateJournal(storage);
+		journal.write(staged);
+		journal.advance(staged, UpdateTransaction.Phase.PROJECTED);
 		Files.createDirectories(storage.gameDirectory().resolve("config"));
 		Files.write(storage.gameDirectory().resolve(preservedPath), stagedBytes);
 

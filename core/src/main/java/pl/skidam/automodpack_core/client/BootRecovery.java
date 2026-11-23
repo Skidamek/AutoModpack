@@ -13,7 +13,6 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
 import pl.skidam.automodpack_core.update.ProjectionAvailability;
@@ -21,6 +20,7 @@ import pl.skidam.automodpack_core.update.ProjectionState;
 import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.UpdateJournal;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.DurableFiles;
@@ -121,15 +121,17 @@ public final class BootRecovery {
 		}
 
 		// The canonical reader asides unusable content as *.corrupt- evidence and returns null; physical read trouble propagates and crashes loudly.
-		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
-		if (transaction == null) {
+		UpdateJournal journal = new UpdateJournal(storage);
+		UpdateJournal.Cursor pending = journal.read();
+		if (pending == null) {
 			UpdateRecovery.clearDeferredGuard(storage);
 			PublicationSweep.sweepUnpinnedDirectories(storage);
 			return;
 		}
+		UpdateTransaction transaction = pending.transaction();
 
 		LOGGER.info("Recovering pending update transaction {} (purpose {}, phase {}, recorded result {}, operation {}, path {}, message {})", transaction.transactionId, transaction.purpose,
-				transaction.phase, transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
+				pending.phase(), transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 
 		UpdateCommit commits = new UpdateCommit(storage);
 		try {
@@ -141,11 +143,11 @@ public final class BootRecovery {
 			// handoff the deferred path intentionally kept.
 			throw e;
 		} catch (IOException | RuntimeException e) {
-			UpdateTransaction failed = UpdateTransaction.read(storage.transactionFile());
-			if (failed != null && ClientProjectionView.mutationStarted(storage, failed)) {
+			UpdateJournal.Cursor failed = journal.read();
+			if (failed != null && failed.started()) {
 				// Only a finished apply untangles a started one: it stays owed, every boot rolls it forward again without a
 				// restart, and the next sync plans on top of it, which also retires a journal no replay can ever finish.
-				LOGGER.error("The pending update {} failed part-way and stays owed; booting what is installed until a replay or the next sync finishes it", failed.transactionId, e);
+				LOGGER.error("The pending update {} failed part-way and stays owed; booting what is installed until a replay or the next sync finishes it", failed.transaction().transactionId, e);
 				nameUnscannedChanges(commits);
 				return;
 			}

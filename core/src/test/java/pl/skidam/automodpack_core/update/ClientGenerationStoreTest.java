@@ -362,10 +362,10 @@ class ClientGenerationStoreTest {
 		Path journal = storage.transactionFile();
 		String old = store(storage, "old-jar");
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, "mods/old.jar", "mod", false, old, 7);
-		ConfigTools.writeAtomicCompact(journal, UpdateTestFixtures.createTransaction(storage, UpdateTestFixtures.plan(target, List.of(new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION,
+		new UpdateJournal(journal).write(UpdateTestFixtures.createTransaction(storage, UpdateTestFixtures.plan(target, List.of(new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION,
 				"mods/old.jar", UpdatePlan.OperationType.INSTALL_OBJECT, old, 7, null)), List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, "mods/old.jar", true, old, 7))), target));
 		byte[] pending = Files.readAllBytes(journal);
-		assertNotNull(UpdateTransaction.readWithoutRepair(journal));
+		assertNotNull(new UpdateJournal(journal).readWithoutRepair());
 		for (int attempt = 0; attempt < 500; attempt++) {
 			Files.write(journal, pending);
 			Thread retire = new Thread(() -> {
@@ -376,10 +376,10 @@ class ClientGenerationStoreTest {
 				}
 			});
 			retire.start();
-			UpdateTransaction.readWithoutRepair(journal);
+			new UpdateJournal(journal).readWithoutRepair();
 			retire.join();
 		}
-		assertNull(UpdateTransaction.readWithoutRepair(journal));
+		assertNull(new UpdateJournal(journal).readWithoutRepair());
 	}
 
 	private static GroupManifest withOptionalGroup(String modpackId, Map<String, String> main, Map<String, String> extra) {

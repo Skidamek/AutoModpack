@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -83,9 +81,8 @@ public final class PublicationSweep {
 	/** Retires the pending journal to a quarantine file, the receipt of an update only a fresh review can re-approve; null when no journal is left. */
 	public static Path retireJournal(ClientStorage storage) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
-			if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
-			Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
-			Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
+			Path stuckJournal = new UpdateJournal(storage).quarantine();
+			if (stuckJournal == null) return null;
 			sweepUnpinnedDirectories(storage);
 			return stuckJournal;
 		});

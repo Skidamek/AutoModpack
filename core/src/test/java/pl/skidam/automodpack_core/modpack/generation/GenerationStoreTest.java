@@ -126,6 +126,38 @@ class GenerationStoreTest {
 		assertTrue(second.entry().changes().stream().anyMatch(change -> change.kind() == JournalEntry.Change.Kind.ADDED && sha1("content-two").equals(change.toSha1())));
 	}
 
+	/** A restore that drops one of two variants at the same path is one removal: the surviving group keeps its file. */
+	@Test
+	void aRestoreThatDropsOneOfTwoVariantsRecordsOneRemovalAndKeepsTheSurvivor() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
+		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First", null);
+		store.publish(exclusiveCandidate("content-one", "content-two"), "Add fantasy", null);
+		assertEquals(2, store.loadCurrent().orElseThrow().tree().filesAt("config/example.txt").size());
+
+		GenerationStore.RevertPreview preview = store.revertPreview(root.entry().seq());
+		assertEquals(root.entry().seq(), preview.target().seq());
+		assertEquals(List.of(JournalEntry.Change.removed("config/example.txt", sha1("content-two"), "content-two".length())), preview.changes());
+		assertEquals(0, preview.summary().added());
+		assertEquals(0, preview.summary().changed());
+		assertEquals(1, preview.summary().removed());
+
+		GenerationStore.Publication restored = store.publishRestore(root.entry().seq(), "Back to one variant");
+		assertEquals(preview.changes(), restored.entry().changes(), "the confirmed diff is the published diff");
+		assertEquals(Set.of(sha1("content-one")), store.loadCurrent().orElseThrow().tree().objectHashes());
+		assertTrue(Files.exists(DataRootResolver.objectFile(objects, sha1("content-one"))));
+	}
+
+	@Test
+	void aRevertPreviewRefusesTheHeadAndAnUnknownGeneration() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
+		store.publish(candidate("one", "content-one"), "First", null);
+
+		assertThrows(IllegalArgumentException.class, () -> store.revertPreview(1));
+		assertThrows(IllegalArgumentException.class, () -> store.revertPreview(99));
+	}
+
 	@Test
 	void replaceHeadNotesKeepsIdentityAndResizesTheHostedJournal() throws Exception {
 		Path objects = tempDir.resolve("objects");

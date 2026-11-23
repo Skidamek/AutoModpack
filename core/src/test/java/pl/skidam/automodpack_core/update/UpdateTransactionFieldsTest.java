@@ -12,7 +12,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -46,9 +45,9 @@ class UpdateTransactionFieldsTest {
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, "", new PlannedAgainst(new ClientConfigJsons.ClientConfigFieldsV3(), "", ledger.toFields()));
 
 		Path file = temporaryDirectory.resolve("update-transaction.json");
-		ConfigTools.writeAtomic(file, transaction);
+		new UpdateJournal(file).write(transaction);
 
-		UpdateTransaction roundTripped = UpdateTransaction.read(file);
+		UpdateTransaction roundTripped = new UpdateJournal(file).read().transaction();
 
 		assertNotNull(roundTripped);
 		assertEquals(UpdateTransaction.Purpose.MODPACK_REMOVAL, roundTripped.purpose);

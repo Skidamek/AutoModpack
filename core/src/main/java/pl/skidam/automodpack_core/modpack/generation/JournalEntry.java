@@ -9,9 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -37,30 +35,16 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 	}
 
 	public Summary summary() {
+		return summaryOf(changes);
+	}
+
+	/** The added/changed/removed counts of one change list, the one spelling both an entry's summary and a revert preview use. */
+	public static Summary summaryOf(List<Change> changes) {
+		Objects.requireNonNull(changes, "changes");
 		int added = 0;
 		int changed = 0;
 		int removed = 0;
 		for (Change change : changes) {
-			switch (change.kind()) {
-				case ADDED -> added++;
-				case CHANGED -> changed++;
-				case REMOVED -> removed++;
-			}
-		}
-		return new Summary(added, changed, removed);
-	}
-
-	/** The net content effect between one journal entry and the current head, folded from the per-entry changes between them. */
-	public static Summary changesSince(List<JournalEntry> history, JournalEntry target) {
-		Map<String, Change> newest = new LinkedHashMap<>();
-		for (JournalEntry entry : history) {
-			if (entry.seq() <= target.seq()) continue;
-			for (Change change : entry.changes()) newest.put(change.path() + '\0' + (change.fromSha1() == null ? "" : change.fromSha1()) + '\0' + (change.toSha1() == null ? "" : change.toSha1()), change);
-		}
-		int added = 0;
-		int changed = 0;
-		int removed = 0;
-		for (Change change : newest.values()) {
 			switch (change.kind()) {
 				case ADDED -> added++;
 				case CHANGED -> changed++;

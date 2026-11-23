@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PublicationSweep;
 import pl.skidam.automodpack_core.update.UpdateCommit;
+import pl.skidam.automodpack_core.update.UpdateJournal;
 import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 
@@ -81,6 +82,11 @@ public final class UpdateRecovery {
 		if (outcome.status() == UpdateTransaction.Status.REPLAN_REQUIRED && outcome instanceof UpdateCommit.Blocked blocked) {
 			// Only a journal that never wrote anything replans, and no restart can re-approve it - only the next sync's
 			// fresh review can - so it retires at once instead of being deferred-restart counted.
+			UpdateJournal journal = new UpdateJournal(storage);
+			UpdateJournal.Cursor pending = journal.readWithoutRepair();
+			if (pending != null && pending.started())
+				throw new IllegalStateException("Transaction " + deferred.transactionId + " replanned after it already wrote (" + pending.phase() + " in " + journal.file()
+						+ "); a started journal is only ever rolled forward, so retiring it would lose the half-applied update");
 			Path stuckJournal = PublicationSweep.retireJournal(storage);
 			clearDeferredGuard(storage);
 			LOGGER.error("The pending update {} needs a fresh review a restart cannot give ({}); retired the transaction to {}", deferred.transactionId, blocked.message(),
@@ -117,8 +123,7 @@ public final class UpdateRecovery {
 	}
 
 	private static void logDeferredRecovery(ClientStorage storage, UpdateTransaction transaction, UpdateCommit.Outcome outcome, UpdateLoopDetector.Outcome loop) {
-		LOGGER.error("The pending modpack update did not finish: transaction {} (purpose {}, phase {}) ended with status {}", transaction.transactionId, transaction.purpose, transaction.phase,
-				outcome.status());
+		LOGGER.error("The pending modpack update did not finish: transaction {} (purpose {}) ended with status {}", transaction.transactionId, transaction.purpose, outcome.status());
 		if (outcome instanceof UpdateCommit.Blocked blocked)
 			LOGGER.error("Blocked operation {}, blocked path {}, message {}", blocked.operation(), blocked.blockedPath(), blocked.message());
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);

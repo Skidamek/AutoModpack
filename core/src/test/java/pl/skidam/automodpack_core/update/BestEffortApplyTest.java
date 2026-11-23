@@ -66,28 +66,6 @@ class BestEffortApplyTest {
 	@TempDir
 	Path temporaryDirectory;
 
-	/** rc.4 and rc.5 wrote the live config in-game, then deferred the swap; the running mod rewrote the file before recovery (#580 failure 2). */
-	@ParameterizedTest
-	@ValueSource(strings = {"rc.4", "rc.5"})
-	void aReleaseCandidateDeferredPublicationRollsForwardAndKeepsTheModsRewrite(String release) throws Exception {
-		Fixture fixture = twoGenerations();
-		Files.createDirectories(fixture.storage.legacyIncomingDirectory());
-		OverlayTombstoneCommitTest.installFixture(fixture.storage, release + "-deferred-publication.json");
-		write(fixture.storage.gamePath(CONFIG), CRLF);
-
-		UpdateCommit.Outcome recovered = UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(cause -> {
-			throw new AssertionError("a started journal never replans: " + cause.message());
-		}));
-
-		assertInstanceOf(UpdateCommit.Applied.class, recovered, String.valueOf(recovered));
-		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
-		assertFalse(Files.exists(fixture.storage.activePath("mods/old.jar")));
-		assertArrayEquals(CRLF, Files.readAllBytes(fixture.storage.gamePath(CONFIG)), "the write after the landed operation is the mod's, and reconciliation owns it");
-		assertTrue(InstanceTree.read(fixture.storage, ClientStateJournal.open(fixture.storage).head().treeSha1()).files().stream()
-				.anyMatch(file -> file.root() == Root.GAME_DIR && file.path().equals(CONFIG) && file.sha1().equals(HashUtils.sha1(CRLF))));
-		assertInstanceOf(UpdateCommit.Idle.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null)));
-	}
-
 	/** #580 failure 2 on this engine: a held projection keeps the swap owed, the mod rewrites its landed config, and the restart neither replans nor loops. */
 	@Test
 	void aHeldProjectionFinishesAtTheNextBootWithoutReplanningAModsRewrite() throws Exception {
@@ -98,8 +76,8 @@ class BestEffortApplyTest {
 
 		assertInstanceOf(UpdateCommit.Deferred.class, deferred, String.valueOf(deferred));
 		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.gamePath(CONFIG)), "the live write lands in-game");
-		UpdateTransaction owed = UpdateTransaction.read(fixture.storage.transactionFile());
-		assertTrue(owed.plan().operations().stream().allMatch(operation -> operation.root() == Root.PROJECTION), "only the projection is still owed");
+		UpdateJournal.Cursor owed = new UpdateJournal(fixture.storage).read();
+		assertTrue(owed.transaction().plan().operations().stream().allMatch(operation -> operation.root() == Root.PROJECTION), "only the projection is still owed");
 		write(fixture.storage.gamePath(CONFIG), CRLF);
 
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(cause -> {
@@ -172,8 +150,8 @@ class BestEffortApplyTest {
 			assertTrue(FileIntegrity.matches(fixture.storage.activePath("mods/old.jar"), OLD_JAR.length, fixture.oldHash), "a loadable projection is the old one");
 			assertFalse(Files.exists(fixture.storage.activePath(CONFIG)));
 		}
-		UpdateTransaction owed = UpdateTransaction.read(fixture.storage.transactionFile());
-		if (ProjectionState.read(fixture.storage).converging()) assertEquals(UpdateTransaction.Phase.PROJECTED, owed.phase, "PROJECTED is durable before the first projection write");
+		UpdateJournal.Cursor owed = new UpdateJournal(fixture.storage).read();
+		if (ProjectionState.read(fixture.storage).converging()) assertEquals(UpdateTransaction.Phase.PROJECTED, owed.phase(), "PROJECTED is durable before the first projection write");
 
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(fixture.storage).run(new UpdateCommit.Recover(null)));
 		assertArrayEquals(LF, Files.readAllBytes(fixture.storage.activePath(CONFIG)));
@@ -199,7 +177,7 @@ class BestEffortApplyTest {
 		} finally {
 			StorageConditions.stores = real;
 		}
-		assertEquals(UpdateTransaction.Status.FAILED, UpdateTransaction.read(fixture.storage.transactionFile()).resultStatus);
+		assertEquals(UpdateTransaction.Status.FAILED, new UpdateJournal(fixture.storage).read().transaction().resultStatus);
 	}
 
 	/** F3: a full disk is a failure the player can act on, named as such, never a held file that defers and restarts. */
@@ -215,7 +193,7 @@ class BestEffortApplyTest {
 
 		UpdateExecutionException failure = assertThrows(UpdateExecutionException.class, () -> full.run(new UpdateCommit.Fresh(() -> built(fixture.storage, fixture.plan, fixture.target), null)));
 		assertTrue(failure.getMessage().contains("the disk is full"), failure.getMessage());
-		UpdateTransaction journal = UpdateTransaction.read(fixture.storage.transactionFile());
+		UpdateTransaction journal = new UpdateJournal(fixture.storage).read().transaction();
 		assertEquals(UpdateTransaction.Status.FAILED, journal.resultStatus);
 		assertTrue(journal.resultMessage.contains("the disk is full"), journal.resultMessage);
 	}
@@ -236,7 +214,7 @@ class BestEffortApplyTest {
 		assertNull(ProjectionAvailability.loadableModsDirectory(fixture.storage.gameDirectory()));
 		ProjectionAvailability.forget(fixture.storage.gameDirectory());
 		assertTrue(Files.exists(fixture.storage.activePath(CONFIG)) && Files.exists(fixture.storage.activePath("mods/old.jar")), "the rest landed around the held jar");
-		assertEquals(UpdateTransaction.Phase.PROJECTED, UpdateTransaction.read(fixture.storage.transactionFile()).phase);
+		assertEquals(UpdateTransaction.Phase.PROJECTED, new UpdateJournal(fixture.storage).read().phase());
 
 		// A boot that must run as is, the journal still owed: the projection it loads is the complete old one.
 		assertTrue(PublicationSweep.restoreFallback(fixture.storage));
@@ -291,10 +269,10 @@ class BestEffortApplyTest {
 			assertInstanceOf(UpdateCommit.Deferred.class, outcome, String.valueOf(outcome));
 			assertArrayEquals(bytes(MANAGED, 0), Files.readAllBytes(storage.gamePath(MANAGED)), "the held file never moved");
 			assertArrayEquals(bytes(MOD, 0), Files.readAllBytes(storage.activePath(MOD)), "the running game keeps its projection");
-			UpdateTransaction owed = UpdateTransaction.read(storage.transactionFile());
-			assertEquals(List.of(MANAGED), owed.plan().operations().stream().filter(operation -> operation.root() != Root.PROJECTION).map(Operation::relativePath).toList());
-			assertTrue(ClientProjectionView.mutationStarted(storage, owed));
-			assertFalse(ClientProjectionView.publicationStarted(storage, owed));
+			UpdateJournal.Cursor owed = new UpdateJournal(storage).read();
+			assertEquals(List.of(MANAGED), owed.transaction().plan().operations().stream().filter(operation -> operation.root() != Root.PROJECTION).map(Operation::relativePath).toList());
+			assertTrue(owed.started());
+			assertFalse(owed.published());
 			if (action == 1) {
 				assertArrayEquals(bytes(EDITABLE, 1), Files.readAllBytes(storage.gamePath(EDITABLE)));
 				write(storage.gamePath(EDITABLE), edit);
@@ -376,9 +354,9 @@ class BestEffortApplyTest {
 		Generation next = generation(storage, installed, 1, 1);
 		UpdatePlan plan = stackedPlan(storage, installed, next);
 		HeldFiles.inGame(storage, path -> path.equals(storage.gamePath(MANAGED))).run(new UpdateCommit.Fresh(() -> built(storage, plan, next.target), null));
-		Set<String> written = keys(JsonParser.parseString(Files.readString(storage.transactionFile())), "");
+		Set<String> written = keys(JsonParser.parseString(documentLine(storage.transactionFile())), "");
 		Set<String> released = new TreeSet<>();
-		for (String release : List.of("rc.5-deferred-publication.json", "rc.5-tombstone-delete-failed.json"))
+		for (String release : List.of("rc.4-deferred-publication.json", "rc.4-tombstone-delete-failed.json", "rc.5-deferred-publication.json", "rc.5-tombstone-delete-failed.json"))
 			try (var fixture = BestEffortApplyTest.class.getResourceAsStream("journals/" + release)) {
 				released.addAll(keys(JsonParser.parseString(new String(fixture.readAllBytes(), StandardCharsets.UTF_8)), ""));
 			}
@@ -388,9 +366,14 @@ class BestEffortApplyTest {
 		Set<String> unknown = new TreeSet<>(written);
 		unknown.removeAll(released);
 		assertTrue(unknown.isEmpty(), "keys rc.5 never wrote: " + unknown);
-		UpdateTransaction owed = UpdateTransaction.read(storage.transactionFile());
-		assertTrue(Set.of(UpdateTransaction.Phase.PLANNED, UpdateTransaction.Phase.PREPARING, UpdateTransaction.Phase.DEFERRED).contains(owed.phase));
-		assertEquals(UpdateTransaction.Status.DEFERRED_LOCKED, owed.resultStatus);
+		UpdateJournal.Cursor owed = new UpdateJournal(storage).read();
+		assertTrue(Set.of(UpdateTransaction.Phase.PLANNED, UpdateTransaction.Phase.PREPARING).contains(owed.phase()));
+		assertEquals(UpdateTransaction.Status.DEFERRED_LOCKED, owed.transaction().resultStatus);
+	}
+
+	/** The journal's first line is its document; the phase records after it are not part of the schema rc.5 has to read. */
+	private static String documentLine(Path journal) throws IOException {
+		return Files.readString(journal, StandardCharsets.UTF_8).split("\n", 2)[0];
 	}
 
 	private static Set<String> keys(JsonElement element, String prefix) {

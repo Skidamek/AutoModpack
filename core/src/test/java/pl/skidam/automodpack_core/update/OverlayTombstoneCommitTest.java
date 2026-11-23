@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,10 +19,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
@@ -39,31 +35,6 @@ class OverlayTombstoneCommitTest {
 
 	@TempDir
 	Path temporaryDirectory;
-
-	/** The journal rc.4 and rc.5 left behind for #580 failure 1: the planned tombstone delete threw NoSuchFileException mid-apply. */
-	@ParameterizedTest
-	@ValueSource(strings = {"rc.4", "rc.5"})
-	void aReleaseCandidateJournalStuckOnATombstoneDeleteRecovers(String release) throws Exception {
-		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
-		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
-		UpdateTestFixtures.target(storage, KEPT, "config", false, kept, KEPT_BYTES.length);
-		storage.writeOverlayState(PACK, Set.of(TOMBSTONED));
-		// The release's live installs ran before its delete threw.
-		Files.createDirectories(storage.gamePath(KEPT).getParent());
-		Files.write(storage.gamePath(KEPT), KEPT_BYTES);
-		installFixture(storage, release + "-tombstone-delete-failed.json");
-		UpdateTransaction stuck = UpdateTransaction.read(storage.transactionFile());
-		assertEquals(UpdateTransaction.Status.FAILED, stuck.resultStatus);
-
-		UpdateCommit.Outcome recovered = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
-
-		assertInstanceOf(UpdateCommit.Applied.class, recovered);
-		assertFalse(Files.exists(storage.transactionFile()));
-		assertArrayEquals(KEPT_BYTES, Files.readAllBytes(storage.activePath(KEPT)));
-		// The derived tombstone set spends the deleted path's tombstone, on the recovery path too (S2).
-		assertTrue(storage.readOverlayState(PACK).deletedPaths.isEmpty());
-		assertInstanceOf(UpdateCommit.Idle.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null)));
-	}
 
 	@Test
 	void aFreshPlanCannotDeleteWhatItNeverObserved() throws Exception {
@@ -87,7 +58,7 @@ class OverlayTombstoneCommitTest {
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)),
 				finalState(kept, new ProjectedFile(Root.OVERLAY, KEPT, false, null, -1)));
 		storage.writeOverlayState(PACK, Set.of("config/stale.toml", KEPT));
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, plan, target));
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null)));
 
 		assertEquals(List.of(KEPT), storage.readOverlayState(PACK).deletedPaths);
@@ -104,8 +75,8 @@ class OverlayTombstoneCommitTest {
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, KEPT, true, kept, KEPT_BYTES.length)));
 		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, plan, target);
-		transaction.phase = UpdateTransaction.Phase.SWAPPING;
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		new UpdateJournal(storage).write(transaction);
+		new UpdateJournal(storage).advance(transaction, UpdateTransaction.Phase.PROJECTED);
 
 		assertInstanceOf(UpdateCommit.Applied.class, UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(cause -> {
 			throw new AssertionError("a published replay must not rebuild: " + cause.message());
@@ -113,18 +84,16 @@ class OverlayTombstoneCommitTest {
 		assertTrue(storage.readOverlayState(PACK).deletedPaths.isEmpty());
 	}
 
-	/** defer() and a replan persist DEFERRED before any write: such a journal is still a plan, so a later overlay edit is drift, not this apply's progress. */
-	@ParameterizedTest
-	@ValueSource(strings = {"DEFERRED_LOCKED", "REPLAN_REQUIRED"})
-	void aJournalDeferredBeforeItsFirstWriteSeesALaterOverlayEdit(String status) throws Exception {
+	/** A journal that recorded a replan before any write is still only a plan, so a later overlay edit is drift, not this apply's progress. */
+	@Test
+	void aJournalSentBackForAReplanBeforeItsFirstWriteSeesALaterOverlayEdit() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
 		String kept = UpdateTestFixtures.store(storage, KEPT_BYTES);
 		SelectedModpackTarget target = UpdateTestFixtures.target(storage, KEPT, "config", true, kept, KEPT_BYTES.length);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, sorted(new Operation(Root.PROJECTION, KEPT, OperationType.INSTALL_OBJECT, kept, KEPT_BYTES.length, null)), finalState(kept));
 		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, plan, target);
-		transaction.phase = UpdateTransaction.Phase.DEFERRED;
-		transaction.resultStatus = UpdateTransaction.Status.valueOf(status);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		transaction.resultStatus = UpdateTransaction.Status.REPLAN_REQUIRED;
+		new UpdateJournal(storage).write(transaction);
 		byte[] edit = "player edit\n".getBytes(StandardCharsets.UTF_8);
 		Path overlay = storage.overlayFile(PACK, KEPT);
 		Files.createDirectories(overlay.getParent());
@@ -143,21 +112,6 @@ class OverlayTombstoneCommitTest {
 		rows.addAll(List.of(others));
 		rows.sort(Comparator.comparing((ProjectedFile row) -> row.root().ordinal()).thenComparing(ProjectedFile::relativePath));
 		return rows;
-	}
-
-	/**
-	 * Loads a shipped rc.4/rc.5 journal fixture. Those files predate the append-only format, so their document is
-	 * promoted to the current schema the way a current build writes it: same plan, no phase records. A real schema-1
-	 * file on disk is refused and re-planned instead (see UpdateTransactionPhaseJournalTest); these fixtures exercise
-	 * the recovery engine on the plan those releases left behind.
-	 */
-	static void installFixture(ClientStorage storage, String name) throws Exception {
-		try (InputStream fixture = OverlayTombstoneCommitTest.class.getResourceAsStream("journals/" + name)) {
-			String document = new String(fixture.readAllBytes(), StandardCharsets.UTF_8)
-					.replaceFirst("\"schemaVersion\"\\s*:\\s*1", "\"schemaVersion\": " + UpdateTransaction.CURRENT_SCHEMA_VERSION);
-			Files.createDirectories(storage.transactionFile().getParent());
-			Files.writeString(storage.transactionFile(), document, StandardCharsets.UTF_8);
-		}
 	}
 
 }

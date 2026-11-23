@@ -94,7 +94,7 @@ class UpdateTransactionValidatorConfinementTest {
 	private record Fixture(ClientStorage storage, SelectedModpackTarget target, UpdateTransaction transaction) {
 		void validate() throws IOException {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				new UpdateTransactionValidator(storage).validate(transaction, target, true, cache);
+				new UpdateTransactionValidator(storage).validate(transaction, target, new UpdateJournal.Cursor(transaction, UpdateTransaction.Phase.PLANNED), cache, null);
 			}
 		}
 	}

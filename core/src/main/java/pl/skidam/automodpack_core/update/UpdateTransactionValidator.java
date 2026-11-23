@@ -75,93 +75,84 @@ final class UpdateTransactionValidator {
 		pathPass.clear();
 	}
 
-	/** Throws when the transaction is not structurally valid; wraps undiagnosed failures with a common message. */
-	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
-		validate(transaction, selectedTarget, verifyMutableInputs, fileCache, null);
-	}
-
-	/** {@link #validate} with the transaction's source records, so the same CAS object is proved once for validation and its links. */
-	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache, ValidatedSources sources) throws IOException {
+	/**
+	 * The one validation door: every structural check, the mutable-input preconditions a journal that never wrote still
+	 * owes, and the delete baselines, so no caller can validate less than another. An unstarted cursor verifies the
+	 * mutable inputs it was planned against; a started one leaves them to the transaction's own operations.
+	 */
+	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, UpdateJournal.Cursor cursor, FileCache fileCache, ValidatedSources sources) throws IOException {
+		beginPathPass();
 		try {
-			validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache, sources);
+			if (transaction == null) throw new IOException("Transaction is missing");
+			if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
+			try {
+				UUID.fromString(transaction.transactionId);
+			} catch (RuntimeException e) {
+				throw new IOException("Invalid transaction UUID", e);
+			}
+			if (transaction.purpose == null) throw new IOException("Transaction purpose is missing");
+			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !transaction.plan().generatedCopies().isEmpty())
+				throw new IOException("Generated-copy state is only valid for modpack update transactions");
+
+			ModpackJsons.ModpackContentFields target = null;
+			if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
+			ModpackId.requireValid(transaction.plan().modpackId());
+			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
+				throw new IOException("A supplied update target is only valid for a modpack update transaction");
+			PackDocument record = selectedTarget == null ? targetDocument(transaction) : selectedTarget.document();
+			target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
+			if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
+			validateGenerationIdentity(transaction, record, target);
+			validateManifest(target, transaction.plan().modpackId());
+			validateSelectionMetadata(transaction);
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
+			validateStoredClientState(transaction);
+			if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
+			else validateRemovalClientConfig(transaction);
+			if (mutableInputDrift(transaction, cursor, fileCache).overlay())
+				throw new IOException("Client editable overlay changed after planning");
+
+			Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId());
+			for (Operation operation : transaction.plan().operations())
+				if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
+					throw new IOException("Incomplete transaction operation");
+			List<Operation> sortedOperations = transaction.plan().operations().stream().sorted(Operation.ORDER).toList();
+			if (!transaction.plan().operations().equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
+			Set<FileKey> operationKeys = new HashSet<>();
+			Set<Path> operationTargets = new HashSet<>();
+			for (Operation operation : transaction.plan().operations()) {
+				String relative = normalizeOperationPath(operation.relativePath());
+				FileKey key = new FileKey(operation.root(), relative);
+				if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
+				Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.plan().modpackId());
+				if (!operationTargets.add(physicalTarget)) throw new IOException("Transaction operations alias the same physical target");
+				ProjectedFile projected = finalState.get(key);
+				if (projected == null && operation.root() != Root.PROJECTION) throw new IOException("Operation target is missing from projected final state");
+				switch (operation.operation()) {
+					case INSTALL_OBJECT -> validateInstall(operation, projected, fileCache, sources);
+					case DELETE -> validateDelete(operation, projected);
+				}
+			}
+			validateBaselineCaptures(transaction);
+			// A plan built against no installed pack can carry no REMOVE_OWNED conflicts and no ACTIVE_LEDGER preservations,
+			// so proofs beside a null recorded ledger mean a pending document from before the ledger was recorded; failing
+			// validation reverts it at boot and the next sync re-proposes the update. Accepted for the rc.1 -> rc.2 upgrade.
+			OwnershipLedger installedLedger;
+			try {
+				installedLedger = transaction.expectedInstalled();
+			} catch (RuntimeException e) {
+				throw new IOException("Recorded installed ownership ledger is invalid", e);
+			}
+			validateConflicts(transaction, finalState, target, installedLedger);
+			validatePreservations(transaction, finalState, target, installedLedger);
+			if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
 			requireDeleteBaselines(transaction);
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid update transaction", e);
 		}
-	}
-
-	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
-		validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache, null);
-	}
-
-	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache, ValidatedSources sources) throws IOException {
-		beginPathPass();
-		if (transaction == null) throw new IOException("Transaction is missing");
-		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
-		try {
-			UUID.fromString(transaction.transactionId);
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid transaction UUID", e);
-		}
-		if (transaction.purpose == null || transaction.phase == null) throw new IOException("Transaction purpose or phase is missing");
-		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !transaction.plan().generatedCopies().isEmpty())
-			throw new IOException("Generated-copy state is only valid for modpack update transactions");
-
-		ModpackJsons.ModpackContentFields target = null;
-		if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
-		ModpackId.requireValid(transaction.plan().modpackId());
-		if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
-			throw new IOException("A supplied update target is only valid for a modpack update transaction");
-		PackDocument record = selectedTarget == null ? targetDocument(transaction) : selectedTarget.document();
-		target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
-		if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
-		validateGenerationIdentity(transaction, record, target);
-		validateManifest(target, transaction.plan().modpackId());
-		validateSelectionMetadata(transaction);
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
-		validateStoredClientState(transaction);
-		if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
-		else validateRemovalClientConfig(transaction);
-		if (verifyMutableInputs && mutableInputDrift(transaction, fileCache).overlay())
-			throw new IOException("Client editable overlay changed after planning");
-
-		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId());
-		for (Operation operation : transaction.plan().operations())
-			if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
-				throw new IOException("Incomplete transaction operation");
-		List<Operation> sortedOperations = transaction.plan().operations().stream().sorted(Operation.ORDER).toList();
-		if (!transaction.plan().operations().equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
-		Set<FileKey> operationKeys = new HashSet<>();
-		Set<Path> operationTargets = new HashSet<>();
-		for (Operation operation : transaction.plan().operations()) {
-			String relative = normalizeOperationPath(operation.relativePath());
-			FileKey key = new FileKey(operation.root(), relative);
-			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
-			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.plan().modpackId());
-			if (!operationTargets.add(physicalTarget)) throw new IOException("Transaction operations alias the same physical target");
-			ProjectedFile projected = finalState.get(key);
-			if (projected == null && operation.root() != Root.PROJECTION) throw new IOException("Operation target is missing from projected final state");
-			switch (operation.operation()) {
-				case INSTALL_OBJECT -> validateInstall(operation, projected, fileCache, sources);
-				case DELETE -> validateDelete(operation, projected);
-			}
-		}
-		validateBaselineCaptures(transaction);
-		// A plan built against no installed pack can carry no REMOVE_OWNED conflicts and no ACTIVE_LEDGER preservations,
-		// so proofs beside a null recorded ledger mean a pending document from before the ledger was recorded; failing
-		// validation reverts it at boot and the next sync re-proposes the update. Accepted for the rc.1 -> rc.2 upgrade.
-		OwnershipLedger installedLedger;
-		try {
-			installedLedger = transaction.expectedInstalled();
-		} catch (RuntimeException e) {
-			throw new IOException("Recorded installed ownership ledger is invalid", e);
-		}
-		validateConflicts(transaction, finalState, target, installedLedger);
-		validatePreservations(transaction, finalState, target, installedLedger);
-		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
 	}
 
 	/** One mutable planning input's drift from the snapshot the transaction was planned against. */
@@ -175,8 +166,8 @@ final class UpdateTransactionValidator {
 	 * The canonical mutable-input precondition: which planned-against inputs (client configuration, group selection,
 	 * editable overlays) drifted since the transaction was planned. Evaluated once per stage boundary; the caller owns the throw.
 	 */
-	MutableInputDrift mutableInputDrift(UpdateTransaction transaction, FileCache fileCache) throws IOException {
-		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction), overlayChanged(transaction, fileCache));
+	MutableInputDrift mutableInputDrift(UpdateTransaction transaction, UpdateJournal.Cursor cursor, FileCache fileCache) throws IOException {
+		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction), overlayChanged(transaction, cursor, fileCache));
 	}
 
 	/**
@@ -185,8 +176,8 @@ final class UpdateTransactionValidator {
 	 * exact final-state check own the overlay, and a digest compare would call this transaction's own progress drift.
 	 * A journal deferred or sent back for a replan before that write is still only a plan.
 	 */
-	private boolean overlayChanged(UpdateTransaction transaction, FileCache fileCache) throws IOException {
-		if (ClientProjectionView.mutationStarted(storage, transaction)) return false;
+	private boolean overlayChanged(UpdateTransaction transaction, UpdateJournal.Cursor cursor, FileCache fileCache) throws IOException {
+		if (cursor.started()) return false;
 		return !Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId(), fileCache));
 	}
 
@@ -544,11 +535,7 @@ final class UpdateTransactionValidator {
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
 
-	/**
-	 * A fresh plan names the bytes every physical delete removes; a delete with no baseline has nothing to remove. Only
-	 * the fresh door asks: journals from before this rule (rc.4 and rc.5 planned tombstone deletes) still replay, and the
-	 * destination-wins rule completes them.
-	 */
+	/** Every physical delete names the bytes it removes, so a replay can tell "already deleted" from "never there"; the destination-wins rule completes one that finds nothing. */
 	private static void requireDeleteBaselines(UpdateTransaction transaction) throws IOException {
 		for (Operation operation : transaction.plan().operations())
 			if (operation.operation() == OperationType.DELETE && operation.root() != Root.PROJECTION && operation.expectedExistingHash() == null)

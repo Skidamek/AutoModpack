@@ -689,33 +689,25 @@ public class Commands {
 	/** The shared resolve-and-report prologue of the revert handlers; feedback is sent and false returned when the target is missing or the journal unreadable. */
 	private static boolean resolveAndReportRevertTarget(CommandContext<CommandSourceStack> context, long targetSeq) {
 		try {
-			List<JournalEntry> history = Hosting.executor().journalEntries();
-			JournalEntry target = findRevertTarget(history, targetSeq);
-			if (target == null) {
-				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);
-				return false;
-			}
-			reportRevertTarget(context, target, history);
+			reportRevertTarget(context, Hosting.executor().revertPreview(targetSeq));
 			return true;
 		} catch (IOException e) {
 			send(context, "FAILED: could not read the modpack journal: " + e.getMessage(), ChatFormatting.RED, true);
 			return false;
+		} catch (IllegalArgumentException e) {
+			send(context, "FAILED: " + e.getMessage(), ChatFormatting.RED, true);
+			return false;
 		}
 	}
 
-	private static JournalEntry findRevertTarget(List<JournalEntry> history, long targetSeq) {
-		return history.stream().filter(entry -> entry.seq() == targetSeq).findFirst().orElse(null);
-	}
-
-	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, JournalEntry target, List<JournalEntry> history) {
+	/** The preview the operator confirms: the target entry and the exact diff the confirmed revert publishes. */
+	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationStore.RevertPreview preview) {
+		JournalEntry target = preview.target();
 		send(context, "Revert target", ChatFormatting.YELLOW, "#" + target.seq() + " " + target.createdAt(), ChatFormatting.WHITE, true);
 		send(context, "Target content", ChatFormatting.WHITE, copyable(target.contentToken()), ChatFormatting.YELLOW, false);
 		if (!target.notes().isBlank()) send(context, "Target patch notes: " + firstLine(target.notes()), ChatFormatting.GRAY, false);
-		if (!history.isEmpty() && history.get(history.size() - 1).seq() != target.seq()) {
-			JournalEntry.Summary netChanges = JournalEntry.changesSince(history, target);
-			send(context, "Changes from current: +" + netChanges.added() + " added, " + netChanges.changed() + " changed, " + netChanges.removed() + " removed",
-					ChatFormatting.YELLOW, false);
-		}
+		JournalEntry.Summary changes = preview.summary();
+		send(context, "Changes from current: +" + changes.added() + " added, " + changes.changed() + " changed, " + changes.removed() + " removed", ChatFormatting.YELLOW, false);
 	}
 
 	private static int exportHttpTree(CommandContext<CommandSourceStack> context) {

@@ -457,8 +457,9 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectTransaction(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
-		if (transaction == null) return;
+		UpdateJournal.Cursor pending = new UpdateJournal(storage).observe();
+		if (pending == null) return;
+		UpdateTransaction transaction = pending.transaction();
 		for (UpdatePlan.Operation operation : transaction.plan().operations()) {
 			retained.ifPresent(operation.expectedObjectHash(), operation.expectedSize(), "in-flight transaction operation");
 			retained.ifPresent(operation.expectedExistingHash(), -1, "in-flight transaction source");

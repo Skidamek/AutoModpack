@@ -128,7 +128,7 @@ class UpdateCommitTest {
 		assertEquals(installed.packTarget().contentToken(), target.packTarget().contentToken());
 		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, plan, target));
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
@@ -302,7 +302,7 @@ class UpdateCommitTest {
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = UpdateTestFixtures.createTransaction(storage, newPlan, newTarget);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		new UpdateJournal(storage).write(transaction);
 		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
@@ -331,7 +331,7 @@ class UpdateCommitTest {
 		UpdatePlan newPlan = UpdateTestFixtures.plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
 		// The swap moved active aside and stopped before incoming moved in.
 		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
 		Files.createDirectories(storage.legacyIncomingDirectory().resolve("mods"));
@@ -363,7 +363,7 @@ class UpdateCommitTest {
 		UpdatePlan newPlan = UpdateTestFixtures.plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, newPlan, newTarget));
 		Files.move(storage.activeDirectory(), storage.legacyBackupDirectory());
 		Files.createDirectories(storage.activePath("mods"));
 		Files.write(storage.activePath("mods/new.jar"), newBytes);
@@ -420,14 +420,14 @@ class UpdateCommitTest {
 		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
 		Files.createDirectories(live.getParent());
 		Files.write(live, newerBytes);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		new UpdateJournal(storage).write(transaction);
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
 		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
 		assertArrayEquals(newerBytes, Files.readAllBytes(live));
-		assertEquals(UpdateTransaction.Phase.DEFERRED, persistedTransaction(storage).phase);
+		assertEquals(UpdateTransaction.Phase.PLANNED, new UpdateJournal(storage).read().phase(), "a replan before the first write keeps the journal unstarted");
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
@@ -450,7 +450,7 @@ class UpdateCommitTest {
 				clientConfig(target.manifest().modpackId()), Set.of(), List.of(),
 				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/durw/cache.db", plannedHash, plannedBytes.length, false)),
 				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, plan, target));
 		// A running mod rewrites its cache file between planning and the next boot's recovery, so the pinned baseline no longer names the live bytes.
 		byte[] rewrittenBytes = "rewritten-by-the-running-mod".getBytes(StandardCharsets.UTF_8);
 		Files.write(live, rewrittenBytes);
@@ -491,7 +491,7 @@ class UpdateCommitTest {
 				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/first.properties", "", -1, true),
 						new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/later.properties", oldPackHash, oldPack.length, false)),
 				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, plan, target));
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Recover(null));
 
@@ -566,7 +566,7 @@ class UpdateCommitTest {
 				clientConfig(target.manifest().modpackId()), Set.of(), List.of(),
 				List.of(new UpdatePlan.BaselineCapture(Root.GAME_DIR, "config/locked.bin", plannedHash, plannedBytes.length, false)),
 				List.of(), List.of(), ChangeSet.empty()).withPlannedSelectedModpackId(target.manifest().modpackId());
-		ConfigTools.writeAtomic(storage.transactionFile(), UpdateTestFixtures.createTransaction(storage, plan, target));
+		new UpdateJournal(storage).write(UpdateTestFixtures.createTransaction(storage, plan, target));
 		Set<PosixFilePermission> previous = Files.getPosixFilePermissions(live);
 		Files.setPosixFilePermissions(live, Set.of());
 		try {
@@ -723,7 +723,7 @@ class UpdateCommitTest {
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
 		newer.playMusic = false;
 		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		ConfigTools.writeAtomic(storage.transactionFile(), pending);
+		new UpdateJournal(storage).write(pending);
 		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		AtomicInteger rebuilds = new AtomicInteger();
 
@@ -782,7 +782,7 @@ class UpdateCommitTest {
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
 		newer.playMusic = false;
 		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		ConfigTools.writeAtomic(storage.transactionFile(), pending);
+		new UpdateJournal(storage).write(pending);
 		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		AtomicInteger rebuilds = new AtomicInteger();
 
@@ -838,15 +838,14 @@ class UpdateCommitTest {
 				new Operation(Root.PROJECTION, "mods/mailbox-deferred.jar", OperationType.INSTALL_OBJECT, deferredHash, deferredBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-deferred.jar", true, deferredHash, deferredBytes.length)));
 		UpdateTransaction deferred = UpdateTestFixtures.createTransaction(storage, deferredPlan, deferredTarget);
-		deferred.phase = UpdateTransaction.Phase.DEFERRED;
 		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
-		ConfigTools.writeAtomic(storage.transactionFile(), deferred);
+		new UpdateJournal(storage).write(deferred);
 		Files.createDirectories(storage.activePath("shaderpacks"));
 		Files.writeString(storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"), "#Mon leftover\n", StandardCharsets.UTF_8);
 
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientProjectionView.Snapshot view = ClientProjectionView.observe(storage).snapshot(cache);
-			assertFalse(ClientProjectionView.publicationStarted(storage, deferred));
+			assertFalse(ClientProjectionView.publicationStarted(new UpdateJournal(storage).read()));
 			assertEquals(installed.flatTarget().contentToken, view.target().contentToken);
 			assertEquals(new UpdatePlan.FileState(oldHash, oldBytes.length, true), view.files().get("mods/mailbox-old.jar"));
 			assertNull(view.files().get("mods/mailbox-deferred.jar"));
@@ -892,7 +891,7 @@ class UpdateCommitTest {
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
 		ReconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		new UpdateJournal(storage).write(transaction);
 
 		assertEquals(target.manifest().modpackId(), ClientProjectionView.observe(storage).logicalSelectedModpackId());
 		assertFalse(ClientProjectionView.observe(storage).logicalConfig(current).syncVersions);
@@ -915,13 +914,14 @@ class UpdateCommitTest {
 		UpdateTransaction staged = UpdateTestFixtures.createTransaction(storage, UpdateTestFixtures.plan(stagedTarget, clientConfig(stagedTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/staged.jar", OperationType.INSTALL_OBJECT, stagedHash, stagedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/staged.jar", true, stagedHash, stagedBytes.length))), stagedTarget);
-		staged.phase = UpdateTransaction.Phase.PROJECTED;
 
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientProjectionView observed = ClientProjectionView.observe(storage);
 			assertEquals(liveTarget.packTarget().contentToken(), observed.target().contentToken);
 
-			ConfigTools.writeAtomic(storage.transactionFile(), staged);
+			UpdateJournal journal = new UpdateJournal(storage);
+			journal.write(staged);
+			journal.advance(staged, UpdateTransaction.Phase.PROJECTED);
 
 			assertEquals(liveTarget.packTarget().contentToken(), observed.target().contentToken, "One observation must not follow a journal it already read");
 			assertEquals(liveTarget.packTarget().contentToken(), observed.snapshot(cache).target().contentToken, "target() and snapshot() must answer from the same observation");
@@ -1306,8 +1306,8 @@ class UpdateCommitTest {
 		return fields;
 	}
 
-	private static UpdateTransaction persistedTransaction(ClientStorage storage) {
-		return ConfigTools.read(storage.transactionFile(), UpdateTransaction.class).orElseThrow();
+	private static UpdateTransaction persistedTransaction(ClientStorage storage) throws IOException {
+		return new UpdateJournal(storage).read().transaction();
 	}
 
 	private static String store(ClientStorage storage, byte[] bytes) throws Exception {

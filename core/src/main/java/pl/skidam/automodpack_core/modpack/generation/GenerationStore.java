@@ -276,23 +276,41 @@ public final class GenerationStore {
 		return locked(() -> publishRestoreLocked(targetSeq, notes));
 	}
 
+	/**
+	 * The revert preview: the journal entry a revert would restore, the tree it served, and exactly the content diff
+	 * publishing it would record. This is the one diff reducer of a revert - the operator confirms the same list the
+	 * publication commits - and it holds the store lock, so the current head cannot move under it.
+	 */
+	public RevertPreview revertPreview(long targetSeq) throws IOException {
+		return locked(() -> {
+			Current current = head().orElseThrow(() -> new IllegalArgumentException("No journal entry " + targetSeq));
+			if (current.seq() == targetSeq) throw new IllegalArgumentException("Generation " + targetSeq + " is already the current generation");
+			return preview(current, targetSeq);
+		});
+	}
+
+	private RevertPreview preview(Current current, long targetSeq) throws IOException {
+		JournalEntry target = journal.entryAt(targetSeq);
+		ContentTree targetTree = journal.treeAt(targetSeq);
+		return new RevertPreview(target, targetTree, current.tree().diff(targetTree));
+	}
+
 	private Publication publishRestoreLocked(long targetSeq, String notes) throws IOException {
 		Current current = head().orElseThrow(() -> new IOException("Nothing to restore before the root generation is published"));
 		if (targetSeq == current.seq()) throw new IllegalArgumentException("Generation " + targetSeq + " is already the current generation");
-		JournalEntry target = journal.entryAt(targetSeq);
-		ContentTree targetTree = journal.treeAt(targetSeq);
-		requireStoredObjects(targetTree);
+		RevertPreview preview = preview(current, targetSeq);
+		JournalEntry target = preview.target();
+		requireStoredObjects(preview.tree());
 		GroupManifest manifest = verifiedPolicy(target);
 		OwnershipLedger ledger = OwnershipLedger.materialize(current.ledger(), manifest);
 
-		List<JournalEntry.Change> changes = current.tree().diff(targetTree);
-		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
+		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, preview.changes());
 		TreeSet<String> pinned = reachable(current);
-		pinned.addAll(targetTree.objectHashes());
+		pinned.addAll(preview.tree().objectHashes());
 		publishReceipt(pinned);
 		journal.append(entry);
 
-		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree, publishWaitingMusicObject(null));
+		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, preview.tree(), publishWaitingMusicObject(null));
 		this.current = updated;
 		writeProjection(updated);
 		return new Publication(entry, manifest, ledger, hosting(updated));
@@ -305,14 +323,6 @@ public final class GenerationStore {
 			List<JournalEntry> entries = journal.entries();
 			int from = Math.max(0, entries.size() - Math.max(1, limit));
 			return List.copyOf(entries.subList(from, entries.size()));
-		});
-	}
-
-	/** The whole journal, for a revert that must name any seq, not only the listing tail. */
-	public List<JournalEntry> journalEntries() throws IOException {
-		return reading(() -> {
-			peek();
-			return journal.entries();
 		});
 	}
 
@@ -534,4 +544,17 @@ public final class GenerationStore {
 	}
 
 	public record Publication(JournalEntry entry, GroupManifest manifest, OwnershipLedger ledger, GenerationHosting hostingPaths) {}
+
+	/** A revert's one answer: the entry to restore, the tree it served, and the exact changes publishing it records. */
+	public record RevertPreview(JournalEntry target, ContentTree tree, List<JournalEntry.Change> changes) {
+		public RevertPreview {
+			Objects.requireNonNull(target, "target");
+			Objects.requireNonNull(tree, "tree");
+			changes = List.copyOf(changes);
+		}
+
+		public JournalEntry.Summary summary() {
+			return JournalEntry.summaryOf(changes);
+		}
+	}
 }
