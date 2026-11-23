@@ -87,4 +87,31 @@ def test_write_server_properties_binds_loopback(tmp_path):
     assert "rcon.port=23457" in text
     (tmp_path / "fabric-server-mc.26.2-loader.0.20.1-launcher.1.1.2.jar").write_bytes(b"jar")
     from automodpack_autotester.host.seed import launch_jar as seed_launch_jar
+    from automodpack_autotester.host.seed import materialize
+    from automodpack_autotester.runtime.base import ServerSpec
+
     assert seed_launch_jar(tmp_path).name.startswith("fabric-server")
+
+
+def test_materialize_keeps_a_staged_automodpack_jar(tmp_path):
+    from automodpack_autotester.host.seed import materialize
+    from automodpack_autotester.runtime.base import ServerSpec
+
+    cache = tmp_path / "cache" / "1.21.1-fabric"
+    dest = tmp_path / "server"
+    cache.mkdir(parents=True)
+    (cache / "fabric-server-launch.jar").write_bytes(b"seed-jar")
+    (cache / "mods").mkdir()
+    (cache / "mods" / "ferritecore.jar").write_bytes(b"ferrite")
+    dest.mkdir()
+    (dest / "mods").mkdir()
+    (dest / "mods" / "automodpack.jar").write_bytes(b"staged-pack")
+    (dest / "automodpack").mkdir()
+    (dest / "automodpack" / "server-config.json").write_text("{}", encoding="utf-8")
+    settings = {"paths": {"serverCacheDir": str(tmp_path / "cache")}}
+    spec = ServerSpec(image="itzg/minecraft-server:java21", env={}, mounts=(), cap_add=())
+    jar = materialize(dest, spec, target_id="1.21.1-fabric", settings=settings)
+    assert jar.name == "fabric-server-launch.jar"
+    assert (dest / "mods" / "automodpack.jar").read_bytes() == b"staged-pack"
+    assert (dest / "mods" / "ferritecore.jar").read_bytes() == b"ferrite"
+    assert (dest / "automodpack" / "server-config.json").read_text(encoding="utf-8") == "{}"

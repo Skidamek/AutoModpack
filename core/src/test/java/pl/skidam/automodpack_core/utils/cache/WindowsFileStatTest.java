@@ -3,15 +3,16 @@ package pl.skidam.automodpack_core.utils.cache;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.utils.PlatformUtils;
+import pl.skidam.automodpack_core.winprobe.WinKernel;
+import pl.skidam.automodpack_core.winprobe.WinProbeFailed;
 
-/** The reparse-tag classifier and, on Windows, the tags {@code compact.exe} and cloud placeholders actually write. */
+/** The reparse-tag classifier and, on a Windows kernel, the tags compact.exe writes. */
 class WindowsFileStatTest {
 	@TempDir
 	Path temporaryDirectory;
@@ -30,22 +31,23 @@ class WindowsFileStatTest {
 
 	@Test
 	void compactedFileIsRegularAndNotAJunction() throws Exception {
-		Assumptions.assumeTrue(PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS, "compact.exe is a Windows tool");
-		Path file = temporaryDirectory.resolve("compacted.bin");
-		Process create = new ProcessBuilder("fsutil", "file", "createnew", file.toString(), "2097152").redirectErrorStream(true).start();
-		assertEqualsZero(create.waitFor(), "fsutil file createnew");
-		Process compact = new ProcessBuilder("compact", "/c", "/f", file.toString()).redirectErrorStream(true).start();
-		byte[] output = compact.getInputStream().readAllBytes();
-		Assumptions.assumeTrue(compact.waitFor() == 0, "compact.exe could not compress this file: " + new String(output));
-
-		FileCache.StatSnapshot snapshot = WindowsFileStat.statSnapshot(file);
-		Assumptions.assumeTrue(snapshot != null, "the Windows native stat is unavailable: " + WindowsFileStat.loadError());
-		assertTrue(snapshot.regularFile(), "a WOF-compressed file is still a regular file");
-		assertFalse(snapshot.junction(), "WOF compression is not a junction");
-		assertFalse(snapshot.symbolicLink(), "WOF compression is not a symbolic link");
-	}
-
-	private static void assertEqualsZero(int value, String command) {
-		Assumptions.assumeTrue(value == 0, command + " failed with exit " + value);
+		try (WinKernel kernel = WinKernel.boot()) {
+			Path file = temporaryDirectory.resolve("compacted.bin");
+			Process create = new ProcessBuilder("fsutil", "file", "createnew", file.toString(), "2097152").redirectErrorStream(true).start();
+			assertTrue(create.waitFor() == 0, "fsutil file createnew");
+			Process compact = new ProcessBuilder("compact", "/c", "/f", file.toString()).redirectErrorStream(true).start();
+			byte[] output = compact.getInputStream().readAllBytes();
+			assertTrue(compact.waitFor() == 0, "compact.exe could not compress this file: " + new String(output, StandardCharsets.UTF_8));
+			FileCache.StatSnapshot snapshot = WindowsFileStat.statSnapshot(file);
+			assertTrue(snapshot != null, "the Windows native stat is unavailable: " + WindowsFileStat.loadError());
+			assertTrue(snapshot.regularFile(), "a WOF-compressed file is still a regular file");
+			assertFalse(snapshot.junction(), "WOF compression is not a junction");
+			assertFalse(snapshot.symbolicLink(), "WOF compression is not a symbolic link");
+			assertTrue(kernel.root() != null);
+			return;
+		} catch (WinProbeFailed failed) {
+			assertTrue(failed.getMessage().startsWith("not Windows") || failed.getMessage().startsWith("unsupported architecture") || failed.getMessage().startsWith("native not loaded")
+					|| failed.getMessage().startsWith("volume is not"), failed.getMessage());
+		}
 	}
 }

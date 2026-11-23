@@ -71,8 +71,19 @@ def _wipe_world(root: Path) -> None:
             path.unlink()
 
 
+def _merge_tree(src: Path, dest: Path) -> None:
+    """Copy ``src`` into ``dest``. Files already in ``dest`` win, so a staged automodpack.jar stays."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dest / child.name
+        if child.is_dir():
+            _merge_tree(child, target)
+        elif not target.exists():
+            shutil.copy2(child, target, follow_symlinks=False)
+
+
 def materialize(dest: Path, spec: ServerSpec, *, target_id: str, settings: dict, timeout: float = 300) -> Path:
-    """Put a launchable server tree at ``dest``. Returns the launch jar."""
+    """Put a launchable server tree at ``dest`` without deleting files already staged there."""
     cache = cache_dir(settings, target_id)
     cache.parent.mkdir(parents=True, exist_ok=True)
     lock = FileLock(str(cache) + ".lock")
@@ -84,9 +95,7 @@ def materialize(dest: Path, spec: ServerSpec, *, target_id: str, settings: dict,
         if not _has_launch_jar(cache):
             cache.mkdir(parents=True, exist_ok=True)
             _itzg_seed(cache, spec, timeout)
-        if dest.exists():
-            shutil.rmtree(dest)
-        shutil.copytree(cache, dest, symlinks=True)
+        _merge_tree(cache, dest)
         _wipe_world(dest)
         return launch_jar(dest)
     finally:

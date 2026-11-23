@@ -41,10 +41,11 @@ def select_platform(settings: dict | None = None, requested: str | None = None, 
         raise PlatformUnavailable(str(error)) from error
 
 
-def scenario_platforms(scenario: dict) -> list[str]:
+def scenario_platforms(scenario: dict) -> list[str] | None:
+    """Declared kernels, or ``None`` when the scenario runs on every kernel."""
     declared = scenario.get("platforms")
     if not declared:
-        return ["linux"]
+        return None
     if isinstance(declared, str):
         declared = [declared]
     return [str(name).lower() for name in declared]
@@ -72,7 +73,7 @@ def case_skip_reason(scenario: dict, platform) -> str | None:
     """Why this scenario must not run on this machine, or ``None`` when it can."""
     kernel = kernel_name()
     declared = scenario_platforms(scenario)
-    if kernel not in declared:
+    if declared is not None and kernel not in declared:
         return f"scenario declares platforms {declared}, kernel is {kernel}"
     missing = missing_capabilities(scenario, platform.capabilities)
     if missing:

@@ -266,11 +266,13 @@ def test_single_string_requirement_is_one_capability_not_characters():
     assert missing_capabilities({"requires": "netem"}, Capabilities()) == []
 
 
-def test_scenario_defaults_to_linux_only(monkeypatch):
+def test_undeclared_platforms_run_on_every_kernel(monkeypatch):
     monkeypatch.setattr("automodpack_autotester.runtime.detect.sys.platform", "win32")
-    assert case_skip_reason({}, FakePlatform()) is not None
+    assert case_skip_reason({}, FakePlatform()) is None
     monkeypatch.setattr("automodpack_autotester.runtime.detect.sys.platform", "linux")
     assert case_skip_reason({}, FakePlatform()) is None
+    monkeypatch.setattr("automodpack_autotester.runtime.detect.sys.platform", "win32")
+    assert case_skip_reason({"platforms": ["linux"]}, FakePlatform()) is not None
 
 
 def test_platform_selection_defaults_to_native_and_windows_is_this_kernel():
