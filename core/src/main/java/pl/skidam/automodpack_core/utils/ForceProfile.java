@@ -16,7 +16,8 @@ import org.apache.logging.log4j.Logger;
 /**
  * What one filesystem's force costs. Every caller that has to choose between overlapping IO and keeping it in order gets
  * the measurement and compares it with the bar its own trade-off uses; the probe runs once per {@link FileStore} and every
- * later caller pays a map lookup.
+ * later caller pays a map lookup. {@link #isNotRotationalStore} is the one shared verdict, because "is this store
+ * rotational" is the same question for every caller; anything narrower belongs to the caller.
  */
 public final class ForceProfile {
 	private static final Logger LOGGER = LogManager.getLogger(ForceProfile.class);
@@ -24,9 +25,9 @@ public final class ForceProfile {
 	// Measured on the benchmark host: a 64 KiB force is ~18 ms warm, ~55 ms cold on the spinning disk, and ~1 ms on
 	// NVMe; 1 MiB is ~31 ms vs ~1.5 ms. Eight milliseconds separates the two without treating a loaded SSD as rotational.
 	private static final int PROBE_BYTES = 64 * 1024;
-	// ProjectionConvergence's bar; a caller that owns its own trade-off compares forceNanos with its own. Bounded by the
-	// number of stores because FileStore overrides equals per device/volume.
-	private static final long SLOW_FORCE_NANOS = TimeUnit.MILLISECONDS.toNanos(8);
+	// The separation between a rotational store and a solid-state one; a caller that owns a narrower trade-off compares
+	// forceNanos with its own bar instead. Bounded by the number of stores because FileStore overrides equals per device.
+	private static final long NOT_ROTATIONAL_FORCE_NANOS = TimeUnit.MILLISECONDS.toNanos(8);
 	private static final ConcurrentHashMap<FileStore, Long> FORCE_NANOS = new ConcurrentHashMap<>();
 
 	/** No measurement: the store could not be inspected or probed, so none of its forces is proven cheap. */
@@ -82,11 +83,11 @@ public final class ForceProfile {
 		}
 	}
 
-	/** Whether this path's store is cheap enough to overlap forces with other work; {@link #forceNanos} carries the measurement. */
-	public static boolean allowsOverlappedForce(Path directory) {
+	/** Whether this path's store is solid-state rather than rotational; {@link #forceNanos} carries the measurement. */
+	public static boolean isNotRotationalStore(Path directory) {
 		long nanos = forceNanos(directory);
-		if (nanos <= SLOW_FORCE_NANOS) return true;
-		if (nanos != UNMEASURED) LOGGER.info("Force probe took {} ms; this store keeps IO in its ordered path", TimeUnit.NANOSECONDS.toMillis(nanos));
+		if (nanos <= NOT_ROTATIONAL_FORCE_NANOS) return true;
+		if (nanos != UNMEASURED) LOGGER.info("Force probe took {} ms; this store is treated as rotational", TimeUnit.NANOSECONDS.toMillis(nanos));
 		return false;
 	}
 }

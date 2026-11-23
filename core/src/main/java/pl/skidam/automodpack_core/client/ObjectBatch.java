@@ -131,7 +131,7 @@ final class ObjectBatch {
 		if (!asynchronous || size < 0 || size > MAX_ASYNC_FORCE_BYTES) return false;
 		synchronized (overlapProbe) {
 			if (overlapForces == null) {
-				overlapForces = ForceProfile.allowsOverlappedForce(dataLayout.stagingDirectory());
+				overlapForces = ForceProfile.isNotRotationalStore(dataLayout.stagingDirectory());
 				if (!overlapForces) LOGGER.info("This store is not proven solid-state; held objects are forced at join");
 			}
 			return overlapForces;

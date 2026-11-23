@@ -222,8 +222,8 @@ public final class InstanceTree {
 	/**
 	 * The identity of one projection row, and with it which tripwire may answer it next time. Only a row that is the
 	 * sealed CAS inode can skip the ctime half of the tripwire: it cannot be rewritten in place, because its bytes are
-	 * the object's and detach took the link away deliberately. A verified copy the store holds at the same bytes is
-	 * sealed by policy too, so it answers immutable; a writable copy is the player's file and is hashed as one.
+	 * the object's and detach took the link away deliberately. Anything else is the player's file or a copy the store
+	 * cannot link, so it is hashed as one even when the read-only policy is set.
 	 */
 	private static String projectionHash(ClientStorage storage, FileCache cache, Path disk) throws IOException {
 		if (!ImmutableFiles.isProtected(disk)) return cache.getOrComputeHashEditable(disk);

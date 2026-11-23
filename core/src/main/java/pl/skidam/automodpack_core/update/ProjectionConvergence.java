@@ -731,9 +731,9 @@ final class ProjectionConvergence {
 	/**
 	 * The pool only runs when nothing about the store or the hooks punishes concurrency. The force probe is this code's
 	 * only reading of the store's own latency, and installs ask a narrower question than downloads: a link never touches
-	 * the platter, only the copy fallback does, and it issues one read and one write per file. So its eight-millisecond
-	 * bar is reused as the conservative "this store is not rotational" answer, and {@link #MAX_INSTALL_WORKERS} bounds
-	 * the crews by the link measurement instead of by that bar.
+	 * the platter, only the copy fallback does, and it issues one read and one write per file. So the shared
+	 * not-rotational verdict is the conservative answer, and {@link #MAX_INSTALL_WORKERS} bounds the crews by the link
+	 * measurement instead of by that verdict.
 	 */
 	private boolean parallelInstalls(boolean keepUnknown) {
 		if (keepUnknown || !writes.parallelSafe()) return false;
@@ -743,7 +743,7 @@ final class ProjectionConvergence {
 			FileStore projection = ForceProfile.storeOf(storage.gameDirectory());
 			// A link across stores falls back to a copy, and copying in parallel is exactly the slow-store trap.
 			if (!data.equals(projection)) return false;
-			return ForceProfile.allowsOverlappedForce(storage.stagingDirectory());
+			return ForceProfile.isNotRotationalStore(storage.stagingDirectory());
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
