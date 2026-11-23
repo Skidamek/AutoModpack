@@ -13,9 +13,10 @@ from .config import REPO_ROOT
 from .generation_identity import content_token, ownership_ledger_digest
 from .mod_fixtures import write_valid_mod_fixture
 from .mods import resolve_mod
-from .client_steps import _ensure_client_data_root, _load_ver, cas_object
+from .client_steps import _ensure_client_data_root, cas_object
 from .engine import Context
 from .engine.registry import verb
+from .runtime.hmc import load_version
 
 
 def _sha1(path: Path) -> str:
@@ -173,7 +174,7 @@ def _write_staged_generation(
         "modpackName": modpack_name,
         "automodpackVersion": "",
         "loader": ctx.target.loader,
-        "loaderVersion": _load_ver(ctx.target),
+        "loaderVersion": load_version(ctx.target),
         "mcVersion": ctx.target.minecraft,
         "categories": {
             "General": {

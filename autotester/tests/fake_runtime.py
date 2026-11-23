@@ -53,15 +53,8 @@ class FakeClientRuntime:
         if self.running_error is not None:
             raise self.running_error
 
-    def is_running(self) -> bool:
-        return self.running_error is None
-
     def logs(self, tail: int | None = None) -> str:
         return self.log_text
-
-    def exec(self, argv: list[str], *, user: str | None = None) -> ExecResult:
-        self.calls.append(("exec", tuple(argv), user))
-        return ExecResult(0, "")
 
     def wait_exited(self, timeout: float) -> None:
         self.calls.append(("wait_exited", self.name, timeout))
@@ -148,9 +141,3 @@ class FakeHostingRuntime:
 
     def remove_network(self, name: str) -> None:
         self.calls.append(("remove_network", name))
-
-    def ensure_volume(self, name: str) -> None:
-        self.calls.append(("ensure_volume", name))
-
-    def remove_volume(self, name: str) -> None:
-        self.calls.append(("remove_volume", name))

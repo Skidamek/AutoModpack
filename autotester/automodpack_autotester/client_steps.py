@@ -15,10 +15,9 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, Target
 from .mods import resolve_mod
 from .runtime.hmc import (
+    CLIENT_DATA_ROOT,
     cache_paths as _client_cache_paths,
-    hmc_build as _hmc_build,
     launcher_meta_dir as _launcher_meta_dir,
-    load_version as _load_ver,
     profile_receipt as _client_profile_receipt,
 )
 from .engine import Context
@@ -28,8 +27,6 @@ from .engine.steps_io import _active_file, _read_active_generation
 
 
 logger = logging.getLogger(__name__)
-
-_CLIENT_DATA_ROOT = Path("automodpack/client/data")
 
 
 def cas_object(objects_dir: Path, sha1: str) -> Path:
@@ -43,7 +40,7 @@ def _bridge_state(ctx: Context) -> Path:
 
 def _ensure_client_data_root(game_dir: Path) -> Path:
     """Create the one local data root used by every client lifecycle step."""
-    data_root = game_dir / _CLIENT_DATA_ROOT
+    data_root = game_dir / CLIENT_DATA_ROOT
     data_root.mkdir(parents=True, exist_ok=True)
     return data_root
 
@@ -112,7 +109,7 @@ def _defer_first_sync_to_login(ctx: Context, game_dir: Path) -> None:
     config_path.write_text("update-selected-modpack-on-launch: false\n", encoding="utf-8", newline="")
 
 
-def _client_profile_is_prepared(ctx: Context, _hmc_cache_root: Path | None = None, _shared_versions: Path | None = None) -> bool:
+def _client_profile_is_prepared(ctx: Context) -> bool:
     """Whether the runtime's loader profile receipt matches this case."""
     if ctx.client is None:
         return False

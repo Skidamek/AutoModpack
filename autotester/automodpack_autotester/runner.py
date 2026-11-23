@@ -18,7 +18,7 @@ from . import client_steps, server_steps, s3_host, staging_steps, static_host  #
 from .config import Target, load_macros, parse_server_files
 from .engine import ClientExited, Context, run_flow
 from .runtime.base import Platform
-from .runtime.detect import case_skip_reason, select_platform
+from .runtime.detect import case_skip_reason
 from .supervisor import resource_labels
 
 
@@ -169,17 +169,15 @@ def run_case(
     client_image: str,
     settings: dict,
     resource_scope: str,
+    platform: Platform,
     netem: list[str] | None = None,
     loss: str = "",
     server_netem: list[str] | None = None,
-    platform: Platform | None = None,
 ) -> dict:
     started = time.monotonic()
     phases: dict[str, float] = {}
     scenario_id = scenario.get("id", "?")
     connection_mode = str((scenario.get("connectionPath") or {}).get("mode", "")).upper() or None
-    if platform is None:
-        platform = select_platform(settings)
     skip_reason = case_skip_reason(scenario, platform)
     if skip_reason:
         logger.info("[%s] skip: %s", target.id, skip_reason)
@@ -284,12 +282,6 @@ def run_case(
         deadline.attach(ctx)
         if deadline_expired.is_set():
             raise TimeoutError(f"Case exceeded the configured {case_seconds:.0f}s deadline")
-
-        ctx.logs_provider = lambda which, tail=None: (
-            ctx.server.logs(tail) if which == "server" and ctx.server is not None
-            else ctx.client.logs(tail) if ctx.client is not None
-            else ""
-        )
 
         def _running():
             try:

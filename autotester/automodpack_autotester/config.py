@@ -24,6 +24,12 @@ ROOT = _find_root()
 REPO_ROOT = ROOT.parent
 
 
+def resolve_settings_path(settings: dict, key: str, default: str) -> Path:
+    """One ``paths:`` entry from settings, resolved against the repo root unless absolute."""
+    path = Path(str(settings.get("paths", {}).get(key, default)))
+    return (REPO_ROOT / path).resolve() if not path.is_absolute() else path.resolve()
+
+
 @lru_cache(maxsize=1)
 def checkout_tag() -> str:
     """Short stable tag of this checkout, so concurrent checkouts never share named docker resources."""
@@ -129,19 +135,21 @@ def load_scenarios() -> dict[str, dict]:
     }
 
 
-def connection_path_variants(scenario: dict) -> list[dict]:
-    """Expand a scenario's declared connection-path matrix into case variants."""
+def connection_path_variants(scenario: dict, mode: str | None = None) -> list[dict]:
+    """Expand a scenario's declared connection-path matrix into case variants, or only ``mode``'s."""
     paths = scenario.get("connectionPaths")
-    if paths is None:
-        return [scenario]
     variants = []
-    for path in paths:
+    if paths is None:
+        variants.append(scenario)
+    for path in paths or ():
         variant = deepcopy(scenario)
-        mode = str(path["mode"]).upper()
-        variant["id"] = f"{scenario['id']}-{mode.lower()}"
+        connection_mode = str(path["mode"]).upper()
+        variant["id"] = f"{scenario['id']}-{connection_mode.lower()}"
         variant["connectionPath"] = deepcopy(path)
         variants.append(variant)
-    return variants
+    if mode is None:
+        return variants
+    return [variant for variant in variants if str((variant.get("connectionPath") or {}).get("mode", "")).upper() == mode]
 
 
 @lru_cache(maxsize=1)

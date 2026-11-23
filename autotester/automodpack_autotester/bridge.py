@@ -14,6 +14,12 @@ class BridgeError(RuntimeError):
         self.code = code
 
 
+# AutoTestBridge.SCREENSHOT_SETTLE_TIMEOUT_SECONDS: the client gives up on a screenshot that has not settled by then.
+_CLIENT_SETTLE_SECONDS = 30
+# Strictly larger, so the client's named settle error arrives instead of this side timing out first.
+SCREENSHOT_TIMEOUT_SECONDS = _CLIENT_SETTLE_SECONDS + 15
+
+
 @dataclass
 class BridgeClient:
     game_dir: Path
@@ -74,7 +80,7 @@ class BridgeClient:
             payload["screenRevision"] = screen_revision
         return self.request("text", timeout=timeout, **payload)
 
-    def screenshot(self, name: str, timeout: float = 30) -> dict:
+    def screenshot(self, name: str, timeout: float = SCREENSHOT_TIMEOUT_SECONDS) -> dict:
         return self.request("screenshot", timeout=timeout, name=name)
 
     def connect(self, host: str, timeout: float = 30) -> dict:

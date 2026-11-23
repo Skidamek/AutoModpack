@@ -177,14 +177,8 @@ class ClientRuntime(Protocol):
     def running(self) -> None:
         """Raise when the client is not running."""
 
-    def is_running(self) -> bool:
-        """Non-raising variant of :meth:`running`."""
-
     def logs(self, tail: int | None = None) -> str:
         """Recent client output."""
-
-    def exec(self, argv: list[str], *, user: str | None = None) -> ExecResult:
-        """Run one command in the client environment (netem shaping only on Linux)."""
 
     def wait_exited(self, timeout: float) -> None:
         """Block until the client exits."""
@@ -241,8 +235,6 @@ class HostingRuntime(Protocol):
         entrypoint: list[str] | None = None,
         aliases: list[str] | None = None,
         labels: dict[str, str] | None = None,
-        sysctls: dict[str, str] | None = None,
-        cap_add: list[str] | None = None,
     ) -> None:
         """Start one service container/process."""
 
@@ -260,10 +252,6 @@ class HostingRuntime(Protocol):
 
     def remove_network(self, name: str) -> None: ...
 
-    def ensure_volume(self, name: str) -> None: ...
-
-    def remove_volume(self, name: str) -> None: ...
-
 
 @runtime_checkable
 class Platform(Protocol):
@@ -279,6 +267,9 @@ class Platform(Protocol):
     def hosting(self, ctx) -> HostingRuntime: ...
 
     def workspace(self, ctx) -> ServerWorkspace: ...
+
+    def prerequisites(self, settings: dict) -> list[tuple[str, bool, str]]:
+        """``(name, ok, detail)`` checks ``doctor`` reports for this platform, beyond the shared ones."""
 
     def abort_case(self, ctx) -> None:
         """Best-effort teardown used by the case deadline thread."""

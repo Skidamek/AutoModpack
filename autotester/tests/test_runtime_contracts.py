@@ -6,6 +6,7 @@ import types
 import pytest
 
 from automodpack_autotester import client_steps, runner, server_steps
+from automodpack_autotester.docker_harness import Docker
 from automodpack_autotester.runtime import (
     Capabilities,
     ClientRuntime,
@@ -20,6 +21,12 @@ from automodpack_autotester.runtime.detect import (
     case_skip_reason,
     missing_capabilities,
     select_platform,
+)
+from automodpack_autotester.runtime.docker_linux import (
+    DockerLinuxClientRuntime,
+    DockerLinuxHostingRuntime,
+    DockerLinuxPlatform,
+    DockerLinuxServerRuntime,
 )
 from automodpack_autotester.supervisor import SCOPE_LABEL
 from tests.fake_runtime import FakeClientRuntime, FakeHostingRuntime, FakeServerRuntime
@@ -47,15 +54,25 @@ class FakePlatform:
     def workspace(self, ctx):
         return ctx.server_workspace
 
+    def prerequisites(self, settings):
+        return []
+
     def abort_case(self, ctx):
         self.aborted.append(ctx)
 
 
-def test_fake_runtimes_satisfy_the_runtime_protocols():
+def test_every_runtime_satisfies_its_protocol(tmp_path):
+    """Fakes and real runtimes alike: a protocol member added or renamed here must show up everywhere."""
+    ctx = types.SimpleNamespace(cli_name="cli-container", prep_name="", srv_name="srv-container", game_dir=tmp_path / "game")
+
     assert isinstance(FakeClientRuntime(), ClientRuntime)
     assert isinstance(FakeServerRuntime(), ServerRuntime)
     assert isinstance(FakeHostingRuntime(), HostingRuntime)
     assert isinstance(FakePlatform(), Platform)
+    assert isinstance(DockerLinuxClientRuntime(ctx), ClientRuntime)
+    assert isinstance(DockerLinuxServerRuntime(ctx), ServerRuntime)
+    assert isinstance(DockerLinuxHostingRuntime(), HostingRuntime)
+    assert isinstance(DockerLinuxPlatform(), Platform)
 
 
 def test_launch_client_drives_the_attached_runtime(make_ctx, monkeypatch):
@@ -118,12 +135,12 @@ def test_docker_client_launch_keeps_the_exact_legacy_container(make_ctx, monkeyp
         settings={"timeouts": {"displayStartSeconds": 7}},
     )
     ctx.resource_scope = "scope123"
-    monkeypatch.setattr(docker_linux, "_run_container", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(Docker, "run", lambda _self, **kwargs: seen.update(kwargs))
     monkeypatch.setattr(docker_linux, "profile_is_prepared", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(docker_linux, "cache_paths", lambda _ctx: (tmp_path / "hmc", tmp_path / "shared"))
     monkeypatch.setattr(docker_linux, "launcher_meta_dir", lambda _ctx: tmp_path / "meta")
-    monkeypatch.setattr(docker_linux, "_uid", lambda: 1000)
-    monkeypatch.setattr(docker_linux, "_gid", lambda: 1001)
+    monkeypatch.setattr(docker_linux, "uid", lambda: 1000)
+    monkeypatch.setattr(docker_linux, "gid", lambda: 1001)
 
     docker_linux.DockerLinuxClientRuntime(ctx).start(ctx)
 
@@ -183,11 +200,11 @@ def test_docker_server_launch_keeps_the_exact_legacy_container(make_ctx, monkeyp
         labels={SCOPE_LABEL: "scope123"},
     )
     calls = []
-    monkeypatch.setattr(docker_linux, "_remove_volume", lambda name: calls.append(("remove_volume", name)))
-    monkeypatch.setattr(docker_linux, "_ensure_volume", lambda name: calls.append(("ensure_volume", name)))
-    monkeypatch.setattr(docker_linux, "_run_container", lambda **kwargs: seen.update(kwargs))
-    monkeypatch.setattr(docker_linux, "_uid", lambda: 1000)
-    monkeypatch.setattr(docker_linux, "_gid", lambda: 1001)
+    monkeypatch.setattr(Docker, "remove_volume", lambda _self, name: calls.append(("remove_volume", name)))
+    monkeypatch.setattr(Docker, "ensure_volume", lambda _self, name: calls.append(("ensure_volume", name)))
+    monkeypatch.setattr(Docker, "run", lambda _self, **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(docker_linux, "uid", lambda: 1000)
+    monkeypatch.setattr(docker_linux, "gid", lambda: 1001)
 
     docker_linux.DockerLinuxServerRuntime(ctx).start(ctx, spec)
 
@@ -196,7 +213,7 @@ def test_docker_server_launch_keeps_the_exact_legacy_container(make_ctx, monkeyp
     assert seen["image"] == "itzg/minecraft-server:java21"
     assert seen["network"] == "net"
     assert seen["env"] == {"TYPE": "FABRIC", "VERSION": "1.21", "UID": "1000", "GID": "1001"}
-    assert seen["mounts"] == list(mounts)
+    assert seen["mounts"] == mounts
     assert seen["labels"] == {SCOPE_LABEL: "scope123"}
     assert seen.get("cap_add") is None
     assert seen["sysctls"] is None
@@ -254,6 +271,9 @@ def test_platform_selection_defaults_to_linux_and_windows_is_explicit():
         select_platform({}, requested="windows")
     with pytest.raises(PlatformUnavailable, match="unknown platform"):
         select_platform({}, requested="plan9")
+    # No provider exists yet, so a Windows lane cannot be planned either.
+    with pytest.raises(PlatformUnavailable, match="Windows runtime is not implemented"):
+        select_platform({}, requested="windows")
 
 
 def test_run_case_refuses_shaping_on_a_platform_without_netem(tmp_path):

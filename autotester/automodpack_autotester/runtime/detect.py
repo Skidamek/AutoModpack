@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 from .base import CAPABILITY_REQUIREMENTS, KNOWN_PLATFORMS, Capabilities, Platform
 from .docker_linux import DockerLinuxPlatform
@@ -26,14 +25,13 @@ def host_default() -> str:
 def select_platform(settings: dict | None = None, requested: str | None = None) -> Platform:
     """Resolve ``--platform`` / settings ``platform:`` / the host default.
 
-    ``linux`` is Docker everywhere Docker runs. ``windows`` is the native-client
-    controller and only exists on Windows: selecting it on Linux is a named
-    failure rather than silently running the Linux containers.
+    ``linux`` is Docker everywhere Docker runs. A declared ``windows`` kernel is refused by
+    name until a Windows runtime exists, rather than silently running the Linux containers.
     """
     settings = settings or {}
     name = str(requested or settings.get("platform") or host_default()).lower()
     if name == "linux":
-        return DockerLinuxPlatform(settings)
+        return DockerLinuxPlatform()
     if name == "windows":
         raise PlatformUnavailable("the Windows runtime is not implemented; the Linux provider is the only one")
     raise PlatformUnavailable(f"unknown platform {name!r} (available: {', '.join(sorted(KNOWN_PLATFORMS))})")
@@ -76,29 +74,9 @@ def case_skip_reason(scenario: dict, platform: Platform) -> str | None:
     return None
 
 
-def describe(platform: Platform) -> dict[str, Any]:
-    caps = platform.capabilities
-    return {
-        "platform": platform.name,
-        "capabilities": {
-            name: getattr(caps, name)
-            for name in (
-                "container_client",
-                "container_server",
-                "native_client",
-                "native_server",
-                "netem",
-                "rendered_ui",
-                "junction_probe",
-            )
-        },
-    }
-
-
 __all__ = [
     "PlatformUnavailable",
     "case_skip_reason",
-    "describe",
     "host_default",
     "missing_capabilities",
     "scenario_platforms",

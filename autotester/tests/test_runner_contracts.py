@@ -17,6 +17,7 @@ from automodpack_autotester.config import generated_content, load_macros, write_
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
 from automodpack_autotester.runtime.base import Capabilities, ExecResult
+from automodpack_autotester.runtime.hmc import hmc_build
 
 
 def _target(**kw):
@@ -81,6 +82,47 @@ def test_target_selection_accepts_a_bounded_batch():
     assert selected == requested
 
 
+def test_repeated_target_flags_union_instead_of_overwriting(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_settings", lambda: {"run": {"scenario": "custom", "target": "first"}})
+    monkeypatch.setattr(cli, "load_scenarios", lambda: {"custom": {}})
+    monkeypatch.setattr(cli, "load_targets", lambda: {"first": _target(id="first"), "second": _target(id="second")})
+    monkeypatch.setattr(cli, "load_macros", dict)
+    monkeypatch.setattr(cli, "validate_scenario", lambda *_: [])
+    monkeypatch.setattr(cli, "scenario_matches_target", lambda *_: True)
+
+    assert cli.main(["targets", "--target", "first", "--target", "second"]) == 0
+
+    assert json.loads(capsys.readouterr().out) == ["first", "second"]
+
+
+def test_plan_refuses_a_connection_path_the_scenario_does_not_declare(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_settings", lambda: {"run": {"scenario": "magic-only", "target": "t"}})
+    monkeypatch.setattr(cli, "load_scenarios", lambda: {"magic-only": {"id": "magic-only", "connectionPaths": [{"mode": "MAGIC", "bindPort": -1}]}})
+    monkeypatch.setattr(cli, "load_targets", lambda: {"t": _target(id="t")})
+    monkeypatch.setattr(cli, "load_macros", dict)
+    monkeypatch.setattr(cli, "validate_scenario", lambda *_: [])
+    monkeypatch.setattr(cli, "scenario_matches_target", lambda *_: True)
+    monkeypatch.setattr(cli, "select_platform", lambda *_args, **_kwargs: types.SimpleNamespace(name="linux", capabilities=Capabilities()))
+
+    assert cli.main(["plan", "--connection-path", "HOLEPUNCH"]) == 1
+
+    assert "declares no HOLEPUNCH connection path" in capsys.readouterr().err
+
+
+def test_plan_fails_loudly_when_the_explicit_selection_runs_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_settings", lambda: {"run": {"scenario": "windows-only", "target": "t"}})
+    monkeypatch.setattr(cli, "load_scenarios", lambda: {"windows-only": {"id": "windows-only", "platforms": ["windows"]}})
+    monkeypatch.setattr(cli, "load_targets", lambda: {"t": _target(id="t")})
+    monkeypatch.setattr(cli, "load_macros", dict)
+    monkeypatch.setattr(cli, "validate_scenario", lambda *_: [])
+    monkeypatch.setattr(cli, "scenario_matches_target", lambda *_: True)
+    monkeypatch.setattr(cli, "select_platform", lambda *_args, **_kwargs: types.SimpleNamespace(name="linux", capabilities=Capabilities()))
+
+    assert cli.main(["plan", "--platform", "linux"]) == 1
+
+    assert "no cases ran on explicitly requested platform 'linux'" in capsys.readouterr().err
+
+
 def test_sigterm_enters_the_interrupt_cleanup_path():
     with pytest.raises(KeyboardInterrupt):
         cli._interrupt_on_termination(None, None)
@@ -100,7 +142,7 @@ def test_explicit_platform_with_zero_ran_cases_fails():
     selected = [_target(id="first")]
     skipped = {"target": "first", "ok": True, "skipped": True, "skipReason": "scenario declares platforms ['windows']"}
 
-    explicit = cli._matrix_payload(selected, {"first": skipped}, False, explicit_platform="windows")
+    explicit = cli._matrix_payload(selected, {"first": skipped}, False, explicit_selection="platform 'windows'")
     implicit = cli._matrix_payload(selected, {"first": skipped}, False)
 
     assert explicit["ok"] is False
@@ -120,7 +162,7 @@ def test_summary_counts_each_connection_path_once():
         ],
     }
 
-    payload = cli._matrix_payload([_target(id="first")], {"first": result}, False, explicit_platform="linux")
+    payload = cli._matrix_payload([_target(id="first")], {"first": result}, False, explicit_selection="platform 'linux'")
 
     assert payload["ok"] is True
     assert payload["summary"] == {"ran": 1, "skipped": 1, "failed": 0, "total": 2}
@@ -179,6 +221,7 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
         client_image="client",
         settings={},
         resource_scope="scope",
+        platform=types.SimpleNamespace(name="linux", capabilities=Capabilities()),
     )
 
     assert seen == ["MAGIC", "HOLEPUNCH", "HTTP"]
@@ -603,10 +646,11 @@ def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadlin
 
 
 def test_client_container_caps_java_heap(make_ctx, monkeypatch, tmp_path):
+    from automodpack_autotester.docker_harness import Docker
     from automodpack_autotester.runtime import docker_linux
 
     seen = {}
-    monkeypatch.setattr(docker_linux, "_run_container", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(Docker, "run", lambda _self, **kwargs: seen.update(kwargs))
     monkeypatch.setattr(docker_linux, "profile_is_prepared", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(docker_linux, "cache_paths", lambda _ctx: (tmp_path / "hmc", tmp_path / "shared"))
     monkeypatch.setattr(docker_linux, "launcher_meta_dir", lambda _ctx: tmp_path / "meta")
@@ -630,14 +674,15 @@ def test_client_container_caps_java_heap(make_ctx, monkeypatch, tmp_path):
     ],
 )
 def test_hmc_build_is_headlessmc_three_build_id(target, expected):
-    assert client_steps._hmc_build(target) == expected
+    assert hmc_build(target) == expected
 
 
 def test_client_container_passes_hmc_neoforge_build(make_ctx, monkeypatch, tmp_path):
+    from automodpack_autotester.docker_harness import Docker
     from automodpack_autotester.runtime import docker_linux
 
     seen = {}
-    monkeypatch.setattr(docker_linux, "_run_container", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(Docker, "run", lambda _self, **kwargs: seen.update(kwargs))
     monkeypatch.setattr(docker_linux, "profile_is_prepared", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(docker_linux, "cache_paths", lambda _ctx: (tmp_path / "hmc", tmp_path / "shared"))
     monkeypatch.setattr(docker_linux, "launcher_meta_dir", lambda _ctx: tmp_path / "meta")
@@ -839,6 +884,7 @@ def test_run_case_refuses_netem_on_host_networking(tmp_path):
             client_image="img",
             settings={},
             resource_scope="scope",
+            platform=types.SimpleNamespace(name="linux", capabilities=Capabilities()),
             netem=["delay", "1ms"],
         )
 

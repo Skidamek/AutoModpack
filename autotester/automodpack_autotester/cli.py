@@ -25,26 +25,23 @@ from .config import (
     load_scenarios,
     load_settings,
     load_targets,
+    resolve_settings_path,
     scenario_matches_target,
     server_cache_volume,
 )
 from .runner import run_case
-from .runtime.detect import case_skip_reason, host_default, select_platform
+from .runtime.detect import case_skip_reason, select_platform
 from .supervisor import RunSupervisor, reap_orphaned_scopes, server_cache_lock
 from .validate import CONNECTION_MODES, validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+_TARGET_HELP = "Target from targets.yaml, or all; repeatable, and each value may be a comma-separated list"
+
 
 def _interrupt_on_termination(_signum, _frame) -> None:
     raise KeyboardInterrupt
-
-
-def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
-    raw = s.get("paths", {}).get(key, default)
-    p = Path(str(raw))
-    return (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
 
 
 def _stop_gradle_daemons() -> None:
@@ -82,11 +79,40 @@ def _leaf_results(result: dict) -> list[dict]:
     return paths if isinstance(paths, list) and paths else [result]
 
 
+def _empty_selection_error(selector: str | None, ran: int, skipped: int) -> str | None:
+    """Loud failure for an explicitly requested selection that exercised nothing.
+
+    Something the caller named (a platform, a connection path) must actually run a case:
+    every case skipping is a capability mismatch, not a green run.
+    """
+    if not selector or ran:
+        return None
+    return f"no cases ran on explicitly requested {selector}: {skipped} skipped"
+
+
+def _explicit_selection(args, settings: dict) -> str | None:
+    """What the caller named explicitly, phrased for :func:`_empty_selection_error`."""
+    requested_platform = str(args.platform or settings.get("platform") or "").lower()
+    selectors = [f"platform {requested_platform!r}"] if requested_platform else []
+    if args.connection_path:
+        selectors.append(f"connection path {args.connection_path!r}")
+    return " and ".join(selectors) or None
+
+
+def _selected_variants(scenario: dict, scenario_name: str, connection_path: str | None) -> list[dict] | None:
+    """The connection-path variants this run/plan executes, or None when the scenario has none for that path."""
+    variants = connection_path_variants(scenario, connection_path)
+    if connection_path and not variants:
+        print(f"Scenario {scenario_name!r} declares no {connection_path} connection path", file=sys.stderr)
+        return None
+    return variants
+
+
 def _matrix_payload(
     selected: list,
     results: dict,
     interrupted: bool,
-    explicit_platform: str | None = None,
+    explicit_selection: str | None = None,
 ) -> dict:
     expected = [target.id for target in selected]
     terminal = dict(results)
@@ -106,15 +132,9 @@ def _matrix_payload(
     skipped = sum(1 for leaf in leaves if leaf.get("skipped"))
     failed = sum(1 for leaf in leaves if not leaf.get("skipped") and not leaf.get("ok", False))
     ok = not interrupted and complete and all(result.get("ok", False) for result in terminal.values())
-    error = None
-    # A platform the caller named explicitly must actually exercise something:
-    # every case skipping is a capability mismatch, not a green run.
-    if explicit_platform and ran == 0:
+    error = _empty_selection_error(explicit_selection, ran, skipped)
+    if error:
         ok = False
-        error = (
-            f"no cases ran on explicitly requested platform {explicit_platform!r}: "
-            f"{skipped} skipped"
-        )
     payload = {
         "ok": ok,
         "results": [terminal[target_id] for target_id in expected],
@@ -154,11 +174,10 @@ def _server_cache_guard(target, variants, settings):
             print(f"[wait] {target.id}: server cache is in use by another run; waiting", flush=True)
 
 
-def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, platform=None, netem=None, loss="", server_netem=None):
-    effective_platform = platform or select_platform(settings)
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope, platform, netem=None, loss="", server_netem=None):
     # A target whose every variant skips never touches the server cache, so it
     # must not block a real run (or wait behind one) on the shared volume lock.
-    all_skip = bool(variants) and all(case_skip_reason(variant, effective_platform) for variant in variants)
+    all_skip = bool(variants) and all(case_skip_reason(variant, platform) for variant in variants)
     lock = None if all_skip else _server_cache_guard(target, variants, settings)
     try:
         case_results = [
@@ -255,15 +274,22 @@ def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[li
     return requested, [t for t in requested if scenario_matches_target(scenario, t)]
 
 
+def _target_selection(values: list[str] | None) -> str | None:
+    """One comma-separated target selection; a repeated ``--target`` is the union, never a silent overwrite."""
+    if not values:
+        return None
+    return ",".join(name.strip() for value in values for name in value.split(",") if name.strip()) or None
+
+
 def _selection_defaults(settings: dict) -> tuple[str, str]:
     run = settings.get("run", {})
     return str(run.get("scenario", "all")), str(run.get("target", "all"))
 
 
-def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:
+def _cmd_targets(scenario_name: str | None, target_values: list[str] | None) -> int:
     default_scenario, default_target = _selection_defaults(load_settings())
     scenario_name = scenario_name or default_scenario
-    target_name = target_name or default_target
+    target_name = _target_selection(target_values) or default_target
     scenarios = load_scenarios()
     scenario = scenarios.get(scenario_name)
     if scenario is None:
@@ -280,22 +306,10 @@ def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:
     return 0
 
 
-def _plan_platform(settings: dict, requested: str | None):
-    """Resolve a platform for planning without requiring its host (Windows plans on Linux)."""
-    name = str(requested or settings.get("platform") or host_default()).lower()
-    if name == "linux":
-        from .runtime.docker_linux import DockerLinuxPlatform
-
-        return DockerLinuxPlatform(settings)
-    if name == "windows":
-        raise ValueError("the Windows runtime is not implemented; the Linux provider is the only one")
-    raise ValueError(f"unknown platform {name!r}")
-
-
 def _cmd_plan(args) -> int:
     settings = load_settings()
     scenario_name = args.scenario or _selection_defaults(settings)[0]
-    target_name = args.target or _selection_defaults(settings)[1]
+    target_name = _target_selection(args.target) or _selection_defaults(settings)[1]
     scenarios = load_scenarios()
     scenario = scenarios.get(scenario_name)
     if scenario is None:
@@ -309,14 +323,14 @@ def _cmd_plan(args) -> int:
             print(f"  - {problem}", file=sys.stderr)
         return 1
     try:
-        platform = _plan_platform(settings, args.platform)
-    except ValueError as error:
+        platform = select_platform(settings, requested=args.platform)
+    except Exception as error:
         print(f"Cannot plan: {error}", file=sys.stderr)
         return 1
+    variants = _selected_variants(scenario, scenario_name, args.connection_path)
+    if variants is None:
+        return 1
     _requested, selected = _select_targets(targets, target_name, scenario)
-    variants = connection_path_variants(scenario)
-    if args.connection_path:
-        variants = [variant for variant in variants if str((variant.get("connectionPath") or {}).get("mode", "")).upper() == args.connection_path]
     ran = skipped = 0
     for target in selected:
         for variant in variants:
@@ -328,8 +342,11 @@ def _cmd_plan(args) -> int:
                 ran += 1
                 print(f"RUN  {target.id} {variant.get('id', '?')}")
     print(f"Plan: {ran} run / {skipped} skip on {platform.name}")
-    explicit = str(args.platform or settings.get("platform") or "").lower() or None
-    return 1 if explicit and ran == 0 else 0
+    error = _empty_selection_error(_explicit_selection(args, settings), ran, skipped)
+    if error:
+        print(error, file=sys.stderr)
+        return 1
+    return 0
 
 
 def _cmd_doctor(args) -> int:
@@ -339,25 +356,19 @@ def _cmd_doctor(args) -> int:
     except Exception as error:
         print(f"FAIL platform: {error}", file=sys.stderr)
         return 1
+    artifact_dir = resolve_settings_path(settings, "artifactDir", "merged")
+    jars = sorted(artifact_dir.glob("*.jar")) if artifact_dir.is_dir() else []
+    checks = [
+        ("platform", True, platform.name),
+        ("python", sys.version_info >= (3, 11), f"{sys.version.split()[0]} ({sys.executable})"),
+        *platform.prerequisites(settings),
+        ("artifactDir", bool(jars), f"{artifact_dir} ({len(jars)} jar(s))"),
+    ]
     failures = 0
-
-    def check(name: str, ok: bool, detail: str) -> None:
-        nonlocal failures
+    for name, ok, detail in checks:
         if not ok:
             failures += 1
         print(f"{'OK  ' if ok else 'FAIL'} {name}: {detail}")
-
-    check("platform", True, platform.name)
-    check("python", sys.version_info >= (3, 11), f"{sys.version.split()[0]} ({sys.executable})")
-    try:
-        version = docker_py.from_env(timeout=10).version()
-        check("docker", True, f"{version.get('Os', '?')}/{version.get('Arch', '?')} {version.get('Version', '?')}")
-    except Exception as error:
-        check("docker", False, str(error))
-    artifact_dir = _resolve_settings_path(settings, "artifactDir", "merged")
-    jars = sorted(artifact_dir.glob("*.jar")) if artifact_dir.is_dir() else []
-    check("artifactDir", bool(jars), f"{artifact_dir} ({len(jars)} jar(s))")
-
     return 0 if failures == 0 else 1
 
 
@@ -371,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--client-image")
 
     run_p = sub.add_parser("run")
-    run_p.add_argument("--target")
+    run_p.add_argument("--target", action="append", help=_TARGET_HELP)
     run_p.add_argument("--scenario")
     run_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper,
                        help="Run one connection path (e.g. HOLEPUNCH) instead of the scenario's full matrix")
@@ -405,11 +416,11 @@ def main(argv: list[str] | None = None) -> int:
 
     target_p = sub.add_parser("targets", help="Print in-scope target IDs as JSON")
     target_p.add_argument("--scenario")
-    target_p.add_argument("--target")
+    target_p.add_argument("--target", action="append", help=_TARGET_HELP)
 
     plan_p = sub.add_parser("plan", help="Print resolved cases and skip reasons without starting anything")
     plan_p.add_argument("--scenario")
-    plan_p.add_argument("--target")
+    plan_p.add_argument("--target", action="append", help=_TARGET_HELP)
     plan_p.add_argument("--platform", help="Plan for linux or windows")
     plan_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper)
 
@@ -465,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "clean":
         s = load_settings()
         out_dir = (
-            _resolve_settings_path(s, "outDir", "out")
+            resolve_settings_path(s, "outDir", "out")
             if not args.out_dir
             else args.out_dir.resolve()
         )
@@ -478,7 +489,6 @@ def main(argv: list[str] | None = None) -> int:
     # --- run ---
     s = load_settings()
     rc = s.get("run", {})
-    requested_platform = str(args.platform or s.get("platform") or "").lower() or None
     try:
         platform = select_platform(s, requested=args.platform)
     except Exception as error:
@@ -511,7 +521,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {prob}", file=sys.stderr)
         return 1
 
-    target_name = args.target or default_target
+    target_name = _target_selection(args.target) or default_target
     # Drop targets the scenario doesn't apply to (targets:/loaders:/minecraft:),
     # so an unrelated target doesn't fail confusingly on missing mods.
     requested, selected = _select_targets(targets, target_name, scenario)
@@ -521,20 +531,17 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         print("No targets in scope for this scenario", file=sys.stderr)
         return 1
-    variants = connection_path_variants(scenario)
-    if args.connection_path:
-        variants = [v for v in variants if str(v.get("connectionPath", {}).get("mode", "")).upper() == args.connection_path]
-        if not variants:
-            print(f"Scenario {scenario_name!r} declares no {args.connection_path} connection path", file=sys.stderr)
-            return 1
+    variants = _selected_variants(scenario, scenario_name, args.connection_path)
+    if variants is None:
+        return 1
 
     out_dir = (
-        _resolve_settings_path(s, "outDir", "out")
+        resolve_settings_path(s, "outDir", "out")
         if not args.out_dir
         else args.out_dir.resolve()
     )
     artifact_dir = (
-        _resolve_settings_path(s, "artifactDir", "merged")
+        resolve_settings_path(s, "artifactDir", "merged")
         if not args.artifact_dir
         else args.artifact_dir.resolve()
     )
@@ -617,7 +624,7 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
-            payload = _matrix_payload(selected, results, interrupted, explicit_platform=requested_platform)
+            payload = _matrix_payload(selected, results, interrupted, explicit_selection=_explicit_selection(args, s))
             ok = payload["ok"]
             _write_results(out_dir / "results.json", payload)
             print(_summary_line(payload))

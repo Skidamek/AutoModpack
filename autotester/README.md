@@ -75,7 +75,7 @@ Common run options:
 
 | Option | Description |
 | --- | --- |
-| `--target ID` | Target from `targets.yaml`, or `all`. |
+| `--target ID` | Target from `targets.yaml`, or `all`. Repeatable, and each value may be a comma-separated list. |
 | `--scenario ID` | Scenario file stem from `scenarios/`. |
 | `--jobs N` | Number of targets to run in parallel. |
 | `--artifact-dir PATH` | Directory containing merged AutoModpack jars. |
