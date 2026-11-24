@@ -197,9 +197,8 @@ final class LaneConnector {
 		HolepunchOptions.Builder builder = HolepunchOptions.builder()
 				.connectTimeout(NETWORK_TIMEOUT)
 				.negotiationTimeout(NETWORK_TIMEOUT)
-				.markerConstant(ServerHolepunchBridge.markerConstant());
-		LoaderManagerService.ModPlatform platform = Environment.current().platform();
-		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
+				.markerConstant(NetUtils.holepunchMarkerConstant());
+		if (Environment.current().platform() == LoaderManagerService.ModPlatform.FORGE) {
 			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
 		}
 		return builder.build();

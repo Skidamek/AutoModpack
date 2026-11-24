@@ -5,10 +5,6 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,7 +33,6 @@ import pl.skidam.mcholepunch.server.netty.NettyChannelRegistry;
  */
 public final class ServerHolepunchBridge {
 	private static final Logger LOGGER = LogManager.getLogger(ServerHolepunchBridge.class);
-	private static final byte[] MARKER_CONSTANT = computeMarkerConstant();
 
 	private static final Set<Channel> channels = ConcurrentHashMap.newKeySet();
 	private static NettyChannelRegistry.Registration registration;
@@ -46,15 +41,7 @@ public final class ServerHolepunchBridge {
 
 	/** AutoModpack's 80-bit mcholepunch routing constant, isolating its login claims from other deployments. */
 	public static byte[] markerConstant() {
-		return MARKER_CONSTANT.clone();
-	}
-
-	private static byte[] computeMarkerConstant() {
-		try {
-			return Arrays.copyOf(MessageDigest.getInstance("SHA-256").digest("automodpack:holepunch-marker".getBytes(StandardCharsets.UTF_8)), 10);
-		} catch (NoSuchAlgorithmException exception) {
-			throw new IllegalStateException("SHA-256 is missing from the JRE", exception);
-		}
+		return NetUtils.holepunchMarkerConstant();
 	}
 
 	/** Registers the takeover application; returns false when holepunch hosting is off or already registered. */
@@ -129,7 +116,7 @@ public final class ServerHolepunchBridge {
 				output.add(input.readRetainedSlice(input.readableBytes()));
 				return;
 			}
-			ByteBuf decoded = context.alloc().ioBuffer(input.readableBytes() + inbound.pendingRecordLength());
+			ByteBuf decoded = context.alloc().ioBuffer(input.readableBytes() + inbound.pendingHeaderBytes());
 			ByteBuffer view = decoded.nioBuffer(0, decoded.capacity());
 			try {
 				inbound.decode(readableView(input), view);
@@ -164,9 +151,7 @@ public final class ServerHolepunchBridge {
 				output.add(message.retain());
 				return;
 			}
-			// The SslHandler writes one TLS record per message, so one frame header of expansion
-			// plus whatever partial record the encoder still holds is the whole bound.
-			ByteBuf encoded = context.alloc().ioBuffer(message.readableBytes() + outbound.pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+			ByteBuf encoded = context.alloc().ioBuffer(message.readableBytes() + outbound.pendingHeaderBytes());
 			ByteBuffer view = encoded.nioBuffer(0, encoded.capacity());
 			try {
 				outbound.encode(readableView(message), view);
@@ -201,6 +186,6 @@ public final class ServerHolepunchBridge {
 	 * stopped draining piles up past this watermark.
 	 */
 	private static long maxPendingWriteBytes() {
-		return WIRE_CHUNK_BYTES + (long) TlsRecordCamouflage.MAX_RECORD_LENGTH + TlsRecordCamouflage.FRAME_HEADER_LENGTH;
+		return WIRE_CHUNK_BYTES + (long) TlsRecordCamouflage.MAX_RECORD_LENGTH;
 	}
 }

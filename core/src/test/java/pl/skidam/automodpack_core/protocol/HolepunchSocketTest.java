@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -68,7 +69,7 @@ class HolepunchSocketTest {
 	}
 
 	@Test
-	void camouflagedReadsSurviveDispatchesThatCompletePendingRecords() throws Exception {
+	void camouflagedReadsSurviveArbitraryChunkingAndHeaderSplits() throws Exception {
 		byte[] secret = new byte[16];
 		TlsRecordCamouflage.Pair serverSide = TlsRecordCamouflage.create(secret, false);
 		byte[] first = tlsRecord(16000);
@@ -78,25 +79,34 @@ class HolepunchSocketTest {
 		byte[] wire = concat(camouflage(serverSide.outbound(), first), camouflage(serverSide.outbound(), second), camouflage(serverSide.outbound(), third),
 				camouflage(serverSide.outbound(), fourth));
 		byte[] expected = concat(first, second, third, fourth);
+		assertEquals(expected.length, wire.length, "header-masked stream must add zero framing bytes");
+		assertFalse(Arrays.equals(Arrays.copyOfRange(wire, 0, 5), Arrays.copyOfRange(wire, first.length, first.length + 5)),
+				"identical TLS headers must mask differently across consecutive records");
 
 		try (HolepunchSocket socket = new HolepunchSocket(new StubConnection())) {
 			socket.enableTlsTrafficCamouflage(true);
-			// The transport coalesces wire bytes arbitrarily: cut inside the last frame so the
-			// second dispatch completes a pending record and decodes far more than its own size.
-			int cut = wire.length - 3;
-			socket.handler().onRawRead(ByteBuffer.wrap(wire, 0, cut));
-			socket.handler().onRawRead(ByteBuffer.wrap(wire, cut, wire.length - cut));
+			// Cut mid-header on the first record and mid-payload on the last record.
+			int headerCut = 2;
+			int tailCut = wire.length - 3;
+			socket.handler().onRawRead(ByteBuffer.wrap(wire, 0, headerCut));
+			socket.handler().onRawRead(ByteBuffer.wrap(wire, headerCut, tailCut - headerCut));
+			socket.handler().onRawRead(ByteBuffer.wrap(wire, tailCut, wire.length - tailCut));
 
 			assertArrayEquals(expected, socket.getInputStream().readNBytes(expected.length));
 		}
 	}
 
 	@Test
-	void camouflagedMalformedFrameClosesTheSocket() throws Exception {
+	void camouflagedMalformedHeaderClosesTheSocket() throws Exception {
+		byte[] secret = new byte[16];
+		// Encrypt an invalid TLS header (contentType=0x00) using the wrong key so unmasked header fails validation.
+		byte[] wrongSecret = new byte[16];
+		wrongSecret[0] = 1;
+		TlsRecordCamouflage.Pair wrongSender = TlsRecordCamouflage.create(wrongSecret, false);
+		byte[] malformed = camouflage(wrongSender.outbound(), tlsRecord(64));
+
 		try (HolepunchSocket socket = new HolepunchSocket(new StubConnection())) {
 			socket.enableTlsTrafficCamouflage(true);
-			// Three VarInt continuation bytes never terminate: the frame header overflows.
-			byte[] malformed = {(byte) 0x80, (byte) 0x80, (byte) 0x80, 1, 2, 3, 4};
 
 			assertThrows(IllegalStateException.class, () -> socket.handler().onRawRead(ByteBuffer.wrap(malformed)));
 			assertTrue(socket.isClosed());
@@ -150,7 +160,7 @@ class HolepunchSocketTest {
 	}
 
 	private static byte[] camouflage(TlsRecordCamouflage camouflage, byte[] record) throws Exception {
-		ByteBuffer output = ByteBuffer.allocate(record.length + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+		ByteBuffer output = ByteBuffer.allocate(record.length);
 		camouflage.encode(ByteBuffer.wrap(record), output);
 		output.flip();
 		byte[] frame = new byte[output.remaining()];

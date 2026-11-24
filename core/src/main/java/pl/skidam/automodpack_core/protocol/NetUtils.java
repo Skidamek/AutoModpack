@@ -23,6 +23,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
@@ -47,6 +48,20 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 
 public class NetUtils {
 	private static final Logger LOGGER = LogManager.getLogger(NetUtils.class);
+	private static final byte[] HOLEPUNCH_MARKER_CONSTANT = computeHolepunchMarkerConstant();
+
+	/** AutoModpack's 80-bit mcholepunch routing constant, kept off Netty-importing server classes so client preload can read it without Netty on the classpath. */
+	public static byte[] holepunchMarkerConstant() {
+		return HOLEPUNCH_MARKER_CONSTANT.clone();
+	}
+
+	private static byte[] computeHolepunchMarkerConstant() {
+		try {
+			return Arrays.copyOf(MessageDigest.getInstance("SHA-256").digest("automodpack:holepunch-marker".getBytes(StandardCharsets.UTF_8)), 10);
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 is missing from the JRE", exception);
+		}
+	}
 
 	private static final String USER_AGENT_PREFIX = "github/skidamek/automodpack/";
 

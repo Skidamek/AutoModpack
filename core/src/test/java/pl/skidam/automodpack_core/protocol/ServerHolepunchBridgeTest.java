@@ -34,14 +34,15 @@ class ServerHolepunchBridgeTest {
 		connection.activateRaw();
 		channel.writeOutbound(Unpooled.wrappedBuffer(record));
 		ByteBuffer framed = ByteBuffer.wrap(readBytes(channel.readOutbound()));
-		ByteBuffer decoded = ByteBuffer.allocate(record.length + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+		assertEquals(record.length, framed.remaining());
+		ByteBuffer decoded = ByteBuffer.allocate(record.length);
 		client.inbound().decode(framed, decoded);
 		decoded.flip();
 		byte[] roundTripped = new byte[decoded.remaining()];
 		decoded.get(roundTripped);
 		assertArrayEquals(record, roundTripped);
 
-		ByteBuffer encodedByClient = ByteBuffer.allocate(record.length + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+		ByteBuffer encodedByClient = ByteBuffer.allocate(record.length);
 		client.outbound().encode(ByteBuffer.wrap(record), encodedByClient);
 		encodedByClient.flip();
 		byte[] camouflaged = new byte[encodedByClient.remaining()];
