@@ -20,9 +20,10 @@ class ServerHolepunchBridgeTest {
 	@Test
 	void camouflageHandlersPassThroughBeforeTheHandoffAndRoundTripAfterIt() throws Exception {
 		FakeConnection connection = new FakeConnection();
+		TlsRecordCamouflage.Pair serverCamouflage = TlsRecordCamouflage.create(connection.transportSecret(), false);
 		EmbeddedChannel channel = new EmbeddedChannel();
-		channel.pipeline().addLast("holepunch-camouflage-encoder", new ServerHolepunchBridge.CamouflageEncoder(connection));
-		channel.pipeline().addLast("holepunch-camouflage-decoder", new ServerHolepunchBridge.CamouflageDecoder(connection));
+		channel.pipeline().addLast("holepunch-camouflage-encoder", new ServerHolepunchBridge.CamouflageEncoder(connection, serverCamouflage.outbound()));
+		channel.pipeline().addLast("holepunch-camouflage-decoder", new ServerHolepunchBridge.CamouflageDecoder(connection, serverCamouflage.inbound()));
 		byte[] record = tlsRecord(64);
 		TlsRecordCamouflage.Pair client = TlsRecordCamouflage.create(connection.transportSecret(), true);
 

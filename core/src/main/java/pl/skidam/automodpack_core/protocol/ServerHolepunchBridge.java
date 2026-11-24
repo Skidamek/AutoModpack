@@ -70,10 +70,11 @@ public final class ServerHolepunchBridge {
 		channels.add(channel);
 		channel.closeFuture().addListener(future -> channels.remove(channel));
 		ChannelPipeline pipeline = channel.pipeline();
+		TlsRecordCamouflage.Pair camouflage = TlsRecordCamouflage.create(connection.transportSecret(), false);
 		// The camouflage pair is wire-side of TLS: inbound records decamouflage before TLS decrypts
 		// them, outbound records camouflage after TLS encrypts them.
-		pipeline.addLast("holepunch-camouflage-encoder", new CamouflageEncoder(connection));
-		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection));
+		pipeline.addLast("holepunch-camouflage-encoder", new CamouflageEncoder(connection, camouflage.outbound()));
+		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection, camouflage.inbound()));
 		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
 		pipeline.addLast("traffic-shaper", server.trafficHandler());
 		server.installContractHandlers(pipeline);
@@ -97,11 +98,11 @@ public final class ServerHolepunchBridge {
 	/** Forwards decrypted transport-frame payloads before the handoff and decodes camouflaged TLS records after it. */
 	static final class CamouflageDecoder extends ByteToMessageDecoder {
 		private final HolepunchConnection connection;
-		private final TlsRecordCamouflage.Pair camouflage;
+		private final TlsRecordCamouflage inbound;
 
-		CamouflageDecoder(HolepunchConnection connection) throws Exception {
+		CamouflageDecoder(HolepunchConnection connection, TlsRecordCamouflage inbound) {
 			this.connection = connection;
-			this.camouflage = TlsRecordCamouflage.create(connection.transportSecret(), false);
+			this.inbound = inbound;
 		}
 
 		@Override
@@ -110,10 +111,10 @@ public final class ServerHolepunchBridge {
 				output.add(input.readRetainedSlice(input.readableBytes()));
 				return;
 			}
-			ByteBuf decoded = context.alloc().ioBuffer(input.readableBytes() + camouflage.inbound().pendingRecordLength());
+			ByteBuf decoded = context.alloc().ioBuffer(input.readableBytes() + inbound.pendingRecordLength());
 			ByteBuffer view = decoded.nioBuffer(0, decoded.capacity());
 			try {
-				camouflage.inbound().decode(readableView(input), view);
+				inbound.decode(readableView(input), view);
 			} catch (IOException exception) {
 				// Malformed input kills the connection, but the pipeline's error path cannot release this
 				// method's local, so the buffer goes back first or every hostile frame leaks one.
@@ -132,11 +133,11 @@ public final class ServerHolepunchBridge {
 	/** Passes handshake-era records through and encodes post-handoff records as camouflage frames the peer's pipeline decodes. */
 	static final class CamouflageEncoder extends MessageToMessageEncoder<ByteBuf> {
 		private final HolepunchConnection connection;
-		private final TlsRecordCamouflage.Pair camouflage;
+		private final TlsRecordCamouflage outbound;
 
-		CamouflageEncoder(HolepunchConnection connection) throws Exception {
+		CamouflageEncoder(HolepunchConnection connection, TlsRecordCamouflage outbound) {
 			this.connection = connection;
-			this.camouflage = TlsRecordCamouflage.create(connection.transportSecret(), false);
+			this.outbound = outbound;
 		}
 
 		@Override
@@ -147,10 +148,10 @@ public final class ServerHolepunchBridge {
 			}
 			// The SslHandler writes one TLS record per message, so one frame header of expansion
 			// plus whatever partial record the encoder still holds is the whole bound.
-			ByteBuf encoded = context.alloc().ioBuffer(message.readableBytes() + camouflage.outbound().pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+			ByteBuf encoded = context.alloc().ioBuffer(message.readableBytes() + outbound.pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
 			ByteBuffer view = encoded.nioBuffer(0, encoded.capacity());
 			try {
-				camouflage.outbound().encode(readableView(message), view);
+				outbound.encode(readableView(message), view);
 			} catch (IOException exception) {
 				encoded.release();
 				throw exception;
