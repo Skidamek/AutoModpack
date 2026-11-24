@@ -637,21 +637,16 @@ public final class ClientGenerationStore {
 				}
 
 				@Override
-				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
 					if (!attributes.isRegularFile()) return FileVisitResult.CONTINUE;
-					try {
-						breakSharedObjectLink(file, cache);
-						ImmutableFiles.unprotect(file);
-					} catch (IOException e) {
-						LOGGER.warn("Cannot make {} private: put it back by hand or resume syncing", file, e);
-					}
+					breakSharedObjectLink(file, cache);
+					ImmutableFiles.unprotect(file);
 					return FileVisitResult.CONTINUE;
 				}
 
 				@Override
-				public FileVisitResult visitFileFailed(Path file, IOException failure) {
-					LOGGER.warn("Cannot even read {} while detaching: it stays as it is", file, failure);
-					return FileVisitResult.CONTINUE;
+				public FileVisitResult visitFileFailed(Path file, IOException failure) throws IOException {
+					throw failure;
 				}
 			});
 		}

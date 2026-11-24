@@ -138,7 +138,7 @@ def test_partial_matrix_cannot_be_reported_as_green():
     assert payload["results"][1]["error"] == "Case did not produce a terminal result"
 
 
-def test_explicit_platform_with_zero_ran_cases_fails():
+def test_zero_ran_cases_fails_for_both_explicit_and_implicit_selections():
     selected = [_target(id="first")]
     skipped = {"target": "first", "ok": True, "skipped": True, "skipReason": "scenario declares platforms ['windows']"}
 
@@ -148,7 +148,8 @@ def test_explicit_platform_with_zero_ran_cases_fails():
     assert explicit["ok"] is False
     assert "explicitly requested platform 'windows'" in explicit["error"]
     assert explicit["summary"] == {"ran": 0, "skipped": 1, "failed": 0, "total": 1}
-    assert implicit["ok"] is True
+    assert implicit["ok"] is False
+    assert implicit["error"] == "no cases ran: 1 skipped"
     assert cli._summary_line(implicit) == "Summary: 0 ran / 1 skipped"
 
 

@@ -5,9 +5,11 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CRLReason;
 import java.security.cert.CertPathBuilder;
 import java.security.cert.CertStore;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateRevokedException;
 import java.security.cert.CollectionCertStoreParameters;
 import java.security.cert.PKIXBuilderParameters;
 import java.security.cert.TrustAnchor;
@@ -15,9 +17,11 @@ import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -25,6 +29,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
+import javax.security.auth.x500.X500Principal;
 
 /**
  * The JDK trust manager, then OneCRL over the certification paths to a trust anchor, which may run through trust-store
@@ -160,6 +165,6 @@ final class RevokingTrustManager extends X509ExtendedTrustManager {
 	}
 
 	private static CertificateException blocked() {
-		return new CertificateException("Certificate is blocked by OneCRL");
+		return new CertificateException("Certificate is blocked by OneCRL", new CertificateRevokedException(new Date(0), CRLReason.UNSPECIFIED, new X500Principal("CN=OneCRL"), Map.of()));
 	}
 }

@@ -21,6 +21,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.net.ssl.SSLSocket;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -87,6 +92,25 @@ class RevokingTrustManagerTest {
 		CertificateException failure = manager.getDeferredFailure(null);
 		assertNotNull(failure, "the CA-covering-origin step must see a failure, not a clean vouch");
 		assertTrue(failure.getMessage().contains("OneCRL"), "the failure must be the OneCRL rejection, not an unrelated PKIX failure");
+	}
+
+	@Test
+	void aOneCrlBlockedCertificateEndsTheTrustLadderWithoutPromptingThePlayer() throws Exception {
+		X509Certificate certificate = pem(EM_OV_TLS_CA_G3C_PEM);
+		var trust = new CustomizableTrustManager.SessionTrust("origin.example:25565", null);
+		var manager = new CustomizableTrustManager(trust, null, trusting(certificate));
+		try (SSLSocket socket = (SSLSocket) CandidateTrustValidation.newSslContext(manager).getSocketFactory().createSocket()) {
+			manager.checkServerTrusted(new X509Certificate[]{certificate}, "ECDHE_ECDSA", socket);
+			AtomicBoolean prompted = new AtomicBoolean();
+			var candidate = new CandidateTrustValidation.Candidate(socket, manager, trust, "origin.example", "origin.example", cert -> {
+				prompted.set(true);
+				return CompletableFuture.completedFuture(true);
+			});
+			CompletionException thrown = assertThrows(CompletionException.class, () -> CandidateTrustValidation.validate(candidate).join());
+			assertTrue(thrown.getCause() instanceof CertificateRejectedException rejected && rejected.reason() == CertificateRejectedException.Reason.CA_REVOCATION,
+					() -> "Expected CA_REVOCATION, got: " + thrown.getCause());
+			assertFalse(prompted.get(), "OneCRL block must be terminal and never ask the player");
+		}
 	}
 
 	/** The server sends only its leaf; the JDK completes the path from a trust-store intermediate, and OneCRL judges that path too. */

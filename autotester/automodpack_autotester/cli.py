@@ -61,14 +61,15 @@ def _leaf_results(result: dict) -> list[dict]:
 
 
 def _empty_selection_error(selector: str | None, ran: int, skipped: int) -> str | None:
-    """Loud failure for an explicitly requested selection that exercised nothing.
+    """Loud failure when a selection exercised nothing.
 
-    Something the caller named (a platform, a connection path) must actually run a case:
-    every case skipping is a capability mismatch, not a green run.
+    A run where every case skipped is a capability mismatch, never a green gate.
     """
-    if not selector or ran:
+    if ran:
         return None
-    return f"no cases ran on explicitly requested {selector}: {skipped} skipped"
+    if selector:
+        return f"no cases ran on explicitly requested {selector}: {skipped} skipped"
+    return f"no cases ran: {skipped} skipped"
 
 
 def _explicit_selection(args, settings: dict) -> str | None:

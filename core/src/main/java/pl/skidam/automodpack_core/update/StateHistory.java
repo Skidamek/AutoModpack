@@ -235,14 +235,20 @@ public final class StateHistory {
 				ChangeSet changes = changesBetween(live, target);
 				// Unsnapshotted local edits die in the overwrite otherwise, like the single-file restore's LIVE row.
 				if (!live.sameAs(target)) snapshotIfDirty(storage, target.keys(), Kind.LIVE, snapshot.modpackId(), "checkout-" + seq);
-				if (!live.sameFiles(target)) applyTree(storage, live, target, cache);
+				String restoreId = "restore-" + seq;
+				if (!live.sameFiles(target)) {
+					applyNonProjection(storage, live, target, cache);
+					convergeProjection(storage, live, target, cache, restoreId);
+				}
 				uncondemnRestoredOverlays(storage, target);
 				boolean reconciled = new ClientGenerationStore(storage).reconcileActiveClaim(target.identity());
+				if (ProjectionState.owed(storage)) ProjectionState.settled(storage, restoreId);
+				if (reconciled) new ClientGenerationStore(storage).reconcileProjectionOwnership();
 				InstanceTree after = InstanceTree.observe(storage, target.keys(), cache);
 				if (!after.sameFiles(target)) throw new IOException("Instance restore did not reproduce snapshot " + seq);
 				after.write(storage);
 				String restorePack = restorePack(storage, snapshot, target.identity());
-				if (!live.sameAs(after) || reconciled) journal.append(after.sha1(), Kind.RESTORE, restorePack, "restore-" + seq);
+				if (!live.sameAs(after) || reconciled) journal.append(after.sha1(), Kind.RESTORE, restorePack, restoreId);
 				Set<String> changedPaths = new HashSet<>();
 				for (ChangeSet.Change change : changes.changes()) changedPaths.add(change.logicalPath());
 				return new CheckoutResult(changes, RestartPolicy.inGame(Set.of(), changedPaths));
@@ -381,9 +387,10 @@ public final class StateHistory {
 		if (!FileIntegrity.matchesNamed(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
-	private static void applyTree(ClientStorage storage, InstanceTree live, InstanceTree target, FileCache cache) throws IOException {
+	private static void applyNonProjection(ClientStorage storage, InstanceTree live, InstanceTree target, FileCache cache) throws IOException {
 		Set<Key> wanted = new HashSet<>();
 		for (TrackedFile file : target.files()) {
+			if (file.root() == Root.PROJECTION) continue;
 			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
 			if (InstanceTree.isRunningModJar(destination)) continue;
 			wanted.add(file.key());
@@ -395,11 +402,41 @@ public final class StateHistory {
 			VerifiedFileTransfer.copyAtomic(object, destination, file.size(), file.sha1(), cache);
 		}
 		for (TrackedFile file : live.files()) {
+			if (file.root() == Root.PROJECTION) continue;
 			if (wanted.contains(file.key())) continue;
 			Path destination = storage.rootedPath(file.root(), file.overlayPackId(), file.path());
 			if (InstanceTree.isRunningModJar(destination)) continue;
 			Files.deleteIfExists(destination);
 			FileTrees.pruneEmptyAncestors(destination, storage.root(file.root(), file.overlayPackId().isEmpty() ? "_" : file.overlayPackId()));
+		}
+	}
+
+	private static void convergeProjection(ClientStorage storage, InstanceTree live, InstanceTree target, FileCache cache, String restoreId) throws IOException {
+		List<ProjectionState.Row> rows = new ArrayList<>();
+		for (TrackedFile file : target.files()) {
+			if (file.root() != Root.PROJECTION) continue;
+			if (InstanceTree.isRunningModJar(storage.rootedPath(file.root(), "", file.path()))) continue;
+			rows.add(new ProjectionState.Row(file.path(), file.sha1(), file.size()));
+		}
+		Map<String, String> hints = new HashMap<>();
+		for (TrackedFile file : live.files()) {
+			if (file.root() == Root.PROJECTION) hints.put(file.path(), file.sha1());
+		}
+		ProjectionConvergence.Result result = new ProjectionConvergence(storage, cache, ProjectionConvergence.Writes.NONE).converge(restoreId, rows, hints);
+		if (!result.converged()) {
+			throw new IOException("Instance restore could not update active projection: " + result.held().size() + " paths are held open, first " + result.held().get(0).path(),
+					result.held().get(0).cause());
+		}
+		if (rows.isEmpty()) {
+			Path active = storage.activeDirectory();
+			if (Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) {
+				try (var entries = Files.list(active)) {
+					if (entries.findAny().isEmpty()) {
+						Files.delete(active);
+						FileTrees.forceDirectory(active.getParent());
+					}
+				}
+			}
 		}
 	}
 

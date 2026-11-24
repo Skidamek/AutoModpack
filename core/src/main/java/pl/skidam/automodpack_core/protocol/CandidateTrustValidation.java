@@ -14,6 +14,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
+import java.security.cert.CertificateRevokedException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
@@ -147,13 +148,15 @@ public final class CandidateTrustValidation {
 				return reject(candidate, new IOException("Cannot fingerprint the deferred certificate", e));
 			}
 		}
+		CertificateException deferredFailure = candidate.trustManager().getDeferredFailure(candidate.socket());
+		if (isRevocationFailure(deferredFailure)) return reject(candidate, revokedByCa());
 		// A CA chain that passed the JDK's validation for the endpoint also covers the typed origin: the deferral
 		// carries no failure exactly when the CAs vouched for this chain, and the origin name in its SANs anchors
 		// that vouch to the address the player typed. Self-signed leaves deferred with a failure never take this
 		// step, and a CA-vouched first contact costs no DNS round trip. The vouch stands only while the CA has not
 		// revoked the leaf: a revocation is final, an undecidable one leaves the leaf to the record and the player, and a
 		// leaf naming no http CRL distribution point has no CRL to consult, so its vouch stands as it did before this check.
-		if (candidate.trustManager().getDeferredFailure(candidate.socket()) == null && leafCoversOrigin(certificate, candidate.originHost())) {
+		if (deferredFailure == null && leafCoversOrigin(certificate, candidate.originHost())) {
 			return LeafRevocation.check(certificate, peerChain(candidate), candidate.sessionTrust()::revoke).thenCompose(status -> switch (status) {
 				case GOOD -> trustCaVouch(candidate, certificate);
 				case REVOKED -> reject(candidate, revokedByCa());
@@ -164,6 +167,13 @@ public final class CandidateTrustValidation {
 			});
 		}
 		return recordOrPlayer(candidate, certificate);
+	}
+
+	private static boolean isRevocationFailure(Throwable failure) {
+		for (Throwable current = failure; current != null; current = current.getCause()) {
+			if (current instanceof CertificateRevokedException) return true;
+		}
+		return false;
 	}
 
 	private static CertificateRejectedException revokedByCa() {
