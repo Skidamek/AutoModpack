@@ -1,15 +1,11 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -33,18 +29,12 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * pointer naming one thing while running another.
  */
 final class ActivePackPointer {
-	/** A one-byte sibling used only as a reading of the pointer filesystem's own clock; never durable state. */
-	private static final String CLOCK_SUFFIX = ".clock";
 	private final Path stateFile;
-	private final Path clockFile;
 	private volatile Cached cached;
-	/** Last reading of the pointer filesystem's clock; a parsed state narrower than this cannot be racy against it. */
-	private volatile long clockStamp = Long.MIN_VALUE;
-	private record Cached(FileCache.FileFingerprint fingerprint, long validatedAtNanos, ClientStorageJsons.ClientGenerationStateFields state) {}
+	private record Cached(FileCache.FileFingerprint fingerprint, ClientStorageJsons.ClientGenerationStateFields state) {}
 
 	ActivePackPointer(Path stateFile) {
 		this.stateFile = Objects.requireNonNull(stateFile, "state file");
-		this.clockFile = stateFile.resolveSibling("." + stateFile.getFileName() + CLOCK_SUFFIX);
 	}
 
 	/** Why selected and the pointer disagree, or null when the selection may follow the pointer (matching, or no pointer). */
@@ -83,49 +73,12 @@ final class ActivePackPointer {
 			cached = null;
 			return null;
 		}
+		if (fingerprint.fileKey() == null || fingerprint.fileKey().isEmpty()) return readFromDisk();
 		Cached hit = cached;
-		if (hit != null && hit.fingerprint().equals(fingerprint) && !isRacy(hit, fingerprint)) return hit.state();
-		long validatedAtNanos = validatedAt(newestTimestampNanos(fingerprint));
+		if (hit != null && hit.fingerprint().equals(fingerprint)) return hit.state();
 		ClientStorageJsons.ClientGenerationStateFields state = readFromDisk();
-		cached = state == null ? null : new Cached(fingerprint, validatedAtNanos, state);
+		cached = state == null ? null : new Cached(fingerprint, state);
 		return state;
-	}
-
-	/**
-	 * The newest stat clock the fingerprint carries. ctime, not only mtime, is the one that catches an in-place write
-	 * whose author put the mtime back; an unknown clock is -1 and never wins, which keeps a fingerprint without a usable
-	 * change time on the safe side of {@link #validatedAt(long)}.
-	 */
-	private static long newestTimestampNanos(FileCache.FileFingerprint fingerprint) {
-		return Math.max(fingerprint.lastModifiedNanos(), fingerprint.changeTimeNanos());
-	}
-
-	/** Git's racily-clean rule: a state stamped at or after the clock reading of its proof could share every stat field with a rewrite in the same tick. */
-	private static boolean isRacy(Cached cached, FileCache.FileFingerprint fingerprint) {
-		return newestTimestampNanos(fingerprint) >= cached.validatedAtNanos();
-	}
-
-	/**
-	 * A reading of the pointer filesystem's clock taken no later than now, from a one-byte sibling rewritten in place.
-	 * Filesystems stamp ctime/mtime from a coarse clock (NTFS ticks, FAT's two seconds); a recent pointer is re-parsed
-	 * once until the clock moves past its stamp, and only then is a fingerprint hit trusted. A filesystem that refuses
-	 * the clock write fails closed: every hit is re-parsed rather than risking a stale generation.
-	 */
-	private long validatedAt(long newestNanos) {
-		long stamp = clockStamp;
-		if (newestNanos < stamp) return stamp;
-		try {
-			Files.createDirectories(stateFile.getParent());
-			try (OutputStream out = Files.newOutputStream(clockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-				out.write('0');
-			}
-			stamp = Files.getLastModifiedTime(clockFile, LinkOption.NOFOLLOW_LINKS).to(TimeUnit.NANOSECONDS);
-		} catch (IOException | UnsupportedOperationException unavailableClock) {
-			// An earlier reading stays valid. With none, MIN makes every hit racy, which re-parses instead of trusting.
-			return stamp;
-		}
-		clockStamp = stamp;
-		return stamp;
 	}
 
 	private ClientStorageJsons.ClientGenerationStateFields readFromDisk() throws IOException {

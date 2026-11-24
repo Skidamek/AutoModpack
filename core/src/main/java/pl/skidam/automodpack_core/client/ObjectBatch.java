@@ -247,12 +247,12 @@ final class ObjectBatch {
 							cache.overwriteCache(dataLayout.objectFile(object.sha1()), object.sha1());
 							probe.reached(Step.RECORDED, dataLayout.objectFile(object.sha1()));
 						} catch (IOException e) {
-							fail(object, failed, e);
+							LOGGER.warn("Could not record cached hash for published CAS object {}; it will be rehashed on next read", object.sha1(), e);
 						}
 					}
 				}
 			} catch (IOException e) {
-				for (Held object : durable) if (!failed.contains(object.task())) fail(object, failed, e);
+				LOGGER.warn("Could not open file cache to record {} published CAS objects; they will be rehashed on next read", durable.size(), e);
 			}
 		}
 		for (OverlappedForcer.Work next : pending) discard(next.object);

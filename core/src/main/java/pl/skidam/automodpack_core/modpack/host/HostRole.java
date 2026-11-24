@@ -41,7 +41,8 @@ public final class HostRole {
 	public static HostRole open(EnvironmentType environment, Path gameDirectory, ModpackExecutor executor) throws IOException {
 		if (environment != EnvironmentType.CLIENT) return new HostRole(HostSourcePolicy.select(environment, null, false), executor, null, false);
 		ClientStorage storage = ClientStorage.open(gameDirectory);
-		String active = new ClientGenerationStore(storage).hasActivePack() ? storage.readActiveState().modpackId : null;
+		var activeState = storage.readActiveState();
+		String active = activeState != null && activeState.modpackId != null && !activeState.modpackId.isBlank() ? activeState.modpackId : null;
 		boolean shared = active != null && RelayConsent.isRelayed(storage, active);
 		return new HostRole(HostSourcePolicy.select(environment, active, shared), executor, storage, true);
 	}

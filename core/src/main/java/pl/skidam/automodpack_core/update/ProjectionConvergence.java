@@ -626,20 +626,27 @@ final class ProjectionConvergence {
 	private void installParallel(List<ProjectionState.Row> installs, Path active, Set<Path> touched, List<Held> held, List<Held> stuck,
 			Map<Path, String> installed, Map<Path, FileCache.FileFingerprint> fingerprints, Set<Path> absentTargets, Set<String> absentInstalls)
 			throws IOException {
-		// The removal and prune passes have finished, so what blocks an install is fixed before the pool starts; a held
-		// install is a file path, and a target beneath it cannot exist.
-		List<Held> fixedHeld = List.copyOf(held);
-		List<Held> fixedStuck = List.copyOf(stuck);
 		// V5: create every install's parent on this thread before a worker can race it. ensuredDirectories names a
 		// directory before creating it, so a worker that lost that race would skip creation and let linkAtomicResult
 		// build the chain, outside this run's forced set. A blocked target creates nothing: its held path may be a file
-		// standing where a directory would go.
+		// standing where a directory would go. Lock failures here stay held (V4), just like the sequential loop.
 		for (ProjectionState.Row row : installs) {
 			Path target = resolveUnchecked(active, row.path());
-			if (target == null || blocker(fixedHeld, fixedStuck, target) != null) continue;
+			if (target == null || blocker(held, stuck, target) != null) continue;
 			Path parent = target.getParent();
-			if (parent != null && ensuredDirectories.add(parent)) createDirectories(parent, touched);
+			if (parent == null || !ensuredDirectories.add(parent)) continue;
+			try {
+				createDirectories(parent, touched);
+			} catch (IOException e) {
+				ensuredDirectories.remove(parent);
+				if (!StorageConditions.isLockFailure(e, row.size())) throw StorageConditions.classified(e, row.size());
+				held.add(new Held(parent, e));
+			}
 		}
+		// The removal, prune, and parent-creation passes have finished, so what blocks an install is fixed before the
+		// pool starts; a held install is a file path, and a target beneath it cannot exist.
+		List<Held> fixedHeld = List.copyOf(held);
+		List<Held> fixedStuck = List.copyOf(stuck);
 		int workers = Math.min(MAX_INSTALL_WORKERS, Runtime.getRuntime().availableProcessors());
 		AtomicBoolean abort = new AtomicBoolean();
 		ExecutorService pool = Executors.newFixedThreadPool(workers, task -> {
