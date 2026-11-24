@@ -50,17 +50,41 @@ public class HolepunchSocket extends Socket {
 	}
 
 	public synchronized void setConnection(HolepunchConnection connection) {
-		if (closed) throw new IllegalStateException("HolepunchSocket is closed");
-		this.connection = Objects.requireNonNull(connection, "connection");
+		Objects.requireNonNull(connection, "connection");
+		if (closed) {
+			connection.close();
+			throw new IllegalStateException("HolepunchSocket is closed");
+		}
+		if (this.connection == connection) return;
+		this.connection = connection;
 		this.trafficCamouflage = null;
 		this.out = new HolepunchOutputStream();
+		in.updateReadPause();
+	}
+
+	private synchronized void bindOnOpen(HolepunchConnection connection) {
+		Objects.requireNonNull(connection, "connection");
+		if (closed) {
+			connection.close();
+			return;
+		}
+		if (this.connection == connection) return;
+		this.connection = connection;
+		this.trafficCamouflage = null;
+		this.out = new HolepunchOutputStream();
+		in.updateReadPause();
 	}
 
 	public HolepunchHandler handler() {
 		return new HolepunchHandler() {
 			@Override
+			public void onOpen(HolepunchConnection connection) {
+				bindOnOpen(connection);
+			}
+
+			@Override
 			public void onRead(ByteBuffer data) {
-				in.feed(data);
+				in.feedCopy(data);
 			}
 
 			@Override
@@ -159,19 +183,18 @@ public class HolepunchSocket extends Socket {
 				ByteBuffer decoded = ByteBuffer.allocate(data.remaining() + camouflage.inbound().pendingRecordLength());
 				camouflage.inbound().decode(data, decoded);
 				decoded.flip();
-				in.feed(decoded);
+				in.feedOwned(decoded);
 				return;
 			} catch (IOException exception) {
 				close();
 				throw new IllegalStateException("Invalid camouflaged TLS record stream", exception);
 			}
 		}
-		in.feed(data);
+		in.feedCopy(data);
 	}
 
 	private class HolepunchInputStream extends InputStream {
-		// The dispatched buffers are already private copies made by the connection, so the queue holds
-		// them directly: one less copy and one less allocation per byte on the read path.
+		private static final ByteBuffer EOF = ByteBuffer.allocate(0);
 		private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
 		private final AtomicInteger queuedBytes = new AtomicInteger();
 		private volatile boolean readsPaused;
@@ -183,7 +206,16 @@ public class HolepunchSocket extends Socket {
 			readTimeoutMillis = timeout;
 		}
 
-		void feed(ByteBuffer data) {
+		/** Copies a callback-scoped buffer before queuing so the transport can safely reuse its buffer on return. */
+		void feedCopy(ByteBuffer data) {
+			if (!data.hasRemaining() || end) return;
+			byte[] copy = new byte[data.remaining()];
+			data.duplicate().get(copy);
+			feedOwned(ByteBuffer.wrap(copy));
+		}
+
+		/** Queues an already-owned buffer directly without an extra copy. */
+		void feedOwned(ByteBuffer data) {
 			if (!data.hasRemaining() || end) return;
 			queuedBytes.addAndGet(data.remaining());
 			queue.offer(data);
@@ -191,7 +223,10 @@ public class HolepunchSocket extends Socket {
 		}
 
 		void feedEnd() {
-			end = true;
+			if (!end) {
+				end = true;
+				queue.offer(EOF);
+			}
 		}
 
 		private synchronized void updateReadPause() {
@@ -225,20 +260,19 @@ public class HolepunchSocket extends Socket {
 
 				try {
 					int timeout = readTimeoutMillis;
+					ByteBuffer next;
 					if (timeout == 0) {
-						current = queue.poll(100, TimeUnit.MILLISECONDS);
-						if (current == null) continue;
+						next = queue.take();
 					} else {
-						// The end flag must interrupt a pending wait: a server-initiated close
-						// surfaces here, and polling the full window would ignore it until expiry.
-						long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
-						while (current == null) {
-							if (end && queue.isEmpty()) return -1;
-							long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
-							if (remaining <= 0) throw new SocketTimeoutException("Holepunch read timed out");
-							current = queue.poll(Math.min(remaining, 100), TimeUnit.MILLISECONDS);
-						}
+						next = queue.poll(timeout, TimeUnit.MILLISECONDS);
+						if (next == null) throw new SocketTimeoutException("Holepunch read timed out");
 					}
+					if (next == EOF) {
+						// Re-enqueue so any subsequent read observes EOF immediately after draining.
+						queue.offer(EOF);
+						return -1;
+					}
+					current = next;
 				} catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 					throw new IOException("read interrupted", e);
@@ -261,7 +295,7 @@ public class HolepunchSocket extends Socket {
 
 		@Override
 		public void close() {
-			end = true;
+			feedEnd();
 		}
 	}
 

@@ -103,6 +103,40 @@ class HolepunchSocketTest {
 		}
 	}
 
+	@Test
+	void copiesCallbackScopedReadBuffersBeforeReturning() throws Exception {
+		try (HolepunchSocket socket = new HolepunchSocket(new StubConnection())) {
+			byte[] backing = {1, 2, 3, 4};
+			socket.handler().onRead(ByteBuffer.wrap(backing).asReadOnlyBuffer());
+			backing[0] = 99;
+			backing[1] = 98;
+
+			byte[] rawBacking = {5, 6, 7, 8};
+			socket.handler().onRawRead(ByteBuffer.wrap(rawBacking).asReadOnlyBuffer());
+			rawBacking[0] = 88;
+			rawBacking[1] = 87;
+
+			assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7, 8}, socket.getInputStream().readNBytes(8));
+		}
+	}
+
+	@Test
+	void onOpenBindsConnectionAndClosesLateConnectionIfSocketAlreadyClosed() {
+		StubConnection live = new StubConnection();
+		try (HolepunchSocket socket = new HolepunchSocket()) {
+			socket.handler().onOpen(live);
+			assertTrue(socket.isConnected());
+			assertEquals(0, live.closes.get());
+		}
+		assertEquals(1, live.closes.get());
+
+		StubConnection late = new StubConnection();
+		HolepunchSocket closedSocket = new HolepunchSocket();
+		closedSocket.close();
+		closedSocket.handler().onOpen(late);
+		assertEquals(1, late.closes.get());
+	}
+
 	/** A plaintext TLS 1.3 application-data record with a patterned payload. */
 	private static byte[] tlsRecord(int payloadLength) {
 		byte[] record = new byte[5 + payloadLength];
@@ -139,6 +173,7 @@ class HolepunchSocketTest {
 	private static final class StubConnection implements HolepunchConnection {
 		private final AtomicInteger pauses = new AtomicInteger();
 		private final AtomicInteger resumes = new AtomicInteger();
+		private final AtomicInteger closes = new AtomicInteger();
 
 		@Override
 		public CompletionStage<Void> write(ByteBuffer data) {
@@ -171,6 +206,8 @@ class HolepunchSocketTest {
 		}
 
 		@Override
-		public void close() {}
+		public void close() {
+			closes.incrementAndGet();
+		}
 	}
 }

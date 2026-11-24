@@ -221,20 +221,23 @@ final class LaneConnector {
 		int protocolVersion = MinecraftProtocols.forVersion(Environment.current().mcVersion());
 		String target = AddressHelpers.formatAddressLiteral(route.transportAddress());
 
+		HolepunchSocket socket = new HolepunchSocket();
 		try {
-			HolepunchSocket socket = new HolepunchSocket();
 			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), protocolVersion, socket.handler(), holepunchOptions())
 					.toCompletableFuture().get(NETWORK_TIMEOUT.plus(NETWORK_TIMEOUT).toSeconds(), TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
 		} catch (InterruptedException e) {
+			closeQuietly(socket);
 			Thread.currentThread().interrupt();
 			throw new IOException("Holepunch connect interrupted for " + target, e);
 		} catch (ExecutionException e) {
+			closeQuietly(socket);
 			Throwable cause = e.getCause() == null ? e : e.getCause();
 			if (cause instanceof IOException io) throw new IOException("Holepunch connect failed for " + target, io);
 			throw new IOException("Holepunch connect failed for " + target, cause);
 		} catch (Exception e) {
+			closeQuietly(socket);
 			throw new IOException("Holepunch connect failed for " + target, e);
 		}
 	}
