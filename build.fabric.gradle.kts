@@ -27,18 +27,15 @@ loom {
 }
 
 repositories {
-	flatDir {
-		name = "mcholepunchLibs"
-		dirs(rootProject.file("libs"))
-	}
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 	maven("https://maven.terraformersmc.com/releases/") { name = "Terraformers" }
 }
 
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
 
-	compileOnly(":mcholepunch-core:$mcholepunchVersion")
-	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion")
+	compileOnly("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	compileOnly("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	minecraft("com.mojang:minecraft:$minecraftVersion")
 	if (!fabric.isUnobf) {

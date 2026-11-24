@@ -33,6 +33,7 @@ bundledModules.forEach { evaluationDependsOn(it) }
 repositories {
 	mavenCentral()
 	maven { url = uri("https://maven.fabricmc.net/") }
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 	flatDir {
 		name = "mcholepunchLibs"
 		dirs(rootProject.file("libs"))
@@ -58,8 +59,8 @@ dependencies {
 
 	// mcholepunch jars - shadowed into the loader so classes are available at
 	// the root classpath (needed by the preload-stage client).
-	implementation(":mcholepunch-core:$mcholepunchVersion")
-	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
+	implementation("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	implementation("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	// reconf - the config format/edit layer for the human-editable configs (core's compile dep,
 	// shadowed into the loader the same way as the mcholepunch jars).

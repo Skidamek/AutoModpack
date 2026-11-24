@@ -16,6 +16,7 @@ base {
 
 repositories {
 	mavenCentral()
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 	flatDir {
 		name = "mcholepunchLibs"
 		dirs(rootProject.file("libs"))
@@ -42,9 +43,9 @@ val deps =
 	)
 
 dependencies {
-	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
 	implementation(":reconf:$reconfVersion")
-	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
+	implementation("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	// minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle
 	deps.forEach { compileOnly(it) }

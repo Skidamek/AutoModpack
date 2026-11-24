@@ -22,10 +22,7 @@ group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
 
 repositories {
-	flatDir {
-		name = "mcholepunchLibs"
-		dirs(rootProject.file("libs"))
-	}
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 }
 
 legacyForge {
@@ -41,8 +38,8 @@ dependencies {
 	// gives legacy Forge one classloader owner for the loader package; its SERVICE module otherwise
 	// loads ModpackUtils while the duplicate nested package can hide ManifestFetchState.
 	compileOnly(project(":core")) { isTransitive = false }
-	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
-	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
+	compileOnly("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	compileOnly("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:$mixinExtrasVersion")!!)
 	implementation("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")

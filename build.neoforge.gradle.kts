@@ -17,10 +17,7 @@ group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
 
 repositories {
-	flatDir {
-		name = "mcholepunchLibs"
-		dirs(rootProject.file("libs"))
-	}
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 }
 
 neoForge {
@@ -34,8 +31,8 @@ neoForge {
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
 
-	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
-	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
+	compileOnly("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	compileOnly("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 }
 
 tasks {
