@@ -61,7 +61,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		fields.policySha1 = policySha1;
 		fields.createdAt = createdAt.toString();
 		fields.notes = notes;
-		fields.restoreOf = restoreOf;
+		fields.restoreOf = restoreOf == NO_RESTORE ? null : restoreOf;
 		List<GenerationJsons.JournalChangeFields> changeFields = new ArrayList<>();
 		for (Change change : changes) changeFields.add(change.toFields());
 		fields.changes = changeFields;
@@ -82,7 +82,8 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		List<Change> changes = new ArrayList<>();
 		for (GenerationJsons.JournalChangeFields change : fields.changes == null ? List.<GenerationJsons.JournalChangeFields>of() : fields.changes)
 			changes.add(Change.fromFields(change));
-		return new JournalEntry(fields.seq, fields.contentToken, fields.policySha1, createdAt, fields.notes == null ? "" : fields.notes, fields.restoreOf, changes);
+		long restore = fields.restoreOf == null ? NO_RESTORE : fields.restoreOf;
+		return new JournalEntry(fields.seq, fields.contentToken, fields.policySha1, createdAt, fields.notes == null ? "" : fields.notes, restore, changes);
 	}
 
 	public record Change(String path, String fromSha1, long fromSize, String toSha1, long toSize) {

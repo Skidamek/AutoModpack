@@ -13,7 +13,7 @@ public class GenerationJsons {
 		public String policySha1 = "";
 		public String createdAt = "";
 		public String notes = "";
-		public long restoreOf = -1;
+		public Long restoreOf;
 		public List<JournalChangeFields> changes = List.of();
 	}
 

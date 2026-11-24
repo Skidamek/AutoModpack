@@ -31,8 +31,6 @@ public class ModpackJsons {
 
 		public static class GroupFileFields {
 			public String size = "";
-			/** Written for rc.7 catalogue parse; rc.8 never reads it. */
-			public String type = "";
 			public boolean editable;
 			public String sha1 = "";
 			public String murmur;

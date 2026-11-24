@@ -510,7 +510,7 @@ public final class GenerationStore {
 		head.waitingMusicSha1 = current.waitingMusicSha1();
 		head.ownershipLedger = current.ledger().toFields();
 		head.policy = current.manifest().toFields();
-		ConfigTools.writeAtomic(projectionFile, head);
+		ConfigTools.writeAtomicCompact(projectionFile, head);
 	}
 
 	/** The convention track's object when it is already stored, without promoting anything: what a read may advertise. */

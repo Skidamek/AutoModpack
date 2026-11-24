@@ -222,19 +222,6 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void publishedHeadStillNamesTypeForOlderClients() {
-		var fields = catalogue();
-		var group = groupAt("mods/example.jar", file("a"));
-		group.files = Map.of("mods/example.jar", file("a"), "config/settings.json", file("a"));
-		group.required = true;
-		group.defaultSelected = true;
-		fields.categories = oneCategory("main", group);
-		var published = GroupManifestValidator.validate(fields).toFields();
-		assertEquals("mod", published.categories.get("General").get("main").files.get("mods/example.jar").type);
-		assertEquals("config", published.categories.get("General").get("main").files.get("config/settings.json").type);
-	}
-
-	@Test
 	void rejectsReservedRoots() {
 		for (String invalid : List.of("saves/world.dat", "logs/latest.log", "screenshots/image.png")) {
 			var fields = catalogue();

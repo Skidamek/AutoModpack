@@ -63,9 +63,7 @@ public record GroupManifest(
 	}
 
 	public static ModpackJsons.CompleteModpackContentFields.GroupFileFields publishedFile(String path, GroupFile file) {
-		ModpackJsons.CompleteModpackContentFields.GroupFileFields fields = new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.editable(), file.sha1(), file.murmur());
-		fields.type = ModpackContentType.kindForPath(path);
-		return fields;
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.editable(), file.sha1(), file.murmur());
 	}
 
 	private static <T> Map<String, T> immutableMap(Map<String, T> input) {
