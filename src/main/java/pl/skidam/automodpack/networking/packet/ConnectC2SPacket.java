@@ -11,22 +11,27 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
+import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
+import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.AdvertiseFetcher;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.SelfUpdater;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.WireJsons;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 public class ConnectC2SPacket {
@@ -50,14 +55,20 @@ public class ConnectC2SPacket {
 
 		if (connect.v != WireJsons.WIRE_CONTRACT_VERSION) {
 			LOGGER.warn("AutoModpack wire contract mismatch. Server: v{}, Client: v{}", connect.v, WireJsons.WIRE_CONTRACT_VERSION);
-			if (trySelfUpdate(handler, connect.amVersion, connect.mcVersion)) return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.UPDATE_REQUIRED));
-			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.CONTRACT_MISMATCH));
+			return CompletableFuture.supplyAsync(
+					() -> buildResponse(trySelfUpdate(handler, connect.amVersion, connect.mcVersion) ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTRACT_MISMATCH),
+					ModpackUpdater.executor());
 		}
 
-		if (connect.amVersion != null && trySelfUpdate(handler, connect.amVersion, connect.mcVersion)) {
-			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.UPDATE_REQUIRED));
+		if (shouldCheckSelfUpdate(connect.amVersion, connect.mcVersion)) {
+			return CompletableFuture.supplyAsync(() -> trySelfUpdate(handler, connect.amVersion, connect.mcVersion), ModpackUpdater.executor())
+					.thenCompose(updated -> updated ? CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.UPDATE_REQUIRED)) : continueConnect(handler, connect));
 		}
 
+		return continueConnect(handler, connect);
+	}
+
+	private static CompletableFuture<FriendlyByteBuf> continueConnect(ClientHandshakePacketListenerImpl handler, WireJsons.ConnectDataFields connect) {
 		if (connect.generating) {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.GENERATING));
 		}
@@ -77,19 +88,21 @@ public class ConnectC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
 		}
 
+		if (AdvertiseFetcher.isEssentialRelayHost(connectionAttempt.origin()) && (connect.route.host == null || connect.route.host.isBlank())) {
+			LOGGER.warn("Essential world hosting relay ({}) does not expose a reachable AutoModpack endpoint; ask the host for an external endpoint or use e4mc/World Host",
+					connectionAttempt.origin().getHostString());
+			ClientLoginDisconnect.disconnect(handler);
+			ScreenManager.failure(FailureRequest.of(new IllegalStateException("Essential world hosting relay does not expose a reachable AutoModpack endpoint"), "automodpack.error.essentialRelay",
+					FailureCategory.CONNECTION, FailureDestination.MULTIPLAYER, null));
+			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
+		}
+
 		ConnectionJsons.ConnectionInfo connectionInfo;
 		try {
 			var remoteAddress = ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
 			InetSocketAddress connectedAddress = remoteAddress instanceof InetSocketAddress inetAddress ? inetAddress : connectionAttempt.origin();
-			String effectiveHost = connect.route.host == null || connect.route.host.isBlank()
-					? AddressHelpers.endpointHost(connectedAddress, connectionAttempt.origin())
-					: connect.route.host;
-			int effectivePort = connect.route.port == null ? connectedAddress.getPort() : connect.route.port;
-			if (effectivePort < 1 || effectivePort > 65535) throw new IllegalArgumentException("Invalid modpack endpoint port: " + effectivePort);
-
-			InetSocketAddress endpoint = AddressHelpers.format(effectiveHost, effectivePort);
-			LOGGER.debug("AutoModpack endpoint: {}:{}", endpoint.getHostString(), endpoint.getPort());
-			connectionInfo = new ConnectionJsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connect.route.mode, connectionAttempt.expectedFingerprint());
+			connectionInfo = AdvertiseFetcher.resolveAdvertisedConnection(connectionAttempt.origin(), connectedAddress, connectionAttempt.expectedFingerprint(), connect.route);
+			LOGGER.debug("AutoModpack endpoint: {}:{}", connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
 		} catch (Exception e) {
 			LOGGER.error("Error preparing AutoModpack endpoint from connect packet", e);
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
@@ -113,15 +126,19 @@ public class ConnectC2SPacket {
 		return reconciled;
 	}
 
-	private static boolean trySelfUpdate(ClientHandshakePacketListenerImpl handler, String serverAMVersion, String serverMCVersion) {
+	private static boolean shouldCheckSelfUpdate(String serverAMVersion, String serverMCVersion) {
 		if (serverAMVersion == null || serverAMVersion.isBlank() || serverMCVersion == null || serverMCVersion.isBlank()) return false;
+		if (!serverMCVersion.equals(Environment.current().mcVersion())) return false;
+		return !Environment.current().modVersion().equals(serverAMVersion);
+	}
+
+	private static boolean trySelfUpdate(ClientHandshakePacketListenerImpl handler, String serverAMVersion, String serverMCVersion) {
+		if (!shouldCheckSelfUpdate(serverAMVersion, serverMCVersion)) return false;
 		ClientConfigJsons.ClientConfigFieldsV3 clientConfig = ClientStorage.current().clientConfig().current();
 		if (clientConfig != null && !clientConfig.syncAutoModpackVersion) {
 			LOGGER.warn("AutoModpack version syncing is disabled in client config. Cannot sync to server version: {}", serverAMVersion);
 			return false;
 		}
-		if (!serverMCVersion.equals(Environment.current().mcVersion())) return false;
-		if (Environment.current().modVersion().equals(serverAMVersion)) return false;
 
 		LOGGER.debug("Versions mismatch. Server: {}; Client: {}", serverAMVersion, Environment.current().modVersion());
 		ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.AUTOMODPACK_ID, serverAMVersion, Environment.current().mcVersion());
@@ -143,5 +160,21 @@ public class ConnectC2SPacket {
 		FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer(1));
 		response.writeByte(result.code());
 		return response;
+	}
+
+	/** Disconnects cleanly on legacy (<v5.0.0-rc.8) servers' HANDSHAKE query so mismatched-contract clients never bypass requireModpack. */
+	public static CompletableFuture<FriendlyByteBuf> receiveLegacyHandshake(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
+		ModPackets.markLoginQueryArrived();
+		String serverVersion = null;
+		try {
+			HandshakePacket legacy = HandshakePacket.fromJson(buf.readUtf(Short.MAX_VALUE));
+			if (legacy != null && legacy.amVersion != null && !legacy.amVersion.isBlank()) serverVersion = legacy.amVersion;
+		} catch (Exception ignored) {
+		}
+		String message = serverVersion == null
+				? "[AutoModpack] This server runs an older AutoModpack version that is not compatible with this client."
+				: "[AutoModpack] AutoModpack version mismatch. This server runs " + serverVersion + ", which uses an older protocol than this client.";
+		ClientLoginDisconnect.disconnect(handler, VersionedText.literal(message));
+		return CompletableFuture.completedFuture(new FriendlyByteBuf(Unpooled.buffer()));
 	}
 }

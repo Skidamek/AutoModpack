@@ -133,6 +133,8 @@ Verification proves the server to the player. Authorization is the reverse: the 
 
 When a player connects and `validate-secrets` is on, the server issues a random download secret through the login handshake. Every modpack request carries that secret as an `Authorization: Bearer` header, and the built-in host rejects requests without a valid one, so only players who passed the Minecraft login, the whitelist, and any bans can pull the pack. Each connection invalidates the previous secret, and `secret-lifetime` caps how long one stays valid.
 
+`/advertise` is the one intentionally public route: when internal TLS is enabled on the built-in host, it answers over the game port with only high-level metadata (pack name, ID, file count, total size, target Minecraft/loader version, and connection route) so clients on the wrong Minecraft version can offer a version switch. It never serves pack files, file lists, or secrets.
+
 A static host of an exported contract tree cannot check any header, so it is public by nature: exporting refuses while `validate-secrets` is on.
 
 A standalone host process (running outside a Minecraft server) has no login to issue secrets, so a fresh standalone configuration defaults `validate-secrets` to `false` and holds a provisioning secret in `automodpack/credentials/provisioning-secret` for bootstrap installs instead. Both settings are described in the [server config](configuration/server-config#network-and-hosting); the provisioning secret is described with the [bootstrap files](how-it-works/files-on-disk#bootstrap).

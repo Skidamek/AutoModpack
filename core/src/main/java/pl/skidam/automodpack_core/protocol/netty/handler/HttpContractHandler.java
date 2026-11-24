@@ -100,6 +100,7 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private final Executor diskReads;
 	private final long fuseTickSeconds;
 	private final long stallSeconds;
+	private final boolean advertiseOnly;
 	private final ActivityTracker tracker;
 	private ByteBuf cumulation;
 	// The one response body currently streaming; the connection drops must end its span even when complete never runs.
@@ -110,14 +111,23 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 	private long bytesServed;
 
 	public HttpContractHandler(NettyServer server, Executor diskReads) {
-		this(server, diskReads, FUSE_TICK_SECONDS, TRANSFER_WRITE_STALL_TIMEOUT.toSeconds());
+		this(server, diskReads, false);
+	}
+
+	public HttpContractHandler(NettyServer server, Executor diskReads, boolean advertiseOnly) {
+		this(server, diskReads, FUSE_TICK_SECONDS, TRANSFER_WRITE_STALL_TIMEOUT.toSeconds(), advertiseOnly);
 	}
 
 	HttpContractHandler(NettyServer server, Executor diskReads, long fuseTickSeconds, long stallSeconds) {
+		this(server, diskReads, fuseTickSeconds, stallSeconds, false);
+	}
+
+	HttpContractHandler(NettyServer server, Executor diskReads, long fuseTickSeconds, long stallSeconds, boolean advertiseOnly) {
 		this.server = server;
 		this.diskReads = diskReads;
 		this.fuseTickSeconds = fuseTickSeconds;
 		this.stallSeconds = stallSeconds;
+		this.advertiseOnly = advertiseOnly;
 		this.tracker = server.activityTracker();
 	}
 
@@ -263,8 +273,6 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 		RequestHead head = parseHead(lines, requestLine);
 		if (head == null) return finishBodyless(ctx, span, STATUS_400, 0, null, null, false);
 
-		if (ServerConfigStore.current().validateSecrets && !authorized(ctx, head.authorization(), span)) return false;
-
 		if (!head.method().equals("GET")) return finishBodyless(ctx, span, STATUS_405, 0, null, null, head.keepAlive());
 
 		// The contract paths carry no encoding, so a percent-encoded target cannot name a route.
@@ -272,6 +280,27 @@ public class HttpContractHandler extends ChannelInboundHandlerAdapter {
 
 		String key = ContractRoutes.key(head.target());
 		span.routeKey = key;
+
+		if (ContractRoutes.isAdvertise(key)) {
+			byte[] payload = server.advertisePayload();
+			if (payload == null) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+			tracker.complete(span, 200, payload.length);
+			responsesServed++;
+			bytesServed += payload.length;
+			ByteBuf headBuf = response(STATUS_200, payload.length, null, null, null, !head.keepAlive());
+			ByteBuf bodyBuf = Unpooled.wrappedBuffer(payload);
+			CompositeByteBuf composite = ctx.alloc().compositeBuffer(2).addComponents(true, headBuf, bodyBuf);
+			if (head.keepAlive()) {
+				ctx.writeAndFlush(composite);
+				return true;
+			}
+			ctx.writeAndFlush(composite).addListener(ChannelFutureListener.CLOSE);
+			return false;
+		}
+
+		if (advertiseOnly) return finishBodyless(ctx, span, STATUS_404, 0, null, null, head.keepAlive());
+
+		if (ServerConfigStore.current().validateSecrets && !authorized(ctx, head.authorization(), span)) return false;
 		// The hosting swap validated and sized every key at publication, so the loop answers from memory; the streamed
 		// body's open re-checks the promised size on the reader pool, which is the filesystem's only per-request touch.
 		Optional<GenerationHosting.HostedObject> hosted = key == null ? Optional.<GenerationHosting.HostedObject>empty() : server.hosted(key);

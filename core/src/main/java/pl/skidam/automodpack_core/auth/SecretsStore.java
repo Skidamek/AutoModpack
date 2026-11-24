@@ -81,6 +81,22 @@ public class SecretsStore {
 			knownAbsent.remove(secret.secret());
 		}
 
+		public synchronized void removeByPlayer(String playerId) {
+			if (playerId == null || playerId.isBlank()) return;
+			try {
+				FileLocks.withLock(lockFile(), () -> {
+					Map<String, IssuedSecret> fresh = readSecrets();
+					if (fresh.values().removeIf(existing -> existing != null && playerId.equals(existing.playerId()))) {
+						write(fresh);
+						cache = new ConcurrentHashMap<>(fresh);
+					}
+					return null;
+				});
+			} catch (IOException e) {
+				LOGGER.warn("Failed to revoke unused host secret for {}", playerId, e);
+			}
+		}
+
 		private Map<String, IssuedSecret> readSecrets() {
 			try {
 				return new ConcurrentHashMap<>(ConfigTools.readState(file, AuthJsons.SecretsFields.class, DESCRIPTION, SecretsCache::validated).orElseGet(Map::of));
@@ -145,5 +161,9 @@ public class SecretsStore {
 
 	public static void saveHostSecret(String playerId, Secrets.Secret secret, String playerName) {
 		hostSecrets.save(playerId, secret, playerName);
+	}
+
+	public static void removeHostSecret(String playerId) {
+		hostSecrets.removeByPlayer(playerId);
 	}
 }

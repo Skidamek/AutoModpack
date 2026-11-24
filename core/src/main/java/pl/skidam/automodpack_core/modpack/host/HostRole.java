@@ -73,6 +73,7 @@ public final class HostRole {
 			host.replacePaths(new ClientGenerationStore(clientStorage).hosting(relay.modpackId()));
 			LOGGER.info("Hosting this client's shared modpack {} to joining players", relay.modpackId());
 		} else if (source instanceof HostSource.None none) {
+			host.updateAbsenceAdvertisement(none.absence());
 			LOGGER.info("{}", none.absence().detail());
 		} else {
 			bindGeneration();

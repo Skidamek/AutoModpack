@@ -9,3 +9,7 @@ AutoModpack ships one jar that covers every supported game version. The release 
 | 26.1, 26.2, 26.3 | Fabric, NeoForge |
 
 A server and its clients must run the same Minecraft version, as always. The AutoModpack jar itself is the same file everywhere; it detects the loader and game version at startup.
+
+## Version mismatch discovery
+
+When you join an AutoModpack server while running a different Minecraft version, the client detects the protocol mismatch, checks the server's game-port `/advertise` endpoint (when the server uses built-in TLS), verifies the server certificate, and shows the target Minecraft and loader versions. On [supported launchers](launchers), it can switch the instance version for you so the pack installs on the next launch; on other launchers, it shows the versions to switch to manually.

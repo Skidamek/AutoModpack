@@ -337,7 +337,7 @@ public final class ManifestFetcher {
 		}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> deleteJournalTemp(storage));
 	}
 
-	private static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo, boolean allowAskingUser) {
+	static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo, boolean allowAskingUser) {
 		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {
 			String fingerprint;

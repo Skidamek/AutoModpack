@@ -34,7 +34,9 @@ import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.AutoModpack;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
+import pl.skidam.automodpack_core.modpack.PackAbsence;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
+import pl.skidam.automodpack_core.modpack.host.HostAdvertisement;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
@@ -52,6 +54,7 @@ public class NettyServer {
 	private volatile TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private volatile GenerationHosting hosting = new GenerationHosting(Map.of());
+	private volatile byte[] advertisePayload;
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ExecutorService diskReads;
 	private ChannelFuture serverChannel;
@@ -95,6 +98,15 @@ public class NettyServer {
 		this.hosting = hosting;
 		this.paths = hosting.asMap();
 		documentEtags.replace(getPath(GenerationHosting.HEAD_DOCUMENT_KEY), getPath(GenerationHosting.JOURNAL_KEY));
+		this.advertisePayload = HostAdvertisement.buildBytes(hosting, null);
+	}
+
+	public void updateAbsenceAdvertisement(PackAbsence absence) {
+		this.advertisePayload = HostAdvertisement.buildBytes(null, absence);
+	}
+
+	public byte[] advertisePayload() {
+		return advertisePayload;
 	}
 
 	// The etag memos live in DocumentEtags; the hosting swap is their invalidation point, and start() warms them too.
@@ -196,14 +208,16 @@ public class NettyServer {
 			Optional<ChannelFuture> started;
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				startSharedTraffic();
-				holepunchActive = ServerHolepunchBridge.register(this);
+				holepunchActive = ServerHolepunchBridge.register(this, false);
 				started = Optional.empty();
 			} else if (connectionMode == ModpackConnectionMode.MAGIC && ServerConfigStore.current().bindPort == -1) {
 				startSharedTraffic();
 				sharedMagicEnabled = true;
+				if (sslCtx != null) ServerHolepunchBridge.register(this, true);
 				started = Optional.empty();
 			} else {
 				started = startDedicated(connectionMode);
+				if (sslCtx != null) ServerHolepunchBridge.register(this, true);
 			}
 			logAdvertisedEndpoint(connectionMode);
 			logHostFingerprint();
@@ -277,12 +291,17 @@ public class NettyServer {
 
 	/** TLS (when internal termination is on) and the URL contract, appended after whatever wire-side stack is present. */
 	public void installContractHandlers(ChannelPipeline pipeline) {
+		installContractHandlers(pipeline, false);
+	}
+
+	/** Same as {@link #installContractHandlers(ChannelPipeline)}, optionally restricting the channel to GET /advertise only. */
+	public void installContractHandlers(ChannelPipeline pipeline, boolean advertiseOnly) {
 		// Streaming responses queue whole chunks ahead of the peer's drain; the watermark bounds that queue and keeps compression overlapped with the wire.
 		// It sits here so every hosting shape - dedicated, shared magic, and holepunch - streams under the same receipts.
 		pipeline.channel().config().setWriteBufferWaterMark(new WriteBufferWaterMark(NetUtils.WRITE_BUFFER_LOW_WATER, NetUtils.WRITE_BUFFER_HIGH_WATER));
 		if (sslCtx != null) pipeline.addLast("tls", sslCtx.newHandler(pipeline.channel().alloc()));
 		else LOGGER.debug("TLS termination handled externally: {}", pipeline.channel().remoteAddress());
-		pipeline.addLast(AutoModpack.ID, new HttpContractHandler(this, diskReads));
+		pipeline.addLast(AutoModpack.ID, new HttpContractHandler(this, diskReads, advertiseOnly));
 	}
 
 	private void prepareTls() throws Exception {

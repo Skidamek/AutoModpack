@@ -85,7 +85,7 @@ public final class WireJsons {
 		}
 
 		public String toJson() {
-			return ConfigTools.GSON.toJson(this);
+			return ConfigTools.COMPACT.toJson(this);
 		}
 
 		public static ConnectDataFields fromJson(String json) {
@@ -106,7 +106,7 @@ public final class WireJsons {
 		public AdvertiseFields() {}
 
 		public String toJson() {
-			return ConfigTools.GSON.toJson(this);
+			return ConfigTools.COMPACT.toJson(this);
 		}
 
 		public static AdvertiseFields fromJson(String json) {

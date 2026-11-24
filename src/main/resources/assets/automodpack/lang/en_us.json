@@ -459,5 +459,17 @@
   "automodpack.hosting.published": "Published %s files, content %s",
   "automodpack.hosting.noChanges": "No changes, content %s",
   "automodpack.hosting.previewReady": "Preview: %s files, content %s.",
-  "automodpack.hosting.failed": "Not generated: %s"
+  "automodpack.hosting.failed": "Not generated: %s",
+  "automodpack.crossVersion.title": "Different Minecraft version",
+  "automodpack.crossVersion.pack": "This server hosts modpack %s (%s files, %s).",
+  "automodpack.crossVersion.noPack": "This server runs AutoModpack on a different Minecraft version.",
+  "automodpack.crossVersion.versions": "Server runs %s. This instance runs %s.",
+  "automodpack.crossVersion.instanceWarning": "Switching changes this whole instance and will affect any other modpack currently selected here.",
+  "automodpack.crossVersion.unreachableRoute": "This host did not advertise a reachable modpack endpoint.",
+  "automodpack.crossVersion.manual": "Your launcher cannot be switched automatically. Switch this instance to %s manually, then rejoin.",
+  "automodpack.crossVersion.contractMismatchTitle": "AutoModpack version mismatch",
+  "automodpack.crossVersion.contractMismatch": "This server uses a different AutoModpack protocol (v%s). Update AutoModpack to %s to join.",
+  "automodpack.crossVersion.switch": "Switch & Relaunch",
+  "automodpack.error.essentialRelay": "This world uses Essential's relay, which does not allow AutoModpack to open a download lane. Ask the host to advertise an external endpoint or share with e4mc / World Host.",
+  "automodpack.error.proxySwallowedQueries": "This server requires an AutoModpack login secret, but its login queries never reached your client (a proxy may be blocking custom login packets). Ask the admin to forward login queries or disable validate-secrets."
 }

@@ -24,7 +24,6 @@ public abstract class ServerNetworkIoMixin {
 		NettyServer hostServer = Hosting.serverOrNull();
 		if (hostServer != null && hostServer.isSharedMagicEnabled()) {
 			channel.pipeline().addFirst(AutoModpack.ID + "-magic-gate", new AmmhGateHandler(hostServer, true));
-			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {
 			NettyLoginClaimHandler.install(channel.pipeline(), Common.server.getKeyPair(), ServerHolepunchBridge.markerConstant(), Common.server.usesAuthentication());

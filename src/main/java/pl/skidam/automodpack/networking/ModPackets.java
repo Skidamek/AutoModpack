@@ -50,6 +50,7 @@ public class ModPackets {
 	private static class ClientPacketRegistration {
 		static void register() {
 			ClientLoginNetworking.registerGlobalReceiver(CONNECT, ConnectC2SPacket::receive);
+			ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, ConnectC2SPacket::receiveLegacyHandshake);
 		}
 	}
 

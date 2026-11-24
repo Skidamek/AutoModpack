@@ -31,6 +31,7 @@ import net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworkAddon;
 import pl.skidam.automodpack.networking.client.IntentionalDisconnectControl;
+import pl.skidam.automodpack.networking.packet.CrossVersionProbe;
 import pl.skidam.automodpack.networking.packet.LoginSelfCheck;
 
 @Mixin(value = ClientHandshakePacketListenerImpl.class, priority = 300)
@@ -94,12 +95,16 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 	/*? if >=26.2 {*/
 	@WrapWithCondition(method = "onDisconnect", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"))
 	private boolean autoModpack$suppressIntentionalDisconnectScreen(Gui gui, Screen screen) {
-		return !autoModpack$intentionalDisconnect.getAndSet(false);
+		if (autoModpack$intentionalDisconnect.getAndSet(false)) return false;
+		CrossVersionProbe.onDisconnectScreen(screen);
+		return true;
 	}
 	/*?} else {*/
 	/*@WrapWithCondition(method = "onDisconnect", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"))
 	private boolean autoModpack$suppressIntentionalDisconnectScreen(Minecraft minecraft, Screen screen) {
-		return !autoModpack$intentionalDisconnect.getAndSet(false);
+		if (autoModpack$intentionalDisconnect.getAndSet(false)) return false;
+		CrossVersionProbe.onDisconnectScreen(screen);
+		return true;
 	}
 	*//*?}*/
 }

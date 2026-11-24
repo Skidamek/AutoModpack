@@ -46,8 +46,14 @@ public final class ServerHolepunchBridge {
 
 	/** Registers the takeover application; returns false when holepunch hosting is off or already registered. */
 	public static synchronized boolean register(NettyServer server) {
-		if (!ServerConfigStore.current().modpackHost || ServerConfigStore.current().connectionMode != ModpackConnectionMode.HOLEPUNCH || registration != null) return false;
-		registration = NettyChannelRegistry.register(maxPendingWriteBytes(), application(server));
+		return register(server, false);
+	}
+
+	/** Registers the takeover application; when {@code advertiseOnly} is true, the game-port channel serves only GET /advertise. */
+	public static synchronized boolean register(NettyServer server, boolean advertiseOnly) {
+		if (!ServerConfigStore.current().modpackHost || registration != null) return false;
+		if (!advertiseOnly && ServerConfigStore.current().connectionMode != ModpackConnectionMode.HOLEPUNCH) return false;
+		registration = NettyChannelRegistry.register(maxPendingWriteBytes(), application(server, advertiseOnly));
 		return true;
 	}
 
@@ -66,11 +72,11 @@ public final class ServerHolepunchBridge {
 		channels.clear();
 	}
 
-	private static HolepunchChannelApplication application(NettyServer server) {
-		return (channel, connection) -> install(server, channel, connection);
+	private static HolepunchChannelApplication application(NettyServer server, boolean advertiseOnly) {
+		return (channel, connection) -> install(server, channel, connection, advertiseOnly);
 	}
 
-	private static void install(NettyServer server, Channel channel, HolepunchConnection connection) throws Exception {
+	private static void install(NettyServer server, Channel channel, HolepunchConnection connection, boolean advertiseOnly) throws Exception {
 		SocketAddress remoteAddress = channel.remoteAddress();
 		channels.add(channel);
 		channel.closeFuture().addListener(future -> channels.remove(channel));
@@ -82,7 +88,7 @@ public final class ServerHolepunchBridge {
 		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection, camouflage.inbound()));
 		pipeline.addLast(IdleStateHandler.class.getSimpleName(), new IdleStateHandler(0, 0, HTTP_IDLE_REAP_SECONDS));
 		pipeline.addLast("traffic-shaper", server.trafficHandler());
-		server.installContractHandlers(pipeline);
+		server.installContractHandlers(pipeline, advertiseOnly);
 		SslHandler sslHandler = pipeline.get(SslHandler.class);
 		if (sslHandler != null) {
 			sslHandler.handshakeFuture().addListener(future -> {

@@ -373,7 +373,7 @@ final class ClientLoginUpdateFlow {
 	}
 
 	private static void disconnectImmediately(ClientHandshakePacketListenerImpl handler) {
-		ClientLoginDisconnect.disconnect(handler);
+		if (handler != null) ClientLoginDisconnect.disconnect(handler);
 	}
 
 	private static ConnectionJsons.ConnectionInfo storedConnection(ClientStorage storage, String modpackId) {

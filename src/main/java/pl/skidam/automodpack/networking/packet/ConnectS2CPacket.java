@@ -68,8 +68,10 @@ public class ConnectS2CPacket {
 						disconnect(handler, VersionedText.literal("AutoModpack modpack hosting is unavailable on the server. Ask the admin to check the server log and try again later."));
 						return;
 					}
-					secret = Secrets.generateSecret();
-					SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret, playerName);
+					if (ServerConfigStore.current().validateSecrets) {
+						secret = Secrets.generateSecret();
+						SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret, playerName);
+					}
 					route = WireJsons.RouteFields.fromServerConfig(ServerConfigStore.current());
 				}
 
@@ -175,6 +177,9 @@ public class ConnectS2CPacket {
 
 			if (!understood) {
 				Common.players.put(playerName, false);
+				if (ServerConfigStore.current().validateSecrets) {
+					SecretsStore.removeHostSecret(GameHelpers.getPlayerUUID(profile).toString());
+				}
 				LOGGER.warn("{} has not installed AutoModpack.", playerName);
 				if (ServerConfigStore.current().requireModpack && !nothingToServeHere()) disconnect(handler, VersionedText.literal(ServerConfigStore.current().nagMessage));
 				return;
