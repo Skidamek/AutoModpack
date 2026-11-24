@@ -39,7 +39,7 @@ class DurableGsonTypesTest {
 				ClientStorageJsons.ClientGenerationStateFields.class, ClientStorageJsons.SnapshotFields.class, ClientStorageJsons.InstanceTreeFields.class, ClientStorageJsons.ClientOverlayFields.class,
 				ClientStorageJsons.ClientCompactionReceiptFields.class,
 				ClientStorageJsons.OfflineRepairJournalFields.class, FileCache.CachedFile.class,
-				PlatformCache.Record.class))
+				PlatformCache.Record.class, WireJsons.ConnectDataFields.class, WireJsons.AdvertiseFields.class, WireJsons.RouteFields.class, WireJsons.TargetFields.class, WireJsons.PackSummaryFields.class))
 			assertNoRecords(type, visited);
 	}
 

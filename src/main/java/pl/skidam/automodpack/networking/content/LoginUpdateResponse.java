@@ -1,29 +1,28 @@
 package pl.skidam.automodpack.networking.content;
 
-/** The single response emitted for the AutoModpack data login query; both ends run the same mod version, enforced by the handshake before this query exists. */
 public enum LoginUpdateResponse {
-	CONTINUE("false"),
-	UPDATE_REQUIRED("true"),
-	HOST_ERROR("null"),
-	/** The client refused the host's certificate, so the failure lives on the player's side of the connection. */
-	CLIENT_REJECTED("rejected"),
-	/** The player dismissed the certificate verification prompt and the client ended the login for it. */
-	CLIENT_DECLINED("declined"),
-	/** The player backed out of joining during the optional modpack offer. */
-	JOIN_CANCELLED("cancelled");
+	CONTINUE((byte) 0),
+	UPDATE_REQUIRED((byte) 1),
+	HOST_ERROR((byte) 2),
+	CLIENT_REJECTED((byte) 3),
+	CLIENT_DECLINED((byte) 4),
+	JOIN_CANCELLED((byte) 5),
+	CONTRACT_MISMATCH((byte) 6),
+	LOADER_MISMATCH((byte) 7),
+	GENERATING((byte) 8);
 
-	private final String wireValue;
+	private final byte code;
 
-	LoginUpdateResponse(String wireValue) {
-		this.wireValue = wireValue;
+	LoginUpdateResponse(byte code) {
+		this.code = code;
 	}
 
-	public String wireValue() {
-		return wireValue;
+	public byte code() {
+		return code;
 	}
 
-	public static LoginUpdateResponse fromWire(String wireValue) {
-		for (LoginUpdateResponse response : values()) if (response.wireValue.equals(wireValue)) return response;
+	public static LoginUpdateResponse fromCode(byte code) {
+		for (LoginUpdateResponse response : values()) if (response.code == code) return response;
 		return HOST_ERROR;
 	}
 }

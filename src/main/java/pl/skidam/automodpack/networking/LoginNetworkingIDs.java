@@ -9,7 +9,7 @@ import pl.skidam.automodpack_core.AutoModpack;
 
 public enum LoginNetworkingIDs {
 	// AutoModpack login query id's
-	HANDSHAKE(-100), DATA(-101);
+	HANDSHAKE(-100), CONNECT(-102);
 
 	private final int value;
 

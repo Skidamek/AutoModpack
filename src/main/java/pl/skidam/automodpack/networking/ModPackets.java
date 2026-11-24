@@ -3,26 +3,18 @@ package pl.skidam.automodpack.networking;
 import java.net.InetSocketAddress;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.netty.buffer.Unpooled;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 
 import pl.skidam.automodpack.networking.client.ClientLoginNetworking;
-import pl.skidam.automodpack.networking.content.HandshakePacket;
-import pl.skidam.automodpack.networking.packet.DataC2SPacket;
-import pl.skidam.automodpack.networking.packet.DataS2CPacket;
-import pl.skidam.automodpack.networking.packet.HandshakeC2SPacket;
-import pl.skidam.automodpack.networking.packet.HandshakeS2CPacket;
+import pl.skidam.automodpack.networking.packet.ConnectC2SPacket;
+import pl.skidam.automodpack.networking.packet.ConnectS2CPacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_core.Environment;
-import pl.skidam.automodpack_core.config.ConfigUtils;
-import pl.skidam.automodpack_core.config.ServerConfigStore;
 
 public class ModPackets {
 	public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
-	public static final Identifier DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
+	public static final Identifier CONNECT = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.CONNECT);
 
 	public record ConnectionAttempt(InetSocketAddress origin, String expectedFingerprint) {}
 
@@ -57,27 +49,16 @@ public class ModPackets {
 
 	private static class ClientPacketRegistration {
 		static void register() {
-			ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);
-			ClientLoginNetworking.registerGlobalReceiver(DATA, DataC2SPacket::receive);
+			ClientLoginNetworking.registerGlobalReceiver(CONNECT, ConnectC2SPacket::receive);
 		}
 	}
 
 	public static void registerS2CPackets() {
-		ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeS2CPacket::receive);
-		ServerLoginNetworking.registerGlobalReceiver(DATA, DataS2CPacket::receive);
+		ServerLoginNetworking.registerGlobalReceiver(CONNECT, ConnectS2CPacket::receive);
+		ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, ConnectS2CPacket::receiveLegacyHandshake);
 	}
 
-	// Fires just after client go into login state and before any FML packet is sent.
-	public static void onReady(ServerLoginPacketListenerImpl handler, MinecraftServer server, ServerLoginNetworking.LoginSynchronizer synchronizer,
-			PacketSender sender) {
-		synchronizer.waitFor(server.submit(() -> {
-			FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-
-			HandshakePacket handshakePacket = new HandshakePacket(ConfigUtils.advertisedLoaders(ServerConfigStore.current()), Environment.current().modVersion(), Environment.current().mcVersion());
-			String jsonHandshakePacket = handshakePacket.toJson();
-
-			buf.writeUtf(jsonHandshakePacket, Short.MAX_VALUE);
-			sender.sendPacket(HANDSHAKE, buf);
-		}));
+	public static void onReady(ServerLoginPacketListenerImpl handler, MinecraftServer server, ServerLoginNetworking.LoginSynchronizer synchronizer, PacketSender sender) {
+		ConnectS2CPacket.sendOnReady(handler, server, synchronizer, sender);
 	}
 }
