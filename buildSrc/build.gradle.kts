@@ -7,10 +7,7 @@ plugins {
 repositories {
 	mavenCentral()
 	gradlePluginPortal()
-	flatDir {
-		name = "mcholepunchLibs"
-		dirs(file("../libs"))
-	}
+	maven("https://skidamek.github.io/maven/") { name = "Skidamek" }
 }
 
 val versions =
@@ -25,7 +22,7 @@ dependencies {
 	// Precompiled zstd natives for packing the impl solid; the version pins the compressed bytes
 	implementation("com.github.luben:zstd-jni:${version("versionZstdJni")}")
 	// The same decoder the runtime uses, so the build proves the solid is decodable by the client
-	implementation(":aircompressor:${version("versionAircompressor")}")
+	implementation("pl.skidam:aircompressor:${version("versionAircompressor")}")
 	implementation(
 		"dev.luna5ama.jar-optimizer:dev.luna5ama.jar-optimizer.gradle.plugin:${version("pluginJarOptimizerVersion")}",
 	)
