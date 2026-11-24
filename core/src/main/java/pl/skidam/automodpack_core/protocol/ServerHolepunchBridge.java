@@ -5,6 +5,10 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,11 +37,25 @@ import pl.skidam.mcholepunch.server.netty.NettyChannelRegistry;
  */
 public final class ServerHolepunchBridge {
 	private static final Logger LOGGER = LogManager.getLogger(ServerHolepunchBridge.class);
+	private static final byte[] MARKER_CONSTANT = computeMarkerConstant();
 
 	private static final Set<Channel> channels = ConcurrentHashMap.newKeySet();
 	private static NettyChannelRegistry.Registration registration;
 
 	private ServerHolepunchBridge() {}
+
+	/** AutoModpack's 80-bit mcholepunch routing constant, isolating its login claims from other deployments. */
+	public static byte[] markerConstant() {
+		return MARKER_CONSTANT.clone();
+	}
+
+	private static byte[] computeMarkerConstant() {
+		try {
+			return Arrays.copyOf(MessageDigest.getInstance("SHA-256").digest("automodpack:holepunch-marker".getBytes(StandardCharsets.UTF_8)), 10);
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 is missing from the JRE", exception);
+		}
+	}
 
 	/** Registers the takeover application; returns false when holepunch hosting is off or already registered. */
 	public static synchronized boolean register(NettyServer server) {

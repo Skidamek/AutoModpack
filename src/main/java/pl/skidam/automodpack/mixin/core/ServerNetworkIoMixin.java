@@ -27,7 +27,7 @@ public abstract class ServerNetworkIoMixin {
 			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {
-			NettyLoginClaimHandler.install(channel.pipeline(), Common.server.getKeyPair());
+			NettyLoginClaimHandler.install(channel.pipeline(), Common.server.getKeyPair(), ServerHolepunchBridge.markerConstant());
 		}
 	}
 }

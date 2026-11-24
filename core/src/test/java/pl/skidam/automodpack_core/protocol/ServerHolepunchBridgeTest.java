@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
@@ -50,6 +51,15 @@ class ServerHolepunchBridgeTest {
 		assertArrayEquals(record, readBytes(channel.readInbound()));
 
 		channel.finishAndReleaseAll();
+	}
+
+	@Test
+	void markerConstantIsTenBytesAndDefensivelyCopied() {
+		byte[] first = ServerHolepunchBridge.markerConstant();
+		assertEquals(10, first.length);
+		byte original = first[0];
+		first[0] = (byte) ~original;
+		assertEquals(original, ServerHolepunchBridge.markerConstant()[0]);
 	}
 
 	private static byte[] tlsRecord(int payloadLength) {
