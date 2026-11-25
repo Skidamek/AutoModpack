@@ -38,7 +38,8 @@ class LangKeyTripwireTest {
 	private static final Pattern OUR_KEY_TO_VANILLA_TRANSLATION = Pattern.compile("VersionedText\\.translatable\\([^)\"]*\"(automodpack\\.[A-Za-z0-9_.]+)\"");
 
 	/** Strings that use the namespace but are not translation keys. */
-	private static final Set<String> NOT_LANG_KEYS = Set.of("automodpack.autotest.gamedir", "automodpack.autotest.render", "automodpack.autotest.token", "automodpack.data.root");
+	private static final Set<String> NOT_LANG_KEYS = Set.of("automodpack.autotest.fastTimers", "automodpack.autotest.gamedir", "automodpack.autotest.port", "automodpack.autotest.render",
+			"automodpack.autotest.token", "automodpack.data.root");
 
 	@Test
 	void everyKeyInCodeResolvesFromTheBundledLangTable() throws IOException {

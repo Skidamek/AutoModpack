@@ -2,11 +2,17 @@ package pl.skidam.automodpack.client.ui.widget;
 
 /** One tick-driven read countdown shared by every gated screen: call {@link #tick} once per frame, render {@link #secondsRemaining}. */
 public final class Countdown {
+	private static volatile boolean fastTimers;
 	private final int durationTicks;
 	private int ticksRemaining;
 
+	/** Only called by AutoTestBridge in -Pautomodpack.autotest builds when fastTimers is enabled. */
+	public static void enableFastTimers() {
+		fastTimers = true;
+	}
+
 	public Countdown(int seconds) {
-		this.durationTicks = seconds * 20;
+		this.durationTicks = fastTimers ? 0 : seconds * 20;
 		this.ticksRemaining = durationTicks;
 	}
 

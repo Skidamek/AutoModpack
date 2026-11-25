@@ -12,26 +12,30 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
-/*? if >=1.20.4 {*/
-/*?}*/
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConnectScreen;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
 /*? if >=1.21.6 {*/
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 /*?}*/
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
-import pl.skidam.automodpack_core.text.L10n;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
+import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
+import pl.skidam.automodpack_core.text.L10n;
+/*? if >= 1.21.9 {*/
+import net.minecraft.client.input.KeyEvent;
+/*?}*/
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -46,8 +50,15 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 /*import net.minecraft.network.chat.TranslatableComponent;
 *//*?}*/
 
-import java.io.IOException;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,10 +70,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
-
 
 import pl.skidam.automodpack_core.utils.ScreenshotSettler;
 
@@ -71,13 +82,16 @@ public final class AutoTestBridge {
 
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
+	private static final AtomicInteger SERVER_PORT = new AtomicInteger(0);
 	private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
 	private static final AtomicBoolean RELOAD_FINISHED = new AtomicBoolean(false);
 	private static final Object READY_STATE_LOCK = new Object();
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
+	private static final long MAIN_THREAD_TIMEOUT_SECONDS = 15;
 	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
+	private static final int FILE_MOVE_RETRIES = 10;
 
 	public static void markReloadFinished() {
 		RELOAD_FINISHED.set(true);
@@ -90,6 +104,7 @@ public final class AutoTestBridge {
 
 	public static void start() {
 		if (!STARTED.compareAndSet(false, true)) return;
+		if (Boolean.getBoolean("automodpack.autotest.fastTimers")) Countdown.enableFastTimers();
 		String token = System.getProperty("automodpack.autotest.token", "");
 		String gameDir = System.getProperty("automodpack.autotest.gamedir", "");
 		if (token.isBlank() || gameDir.isBlank()) {
@@ -97,15 +112,20 @@ public final class AutoTestBridge {
 			return;
 		}
 
-		Thread t = new Thread(() -> run(Path.of(gameDir), token), "AutoModpackBridge");
-		t.setDaemon(true);
-		t.start();
+		int requestedPort = Integer.getInteger("automodpack.autotest.port", 0);
+		Thread socketThread = new Thread(() -> runSocketServer(Path.of(gameDir), token, requestedPort), "AutoModpackBridgeSocket");
+		socketThread.setDaemon(true);
+		socketThread.start();
+
+		Thread fileThread = new Thread(() -> runFileFallback(Path.of(gameDir), token), "AutoModpackBridge");
+		fileThread.setDaemon(true);
+		fileThread.start();
 
 		// Fallback in case the reload-finished mixin fires before the title screen is shown.
 		Thread waiter = new Thread(() -> {
 			while (!CLIENT_READY.get()) {
 				try {
-					Thread.sleep(100);
+					Thread.sleep(50);
 					if (currentScreen() instanceof TitleScreen && hasReloadFinished()) {
 						onClientReady();
 						return;
@@ -126,31 +146,78 @@ public final class AutoTestBridge {
 	private static void publishReadyState() {
 		if (!CLIENT_READY.get()) return;
 		synchronized (READY_STATE_LOCK) {
-			if (READY_STATE_PUBLISHED.get()) return;
 			Path dir = bridgeDir;
-			if (dir == null) return;
+			int port = SERVER_PORT.get();
+			if (dir == null || port <= 0) return;
+			if (READY_STATE_PUBLISHED.get()) return;
 			try {
-				writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
+				JsonObject state = new JsonObject();
+				state.addProperty("status", "ready");
+				state.addProperty("port", port);
+				writeFile(dir.resolve("bridge-state.json"), state.toString());
 				READY_STATE_PUBLISHED.set(true);
 				READY_STATE_WRITE_FAILED.set(false);
-				LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
+				LOGGER.info("AutoModpack autotest: client ready on 127.0.0.1:{}, wrote bridge-state.json", port);
 			} catch (IOException e) {
 				if (READY_STATE_WRITE_FAILED.compareAndSet(false, true)) LOGGER.error("Cannot write client-ready state", e);
 			}
 		}
 	}
 
-	private static void run(Path gameDir, String token) {
+	private static Path ensureBridgeDir(Path gameDir) throws IOException {
 		Path dir = gameDir.resolve("automodpack/autotest");
+		Files.createDirectories(dir);
+		bridgeDir = dir;
+		return dir;
+	}
+
+	private static void runSocketServer(Path gameDir, String token, int requestedPort) {
 		try {
-			Files.createDirectories(dir);
+			ensureBridgeDir(gameDir);
 		} catch (IOException e) {
 			LOGGER.error("Cannot initialize autotest bridge directory", e);
 			return;
 		}
+		try (ServerSocket server = new ServerSocket(requestedPort, 16, InetAddress.getByName("127.0.0.1"))) {
+			SERVER_PORT.set(server.getLocalPort());
+			LOGGER.info("AutoModpack bridge socket listening on 127.0.0.1:{}", server.getLocalPort());
+			publishReadyState();
+			while (!server.isClosed()) {
+				Socket client = server.accept();
+				Thread handler = new Thread(() -> serveClient(client, token), "AutoModpackBridgeConn");
+				handler.setDaemon(true);
+				handler.start();
+			}
+		} catch (IOException e) {
+			LOGGER.error("AutoModpack bridge socket server stopped", e);
+		}
+	}
 
-		bridgeDir = dir;
-		LOGGER.info("AutoModpack bridge ready at {}", dir);
+	private static void serveClient(Socket socket, String token) {
+		try (socket;
+			BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+			BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
+			socket.setTcpNoDelay(true);
+			String line;
+			while ((line = in.readLine()) != null) {
+				if (line.isBlank()) continue;
+				String response = handle(line, token);
+				out.write(response);
+				out.newLine();
+				out.flush();
+			}
+		} catch (IOException ignored) {
+		}
+	}
+
+	private static void runFileFallback(Path gameDir, String token) {
+		Path dir;
+		try {
+			dir = ensureBridgeDir(gameDir);
+		} catch (IOException e) {
+			LOGGER.error("Cannot initialize autotest bridge directory", e);
+			return;
+		}
 		publishReadyState();
 		Path cmd = dir.resolve("bridge-command.json");
 		Path rsp = dir.resolve("bridge-response.json");
@@ -159,7 +226,7 @@ public final class AutoTestBridge {
 				if (CLIENT_READY.get() && !READY_STATE_PUBLISHED.get()) publishReadyState();
 				if (Files.exists(cmd)) {
 					String json = Files.readString(cmd, StandardCharsets.UTF_8);
-					Files.delete(cmd);
+					Files.deleteIfExists(cmd);
 					writeFile(rsp, handle(json, token));
 				}
 				Thread.sleep(50);
@@ -173,25 +240,36 @@ public final class AutoTestBridge {
 	}
 
 	private static String handle(String json, String token) {
+		JsonElement requestId = null;
 		try {
 			JsonObject req = JsonParser.parseString(json).getAsJsonObject();
+			requestId = req.get("reqId");
 			if (!token.equals(optString(req, "token"))) {
-				return err("invalid bridge token");
+				return withId(err("invalid bridge token"), requestId);
 			}
-
-			return exec(req);
+			return withId(exec(req), requestId);
 		} catch (Exception e) {
 			LOGGER.error("AutoModpack bridge command failed", e);
-			return err(e.getMessage());
+			return withId(err(e.getMessage()), requestId);
 		}
+	}
+
+	private static String withId(String responseJson, JsonElement requestId) {
+		if (requestId == null || requestId.isJsonNull()) return responseJson;
+		JsonObject obj = JsonParser.parseString(responseJson).getAsJsonObject();
+		obj.add("reqId", requestId);
+		return obj.toString();
 	}
 
 	private static String exec(JsonObject req) throws Exception {
 		return switch (optString(req, "op")) {
 			case "ping" -> ok();
+			case "state" -> onMain(() -> state().toString());
 			case "gui" -> onMain(() -> gui().toString());
 			case "click" -> onMain(() -> click(req));
 			case "text" -> onMain(() -> text(req));
+			case "key" -> onMain(() -> key(req));
+			case "scroll" -> onMain(() -> scroll(req));
 			case "screenshot" -> screenshot(req);
 			case "connect" -> onMain(() -> connect(req));
 			case "disconnect" -> onMain(AutoTestBridge::disconnect);
@@ -204,17 +282,45 @@ public final class AutoTestBridge {
 		return ScreenImpl.currentScreen();
 	}
 
+	private static String normalizedScreenName(Screen screen) {
+		if (screen == null) return null;
+		if (screen instanceof TitleScreen) return "TitleScreen";
+		if (screen instanceof ConnectScreen) return "ConnectScreen";
+		if (screen instanceof DisconnectedScreen) return "DisconnectedScreen";
+		if (screen instanceof JoinMultiplayerScreen) return "JoinMultiplayerScreen";
+		/*? if >=1.21.6 {*/
+		if (screen instanceof GenericMessageScreen) return "GenericMessageScreen";
+		/*?}*/
+		return screen.getClass().getSimpleName();
+	}
+
+	private static JsonObject state() {
+		Minecraft minecraft = Minecraft.getInstance();
+		Screen s = currentScreen();
+		JsonObject o = base();
+		o.addProperty("ready", CLIENT_READY.get());
+		o.addProperty("reloadFinished", RELOAD_FINISHED.get());
+		o.addProperty("inWorld", minecraft.level != null);
+		o.addProperty("screenName", normalizedScreenName(s));
+		o.addProperty("screenClass", s == null ? null : s.getClass().getName());
+		o.addProperty("title", s == null ? null : s.getTitle().getString());
+		o.addProperty("screenRevision", screenRevision(s));
+		return o;
+	}
+
 	private static JsonObject gui() {
 		Screen s = currentScreen();
 		JsonObject o = base();
+		o.addProperty("screenName", normalizedScreenName(s));
 		o.addProperty("screenClass", s == null ? null : s.getClass().getName());
 		o.addProperty("title", s == null ? null : s.getTitle().getString());
+		o.addProperty("screenWidth", s == null ? 0 : s.width);
+		o.addProperty("screenHeight", s == null ? 0 : s.height);
 		o.addProperty("screenRevision", screenRevision(s));
 		GuiElements elements = elements(s);
 		o.add("buttons", elementsJson(elements.buttons()));
 		o.add("textFields", elementsJson(elements.textFields()));
 		o.add("other", elementsJson(elements.other()));
-		o.add("elements", elementsJson(elements.all()));
 		JsonArray toasts = new JsonArray();
 		for (VersionedToasts.Shown toast : VersionedToasts.shown()) {
 			JsonObject shown = new JsonObject();
@@ -276,6 +382,47 @@ public final class AutoTestBridge {
 		}
 
 		editBox.setValue(optString(req, "text"));
+		return ok();
+	}
+
+	private static String key(JsonObject req) {
+		Screen s = currentScreen();
+		if (s == null) return err("no screen");
+		if (has(req, "screenRevision") && screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before key input");
+		int keyCode = optInt(req, "keyCode", -1);
+		if (keyCode < 0) return err("keyCode is required");
+		int scanCode = optInt(req, "scanCode", 0);
+		int modifiers = optInt(req, "modifiers", 0);
+		/*? if >= 1.21.9 {*/
+		s.keyPressed(new KeyEvent(keyCode, scanCode, modifiers));
+		/*?} else {*/
+		/*s.keyPressed(keyCode, scanCode, modifiers);
+		*//*?}*/
+		return ok();
+	}
+
+	private static String scroll(JsonObject req) {
+		Screen s = currentScreen();
+		if (s == null) return err("no screen");
+		if (has(req, "screenRevision") && screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before scroll");
+		double x;
+		double y;
+		if (has(req, "id")) {
+			GuiElement e = elements(s).byId(optInt(req, "id", -1));
+			if (e == null) return err("no gui element with id " + optInt(req, "id", -1));
+			x = e.x() + e.width() / 2.0;
+			y = e.y() + e.height() / 2.0;
+		} else {
+			x = optDouble(req, "x", s.width / 2.0);
+			y = optDouble(req, "y", s.height / 2.0);
+		}
+		double dx = optDouble(req, "dx", 0.0);
+		double dy = optDouble(req, "dy", 0.0);
+		/*? if >= 1.20.2 {*/
+		s.mouseScrolled(x, y, dx, dy);
+		/*?} else {*/
+		/*s.mouseScrolled(x, y, dy);
+		*//*?}*/
 		return ok();
 	}
 
@@ -601,14 +748,39 @@ public final class AutoTestBridge {
 				f.completeExceptionally(e);
 			}
 		});
-		T result = f.get();
-		return result instanceof String string ? string : String.valueOf(result);
+		try {
+			T result = f.get(MAIN_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+			return result instanceof String string ? string : String.valueOf(result);
+		} catch (TimeoutException e) {
+			return err("main_thread_timeout", "Minecraft main thread did not respond within " + MAIN_THREAD_TIMEOUT_SECONDS + "s");
+		}
 	}
 
 	private static void writeFile(Path p, String c) throws IOException {
 		Path t = p.resolveSibling(p.getFileName() + ".tmp");
 		Files.writeString(t, c, StandardCharsets.UTF_8);
-		Files.move(t, p, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		IOException last = null;
+		for (int attempt = 0; attempt < FILE_MOVE_RETRIES; attempt++) {
+			try {
+				Files.move(t, p, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+				return;
+			} catch (IOException e) {
+				last = e;
+				try {
+					Files.move(t, p, StandardCopyOption.REPLACE_EXISTING);
+					return;
+				} catch (IOException retryable) {
+					last = retryable;
+				}
+				try {
+					Thread.sleep(25);
+				} catch (InterruptedException interrupted) {
+					Thread.currentThread().interrupt();
+					throw last;
+				}
+			}
+		}
+		throw last;
 	}
 
 	private static JsonObject base() {
@@ -637,14 +809,29 @@ public final class AutoTestBridge {
 	}
 
 	private static long screenRevision(Screen screen) {
-		// The revision must change whenever the widget set is replaced (rebuildWidgets swaps
-		// screen.children()), not only when the screen instance changes: element ids are
-		// positional over children, so a rebuild shifts every id and a click dumped before the
-		// rebuild would otherwise land on a different button.
 		if (screen == null) return 0;
 		long revision = System.identityHashCode(screen);
 		for (GuiEventListener child : screen.children()) {
-			revision = revision * 31 + System.identityHashCode(child);
+			revision = hashListener(revision, child);
+		}
+		if (screen instanceof VersionedScreen versioned) {
+			for (RowListWidget menu : versioned.openMenus()) {
+				revision = revision * 31 + System.identityHashCode(menu);
+				revision = revision * 31 + menu.rowCount();
+			}
+		}
+		return revision;
+	}
+
+	private static long hashListener(long revision, GuiEventListener listener) {
+		revision = revision * 31 + System.identityHashCode(listener);
+		if (listener instanceof RowViewport viewport) {
+			revision = revision * 31 + viewport.rowCount();
+		}
+		if (!(listener instanceof Screen) && listener instanceof ContainerEventHandler container) {
+			for (GuiEventListener child : container.children()) {
+				revision = hashListener(revision, child);
+			}
 		}
 		return revision;
 	}
@@ -667,6 +854,11 @@ public final class AutoTestBridge {
 	private static long optLong(JsonObject o, String k, long d) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull() ? e.getAsLong() : d;
+	}
+
+	private static double optDouble(JsonObject o, String k, double d) {
+		JsonElement e = o.get(k);
+		return e != null && !e.isJsonNull() ? e.getAsDouble() : d;
 	}
 
 	/*? if >= 1.19.2 {*/
