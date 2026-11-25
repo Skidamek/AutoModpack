@@ -129,4 +129,56 @@ class BootstrapConfigTest {
 		mixed.modpackId = "abc1234";
 		assertThrows(IllegalArgumentException.class, () -> BootstrapConfig.validate(mixed));
 	}
+
+	@Test
+	void resolveEndpointUsesTheMinecraftPortForHolepunch() {
+		assertEquals("play.example.com:25566", resolve("play.example.com:25566", new ServerConfigJsons.ServerConfigFieldsV3(), ModpackConnectionMode.HOLEPUNCH));
+	}
+
+	@Test
+	void resolveEndpointUsesBindPortForMagicOnlyWhenSet() {
+		ServerConfigJsons.ServerConfigFieldsV3 bound = new ServerConfigJsons.ServerConfigFieldsV3();
+		bound.bindPort = 25567;
+		assertEquals("play.example.com:25567", resolve("play.example.com:25566", bound, ModpackConnectionMode.MAGIC));
+		assertEquals("play.example.com:25566", resolve("play.example.com:25566", new ServerConfigJsons.ServerConfigFieldsV3(), ModpackConnectionMode.MAGIC));
+	}
+
+	@Test
+	void resolveEndpointRequiresBindPortForHttp() {
+		ServerConfigJsons.ServerConfigFieldsV3 bound = new ServerConfigJsons.ServerConfigFieldsV3();
+		bound.bindPort = 25568;
+		assertEquals("play.example.com:25568", resolve("play.example.com:25566", bound, ModpackConnectionMode.HTTP));
+		assertThrows(IllegalArgumentException.class, () -> resolve("play.example.com:25566", new ServerConfigJsons.ServerConfigFieldsV3(), ModpackConnectionMode.HTTP));
+	}
+
+	@Test
+	void resolveEndpointPrefersAdvertisedEndpointOverTheMode() {
+		ServerConfigJsons.ServerConfigFieldsV3 advertised = new ServerConfigJsons.ServerConfigFieldsV3();
+		advertised.advertisedEndpointHost = " Downloads.Example.com ";
+		advertised.advertisedEndpointPort = 25564;
+		advertised.bindPort = 25568;
+		assertEquals("downloads.example.com:25564", resolve("play.example.com:25566", advertised, ModpackConnectionMode.HTTP));
+		assertEquals("downloads.example.com:25564", resolve("play.example.com:25566", advertised, ModpackConnectionMode.HOLEPUNCH));
+	}
+
+	@Test
+	void resolveEndpointKeepsAnIpv6OriginBracketed() {
+		assertEquals("[::1]:25566", resolve("[::1]:25566", new ServerConfigJsons.ServerConfigFieldsV3(), ModpackConnectionMode.HOLEPUNCH));
+
+		ServerConfigJsons.ServerConfigFieldsV3 advertised = new ServerConfigJsons.ServerConfigFieldsV3();
+		advertised.advertisedEndpointHost = "2001:DB8::1";
+		advertised.advertisedEndpointPort = 25564;
+		assertEquals("[2001:db8::1]:25564", resolve("[::1]:25566", advertised, ModpackConnectionMode.HOLEPUNCH));
+	}
+
+	@Test
+	void resolveEndpointUsesAnExplicitEndpointAsGiven() {
+		ServerConfigJsons.ServerConfigFieldsV3 unconfigured = new ServerConfigJsons.ServerConfigFieldsV3();
+		assertEquals("downloads.example.com:25564",
+				AddressHelpers.formatAddress(BootstrapConfig.resolveEndpoint(AddressHelpers.parseOrigin("play.example.com"), unconfigured, "Downloads.Example.com:25564", ModpackConnectionMode.HTTP)));
+	}
+
+	private static String resolve(String origin, ServerConfigJsons.ServerConfigFieldsV3 config, ModpackConnectionMode mode) {
+		return AddressHelpers.formatAddress(BootstrapConfig.resolveEndpoint(AddressHelpers.parseOrigin(origin), config, null, mode));
+	}
 }

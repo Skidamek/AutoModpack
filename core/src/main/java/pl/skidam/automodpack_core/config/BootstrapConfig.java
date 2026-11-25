@@ -35,6 +35,20 @@ public final class BootstrapConfig {
 		return new Validated(origin, fingerprint, fields.modpackId, endpoint, fields.connectionMode, secret, serverName);
 	}
 
+	/** The endpoint a bootstrap install advertises: the explicit one, or what the config and connection mode say this host serves. */
+	public static InetSocketAddress resolveEndpoint(InetSocketAddress origin, ServerConfigJsons.ServerConfigFieldsV3 config, String explicitEndpoint, ModpackConnectionMode mode) {
+		if (explicitEndpoint != null && !explicitEndpoint.isBlank()) return AddressHelpers.parseEndpoint(explicitEndpoint);
+
+		String host = config.advertisedEndpointHost != null && !config.advertisedEndpointHost.isBlank() ? config.advertisedEndpointHost.trim() : origin.getHostString();
+		int port;
+		if (config.advertisedEndpointPort > 0) port = config.advertisedEndpointPort;
+		else if (mode == ModpackConnectionMode.HOLEPUNCH) port = origin.getPort();
+		else if (mode == ModpackConnectionMode.MAGIC) port = config.bindPort > 0 ? config.bindPort : origin.getPort();
+		else if (config.bindPort > 0) port = config.bindPort;
+		else throw new IllegalArgumentException("HTTP bootstrap install requires an explicit endpoint or configured bindPort / advertisedEndpointPort");
+		return AddressHelpers.parseEndpoint(AddressHelpers.formatAddress(AddressHelpers.format(host, port)));
+	}
+
 	public static ConnectionJsons.KnownHostsBootstrapFields pin(InetSocketAddress origin, String fingerprint) {
 		return pin(origin, fingerprint, null);
 	}

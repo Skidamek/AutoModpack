@@ -144,22 +144,30 @@ public class Commands {
 										.then(literal("pin")
 												.then(argument("origin", StringArgumentType.word())
 														.executes(Commands::bootstrapPin)
-														.then(argument("server-name", StringArgumentType.greedyString())
-																.executes(Commands::bootstrapPinNamed)
+														.then(literal("name")
+																.then(argument("server-name", StringArgumentType.greedyString())
+																		.executes(Commands::bootstrapPinNamed)
+																)
 														)
 												)
 										)
 										.then(literal("install")
 												.then(argument("origin", StringArgumentType.word())
 														.executes(Commands::bootstrapInstallConfiguredEndpoint)
-														.then(argument("server-name", StringArgumentType.greedyString())
-																.executes(Commands::bootstrapInstallConfiguredEndpointNamed)
+														.then(literal("name")
+																.then(argument("server-name", StringArgumentType.greedyString())
+																		.executes(Commands::bootstrapInstallConfiguredEndpointNamed)
+																)
 														)
-														.then(argument("endpoint", StringArgumentType.word())
-																.then(argument("connection-mode", StringArgumentType.word())
-																		.executes(Commands::bootstrapInstallExplicitEndpoint)
-																		.then(argument("server-name", StringArgumentType.greedyString())
-																				.executes(Commands::bootstrapInstallExplicitEndpointNamed)
+														.then(literal("endpoint")
+																.then(argument("endpoint", StringArgumentType.word())
+																		.then(argument("connection-mode", StringArgumentType.word())
+																				.executes(Commands::bootstrapInstallExplicitEndpoint)
+																				.then(literal("name")
+																						.then(argument("server-name", StringArgumentType.greedyString())
+																								.executes(Commands::bootstrapInstallExplicitEndpointNamed)
+																						)
+																				)
 																		)
 																)
 														)
@@ -292,16 +300,10 @@ public class Commands {
 
 	private static int exportBootstrapInstall(CommandContext<CommandSourceStack> context, String endpoint, String connectionMode, String serverName) {
 		try {
-			if (endpoint == null && (ServerConfigStore.current().advertisedEndpointHost == null || ServerConfigStore.current().advertisedEndpointHost.isBlank()
-					|| ServerConfigStore.current().advertisedEndpointPort == -1))
-				throw new IllegalArgumentException("Configured bootstrap install requires explicit advertisedEndpointHost and advertisedEndpointPort values");
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
-			InetSocketAddress resolvedEndpoint = endpoint == null
-					? AddressHelpers.parseEndpoint(AddressHelpers.formatAddress(AddressHelpers.format(ServerConfigStore.current().advertisedEndpointHost, ServerConfigStore.current().advertisedEndpointPort)))
-					: AddressHelpers.parseEndpoint(endpoint);
 			ModpackConnectionMode mode = connectionMode == null ? ServerConfigStore.current().connectionMode : parseConnectionMode(connectionMode);
-			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), resolvedEndpoint, mode,
-					requireProvisioningSecret(), serverName), true);
+			InetSocketAddress resolvedEndpoint = BootstrapConfig.resolveEndpoint(origin, ServerConfigStore.current(), endpoint, mode);
+			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), resolvedEndpoint, mode, requireProvisioningSecret(), serverName), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
