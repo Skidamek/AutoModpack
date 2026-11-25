@@ -150,8 +150,7 @@ public class ConnectS2CPacket {
 					LOGGER.info("{} cancelled the join during the optional modpack offer", playerName);
 					disconnect(handler, VersionedText.literal("[AutoModpack] Join cancelled."));
 				}
-				case CONTRACT_MISMATCH -> disconnect(handler, VersionedText
-						.literal("AutoModpack version mismatch. This server runs " + Environment.current().modVersion() + ", so install that version of AutoModpack for " + Environment.current().loader() + " to join."));
+				case CONTRACT_MISMATCH -> disconnect(handler, versionMismatchReason());
 				case LOADER_MISMATCH -> disconnect(handler, VersionedText.literal("This server does not accept your mod loader. Join with " + Environment.current().loader() + "."));
 				case GENERATING -> disconnect(handler, VersionedText.literal("AutoModpack is generating modpack. Please wait a moment and try again."));
 				default -> {
@@ -186,12 +185,18 @@ public class ConnectS2CPacket {
 			}
 
 			Common.players.put(playerName, true);
-			disconnect(handler, VersionedText
-					.literal("AutoModpack version mismatch. This server runs " + Environment.current().modVersion() + ", so install that version of AutoModpack for " + Environment.current().loader() + " to join."));
+			disconnect(handler, versionMismatchReason());
 		} catch (Exception e) {
 			LOGGER.error("Error while handling legacy AutoModpack handshake", e);
 			disconnect(handler, VersionedText.literal("[AutoModpack] The server failed to process your handshake. Ask the server administrator to check the server log."));
 		}
+	}
+
+	private static Component versionMismatchReason() {
+		String message = "AutoModpack version mismatch. This server runs " + Environment.current().modVersion() + ", so install that version of AutoModpack for " + Environment.current().loader() + " to join.";
+		String link = ServerConfigStore.current().nagClickableLink;
+		if (link != null && !link.isBlank()) message += "\n\n" + link.trim();
+		return VersionedText.literal(message);
 	}
 
 	private static GameProfile resolveProfile(ServerLoginPacketListenerImpl handler) {
