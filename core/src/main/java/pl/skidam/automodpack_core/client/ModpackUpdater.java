@@ -166,6 +166,10 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** True when the plan would write a gated jar that has no first-party hit. */
+	int planUnverifiedJarCount(UpdatePlan plan) {
+		return review.planUnverifiedJarCount(plan);
+	}
+
 	boolean planWritesUnverifiedJar(UpdatePlan plan) {
 		return review.planWritesUnverifiedJar(plan);
 	}
@@ -677,8 +681,8 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
 		boolean updateOrRollback = preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK;
-		boolean writesUnverifiedJar = updateOrRollback && review.planWritesUnverifiedJar(preview.plan());
-		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
+		int unverifiedPlanJarCount = updateOrRollback ? review.planUnverifiedJarCount(preview.plan()) : 0;
+		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), unverifiedPlanJarCount, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), sourceCatalogue.unreachableProviders(), review.reviewConsent(), continueAction, cancelAction);
 	}
 

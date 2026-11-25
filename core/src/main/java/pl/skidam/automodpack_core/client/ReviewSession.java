@@ -198,6 +198,11 @@ final class ReviewSession {
 		return sourceCatalogue.unverifiedSelectedJarPaths(updater.getSelectedTarget());
 	}
 
+	/** Number of gated jars without a first-party hit that the plan would write. */
+	int planUnverifiedJarCount(UpdatePlan plan) {
+		return sourceCatalogue.planUnverifiedJarCount(plan);
+	}
+
 	/** True when the plan would write a gated jar that has no first-party hit. */
 	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
 		return sourceCatalogue.planWritesUnverifiedJar(plan);

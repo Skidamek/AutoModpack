@@ -138,14 +138,19 @@ final class SourceCatalogue {
 		return record != null && (provider == DownloadSource.Provider.MODRINTH ? record.modrinth() != null : record.curseforge() != null);
 	}
 
-	boolean planWritesUnverifiedJar(UpdatePlan plan) {
-		if (plan == null) return false;
+	int planUnverifiedJarCount(UpdatePlan plan) {
+		if (plan == null) return 0;
+		int count = 0;
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
 			if (!gatedJar(operation.relativePath())) continue;
-			if (!firstPartyHit(operation.expectedObjectHash())) return true;
+			if (!firstPartyHit(operation.expectedObjectHash())) count++;
 		}
-		return false;
+		return count;
+	}
+
+	boolean planWritesUnverifiedJar(UpdatePlan plan) {
+		return planUnverifiedJarCount(plan) > 0;
 	}
 
 	/** Platforms the running lookup could not reach; empty when no lookup ran or both answered. */

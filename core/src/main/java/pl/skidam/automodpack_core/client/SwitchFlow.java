@@ -80,9 +80,9 @@ public final class SwitchFlow {
 			return;
 		}
 		if (forcedMode != null) preview = preview.withMode(forcedMode);
-		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan());
+		int unverifiedPlanJarCount = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) ? updater.planUnverifiedJarCount(preview.plan()) : 0;
 		boolean launchWrites = updater.launchWritesUnverified();
-		boolean requiresUnverifiedGate = writesUnverifiedJar && !launchWrites;
+		boolean requiresUnverifiedGate = unverifiedPlanJarCount > 0 && !launchWrites;
 		// The save already consented to a selection switch, so the only things worth an interposing screen are jars
 		// nobody vouched for and local mods the switch would leave beside the new pack; every other switch applies
 		// straight through, and the restart screen - whose buttons only pick when the game reloads - is the one screen
@@ -93,7 +93,7 @@ public final class SwitchFlow {
 		}
 		// One apply per review: a double confirm click must not start a second commit on the same updater.
 		AtomicBoolean applyArmed = new AtomicBoolean(true);
-		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), writesUnverifiedJar, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
+		boolean shown = ScreenManager.preview(PreviewPayload.review(preview, modpackName, updater.joinOrigin(), unverifiedPlanJarCount, updater.getSelectedTarget(), updater.unverifiedSelectedJarPaths(),
 				updater.selectedJarSourceCounts(), launchWrites, updater.unreachableProviders(), updater.reviewConsent(),
 				(Runnable) () -> {
 					if (!applyArmed.compareAndSet(true, false)) return;

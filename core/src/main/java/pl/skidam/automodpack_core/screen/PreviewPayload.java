@@ -14,22 +14,27 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
  * the typed-ack confirm without touching the engine. {@code origin} is the join target the plan arrived from, or ""
  * when the session has no live connection.
  */
-public record PreviewPayload(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
+public record PreviewPayload(UpdatePreview preview, String modpackName, String origin, int unverifiedPlanJarCount, SelectedModpackTarget target, List<String> unverifiedJarPaths,
 		SourceCounts sourceCounts, boolean launchWritesUnverified, Set<DownloadSource.Provider> unreachableProviders, ReviewConsent actions, Runnable continueAction, Runnable cancelAction) {
+
+	/** True when this plan writes at least one unverified jar. */
+	public boolean writesUnverifiedJar() {
+		return unverifiedPlanJarCount > 0;
+	}
 
 	/** True when an unverified jar is written by a flow that does not already carry the pack's launch-writes consent. */
 	public boolean requiresUnverifiedGate() {
-		return writesUnverifiedJar && !launchWritesUnverified;
+		return writesUnverifiedJar() && !launchWritesUnverified;
 	}
 
 	/** A plan a live review session stands behind: the screen can reach the review's customize actions through it. */
-	public static PreviewPayload review(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
+	public static PreviewPayload review(UpdatePreview preview, String modpackName, String origin, int unverifiedPlanJarCount, SelectedModpackTarget target, List<String> unverifiedJarPaths,
 			SourceCounts sourceCounts, boolean launchWritesUnverified, Set<DownloadSource.Provider> unreachableProviders, ReviewConsent actions, Runnable continueAction, Runnable cancelAction) {
-		return new PreviewPayload(preview, modpackName, origin, writesUnverifiedJar, target, unverifiedJarPaths, sourceCounts, launchWritesUnverified, unreachableProviders, actions, continueAction, cancelAction);
+		return new PreviewPayload(preview, modpackName, origin, unverifiedPlanJarCount, target, unverifiedJarPaths, sourceCounts, launchWritesUnverified, unreachableProviders, actions, continueAction, cancelAction);
 	}
 
 	/** Removing or deactivating a stored pack: no jar re-verification question, {@code actions} null when no live review offers customize. */
 	public static PreviewPayload storageRemoval(UpdatePreview preview, String modpackName, String origin, ReviewConsent actions, Runnable continueAction, Runnable cancelAction) {
-		return new PreviewPayload(preview, modpackName, origin, false, null, List.of(), null, false, Set.of(), actions, continueAction, cancelAction);
+		return new PreviewPayload(preview, modpackName, origin, 0, null, List.of(), null, false, Set.of(), actions, continueAction, cancelAction);
 	}
 }
