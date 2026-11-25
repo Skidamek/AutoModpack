@@ -105,6 +105,13 @@ public class Commands {
 				literal("automodpack")
 						.executes(Commands::about)
 						.then(generateNode)
+						.then(literal("invite")
+								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+								.executes(Commands::inviteUsage)
+								.then(argument("minecraft-address", StringArgumentType.greedyString())
+										.executes(Commands::inviteAddress)
+								)
+						)
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::modpackHostAbout)
@@ -131,12 +138,6 @@ public class Commands {
 												.executes(Commands::fingerprintDnsUsage)
 												.then(argument("minecraft-hostname", StringArgumentType.word())
 														.executes(Commands::fingerprintDnsRecord)
-												)
-										)
-										.then(literal("share")
-												.executes(Commands::fingerprintShareUsage)
-												.then(argument("minecraft-address", StringArgumentType.greedyString())
-														.executes(Commands::fingerprintShareAddress)
 												)
 										)
 								)
@@ -236,30 +237,42 @@ public class Commands {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int fingerprintShareUsage(CommandContext<CommandSourceStack> context) {
-		send(context, "Usage: /automodpack host fingerprint share <minecraft-address>", ChatFormatting.RED, false);
+	private static int inviteUsage(CommandContext<CommandSourceStack> context) {
+		send(context, "Usage: /automodpack invite <minecraft-address>", ChatFormatting.RED, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static int fingerprintShareAddress(CommandContext<CommandSourceStack> context) {
-		String fingerprint = Hosting.server().getCertificateFingerprint();
-		if (fingerprint == null) {
-			send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
-			return Command.SINGLE_SUCCESS;
-		}
-
-		String origin = StringArgumentType.getString(context, "minecraft-address");
-		final String pinnedOrigin;
+	private static int inviteAddress(CommandContext<CommandSourceStack> context) {
+		final InetSocketAddress origin;
 		try {
-			pinnedOrigin = ServerAddressPin.format(origin, fingerprint);
+			origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "minecraft-address"));
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+
+		String address = AddressHelpers.formatAddress(origin);
+		if (ServerConfigStore.current().disableInternalTLS) {
+			send(context, "Join address", ChatFormatting.WHITE, copyable(address), ChatFormatting.YELLOW, false);
+			send(context, "disable-internal-tls is enabled, so the built-in host has no AutoModpack certificate fingerprint to pin. When a reverse proxy or tunnel terminates TLS, clients verify against that front-end's certificate.", ChatFormatting.GRAY, false);
 			return Command.SINGLE_SUCCESS;
 		}
 
-		send(context, "Plain Minecraft origin (vanilla and older clients):", ChatFormatting.WHITE, copyable(origin), ChatFormatting.YELLOW, false);
-		send(context, "Pinned AutoModpack origin:", ChatFormatting.WHITE, copyable(pinnedOrigin), ChatFormatting.GREEN, false);
-		send(context, "Compatible AutoModpack clients import the public fingerprint and save a clean Minecraft origin.", ChatFormatting.GRAY, false);
+		if (Hosting.server().endpointOwner() == NettyServer.EndpointOwner.EXTERNAL) {
+			send(context, "Join address", ChatFormatting.WHITE, copyable(address), ChatFormatting.YELLOW, false);
+			send(context, "The advertised endpoint is served externally, so clients verify against that front-end's TLS certificate instead of this host's.", ChatFormatting.GRAY, false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		String fingerprint = Hosting.server().getCertificateFingerprint();
+		if (fingerprint == null) {
+			send(context, "The certificate fingerprint is unavailable. Start the host with /automodpack host start first.", ChatFormatting.RED, false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		send(context, "Pinned AutoModpack join address", ChatFormatting.WHITE, copyable(ServerAddressPin.format(address, fingerprint)), ChatFormatting.GREEN, false);
+		send(context, "Plain Minecraft address (vanilla and older clients)", ChatFormatting.WHITE, copyable(address), ChatFormatting.YELLOW, false);
+		send(context, "One-file setup for AutoModpack clients: /automodpack host bootstrap install " + address, ChatFormatting.GRAY, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
@@ -565,6 +578,7 @@ public class Commands {
 		send(context, "/automodpack generate replace-notes [text...]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate history/storage [collect confirm]/export-http [--all] <dir>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/activity/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack invite <minecraft-address>", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack groups [group-id]", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;

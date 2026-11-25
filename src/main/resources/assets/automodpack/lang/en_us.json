@@ -457,7 +457,7 @@
   "automodpack.hosting.fingerprint": "Certificate fingerprint: %s",
   "automodpack.hosting.noFingerprint": "The certificate is created the first time this instance hosts",
   "automodpack.hosting.pinHint": "Players pin this host on first join by adding %s to your world's address",
-  "automodpack.hosting.live": "While a world runs, /automodpack host activity shows who is downloading and /automodpack host fingerprint share <address> prints the pinned join address",
+  "automodpack.hosting.live": "While a world runs, /automodpack host activity shows who is downloading and /automodpack invite <address> prints the pinned join address",
   "automodpack.hosting.generate": "Generate",
   "automodpack.hosting.preview": "Preview",
   "automodpack.hosting.copyPin": "Copy pin",
