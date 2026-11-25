@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -288,7 +289,9 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
 		connectionLine = pack.connectionDetail() == null ? null : VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
 		String contentToken = pack.record().contentToken();
-		generationLine = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt()));
+		Instant createdAt = pack.record().createdAt();
+		String createdText = createdAt == null || createdAt.equals(Instant.EPOCH) ? "—" : UiFormat.formatInstant(createdAt);
+		generationLine = VersionedText.str("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), createdText);
 		idTooltip = VersionedText.literal(pack.modpackId());
 		generationTooltip = VersionedText.literal(contentToken);
 	}

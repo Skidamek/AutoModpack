@@ -196,7 +196,12 @@ public final class ClientGenerationStore {
 					createdAt = Instant.parse(state.createdAt);
 				} else {
 					Optional<JournalEntry> entry = findMirrorEntry(state.modpackId, state.contentToken);
-					createdAt = entry.map(JournalEntry::createdAt).orElse(Instant.EPOCH);
+					if (entry.isPresent()) {
+						createdAt = entry.get().createdAt();
+					} else {
+						LOGGER.warn("Active pack {} ({}) has no recorded creation timestamp and no matching journal mirror entry; using unknown creation time", state.modpackId, state.contentToken);
+						createdAt = Instant.EPOCH;
+					}
 				}
 				String waitingMusicSha1 = advertisedTrack(state.modpackId, state.contentToken, policySha1);
 				return new PackDocument(manifest, state.contentToken, policySha1, createdAt, OwnershipLedger.fromFields(state.ownershipLedger), waitingMusicSha1);
