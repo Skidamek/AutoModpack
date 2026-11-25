@@ -30,6 +30,7 @@ client -> platforms
 client -> protocol
 client -> screen
 client -> storage
+client -> text
 client -> update
 client -> utils
 config -> <root>

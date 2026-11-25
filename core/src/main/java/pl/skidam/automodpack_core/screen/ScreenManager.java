@@ -42,9 +42,9 @@ public final class ScreenManager {
 	}
 
 	/** Preload restart UI: Minecraft screens are not installed yet, so this is the AWT adapter. Returns as soon as the window process is spawned. */
-	public static void preloadRestart(String message) {
+	public static void preloadRestart(RestartWindowText text) {
 		if (GraphicsEnvironment.isHeadless()) return;
-		new Gui().open(message);
+		new Gui().open(text);
 	}
 
 	public static void completeWithoutRestart() {

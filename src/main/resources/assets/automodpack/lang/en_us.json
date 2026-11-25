@@ -177,6 +177,7 @@
   "automodpack.validation.skip.warning2": "Mods can access your files and run arbitrary code.",
   "automodpack.validation.skip.instruction": "Skip only if you know what you are doing.",
   "automodpack.validation.skip.confirm.text": "Type the phrase below to confirm:",
+  "automodpack.validation.skip.requiredText": "I accept the risk",
   "automodpack.validation.skip.failed": "Wrong text",
   "automodpack.retry": "Try again",
   "automodpack.cancel": "Cancel",
@@ -471,5 +472,9 @@
   "automodpack.crossVersion.contractMismatch": "This server uses a different AutoModpack protocol (v%s). Update AutoModpack to %s to join.",
   "automodpack.crossVersion.switch": "Switch & Relaunch",
   "automodpack.error.essentialRelay": "This world uses Essential's relay, which does not allow AutoModpack to open a download lane. Ask the host to advertise an external endpoint or share with e4mc / World Host.",
-  "automodpack.error.proxySwallowedQueries": "This server requires an AutoModpack login secret, but its login queries never reached your client (a proxy may be blocking custom login packets). Ask the admin to forward login queries or disable validate-secrets."
+  "automodpack.error.proxySwallowedQueries": "This server requires an AutoModpack login secret, but its login queries never reached your client (a proxy may be blocking custom login packets). Ask the admin to forward login queries or disable validate-secrets.",
+  "automodpack.preload.windowTitle": "AutoModpack",
+  "automodpack.preload.ok": "OK",
+  "automodpack.preload.deferred": "Some files are still open, so AutoModpack could not finish. Please start the game again.",
+  "automodpack.preload.deferredWithFile": "Some files are still open (%s), so AutoModpack could not finish. Please start the game again."
 }

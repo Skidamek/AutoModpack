@@ -7,27 +7,29 @@ import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.client.compat.crashassistant.ProcessSignalIO;
+import pl.skidam.automodpack_core.screen.RestartWindowText;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public class ReLauncher {
 	private static final Logger LOGGER = LogManager.getLogger(ReLauncher.class);
 
-	private final String updateMessage;
+	private final RestartWindowText text;
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
 
 	public ReLauncher(UpdateType updateType) {
-		this(updateType, null, "Successfully updated AutoModpack!");
+		this(updateType, null, null);
 	}
 
 	public ReLauncher(UpdateType updateType, Changelogs changelogs) {
-		this(updateType, changelogs, "Successfully updated the modpack!");
+		this(updateType, changelogs, null);
 	}
 
-	public ReLauncher(UpdateType updateType, Changelogs changelogs, String updateMessage) {
+	/** {@code text}: the preload window's own text; without it the window names the update type. */
+	public ReLauncher(UpdateType updateType, Changelogs changelogs, RestartWindowText text) {
 		this.updateType = updateType;
 		this.changelogs = changelogs;
-		this.updateMessage = updateMessage;
+		this.text = text;
 	}
 
 	public final void restart(boolean shutdownInPreload, Runnable... callbacks) {
@@ -52,7 +54,7 @@ public class ReLauncher {
 		} else if (Environment.isPrelaunching()) {
 			ProcessSignalIO.post("normal_stop"); // let crash assistant know
 			if (isHeadless) LOGGER.info("Please restart the game to apply updates!");
-			else ScreenManager.preloadRestart(updateMessage);
+			else ScreenManager.preloadRestart(text != null ? text : PreloadText.restart(updateType));
 			runCallbacks(callbacks);
 			System.exit(0);
 		}

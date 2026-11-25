@@ -191,7 +191,7 @@ public final class BootRecovery {
 				return;
 			}
 			if (!done && outcome instanceof UpdateCommit.Blocked blocked) {
-				new ReLauncher(UpdateType.UPDATE, null, UpdateRecovery.deferredPopupMessage(blocked.held())).restart(true);
+				new ReLauncher(UpdateType.UPDATE, null, PreloadText.deferred(blocked.held())).restart(true);
 				throw new UpdateDeferredException(deferred.transactionId, blocked.blockedPath(), blocked.message());
 			}
 		}

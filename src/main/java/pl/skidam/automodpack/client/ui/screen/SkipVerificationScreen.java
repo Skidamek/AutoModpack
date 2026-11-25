@@ -22,6 +22,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.text.L10n;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public class SkipVerificationScreen extends VersionedScreen implements LoginGate {
@@ -33,7 +34,7 @@ public class SkipVerificationScreen extends VersionedScreen implements LoginGate
 	private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE,
 			VersionedText.text("automodpack.validation.skip.failed"),
 			VersionedText.text("automodpack.retry"));
-	private static final String REQUIRED_TEXT = "I accept the risk";
+	private static final String ENGLISH_REQUIRED_TEXT = "I accept the risk";
 	private static final int TIMER_SECONDS = 10;
 	private final Countdown countdown = new Countdown(TIMER_SECONDS);
 	private EditBox textField;
@@ -66,8 +67,9 @@ public class SkipVerificationScreen extends VersionedScreen implements LoginGate
 		prose.add(blankLine());
 		prose.addAll(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.instruction"), wrapWidth));
 		// The typed phrase pins with the field that must receive it: confirm label, phrase, field, countdown hint.
+		String requiredText = VersionedText.str("automodpack.validation.skip.requiredText");
 		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.str("automodpack.validation.skip.confirm.text"), wrapWidth, ChatFormatting.GRAY));
-		stack.add(VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC));
+		stack.add(VersionedText.literal("\"" + requiredText + "\"").withStyle(ChatFormatting.ITALIC));
 		stackLines = List.copyOf(stack);
 
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -85,13 +87,14 @@ public class SkipVerificationScreen extends VersionedScreen implements LoginGate
 		fieldY = stackTop + stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM;
 
 		int fieldLeft = panelLeft(BODY);
-		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.literal(REQUIRED_TEXT), VersionedText.text("automodpack.learnmore"), 128);
+		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.literal(requiredText), VersionedText.text("automodpack.learnmore"), 128);
 	}
 
 	private void confirmSkip() {
 		String input = textField.getValue().strip();
+		String requiredText = VersionedText.str("automodpack.validation.skip.requiredText");
 
-		if (input.equals(REQUIRED_TEXT)) {
+		if (L10n.matchesPhrase(input, requiredText) || L10n.matchesPhrase(input, ENGLISH_REQUIRED_TEXT)) {
 			confirmButton.active = false;
 			ScreenManager.waiting();
 			validatedCallback.run();

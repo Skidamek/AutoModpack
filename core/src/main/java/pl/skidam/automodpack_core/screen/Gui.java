@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
 import javax.imageio.ImageIO;
@@ -29,11 +30,11 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 public class Gui {
 	private static final Logger LOGGER = LogManager.getLogger(Gui.class);
 
-	private String text;
+	private RestartWindowText text;
 
 	/** Spawns the restart window in its own JVM and returns immediately; falls back to this JVM only when spawning fails. */
-	public void open(String text) {
-		this.text = text;
+	public void open(RestartWindowText text) {
+		this.text = Objects.requireNonNull(text, "text");
 		try {
 			openForked();
 		} catch (Exception e) {
@@ -62,30 +63,33 @@ public class Gui {
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
 		frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
 
-		JLabel RestartText = new JLabel("Restart your game!");
-		RestartText.setBounds(0, 10, 400, 32);
+		JLabel RestartText = new JLabel("<html><div style='text-align:center;width:360px'>" + escapeHtml(text.heading()) + "</div></html>");
 		RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
 		RestartText.setForeground(Color.green);
 		RestartText.setHorizontalAlignment(JLabel.CENTER);
+		int headingHeight = Math.max(32, RestartText.getPreferredSize().height);
+		RestartText.setBounds(0, 12, 400, headingHeight);
 
 		// The deferred-update guidance runs longer than one line; Swing wraps a label only through the HTML renderer.
-		JLabel CustomText = new JLabel("<html><div style='text-align:center;width:380px'>" + text + "</div></html>");
+		JLabel CustomText = new JLabel("<html><div style='text-align:center;width:380px'>" + escapeHtml(text.message()) + "</div></html>");
 		CustomText.setVerticalAlignment(JLabel.TOP);
 		CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 		CustomText.setForeground(Color.white);
 		CustomText.setHorizontalAlignment(JLabel.CENTER);
+		int textTop = 12 + headingHeight + 8;
 		int textHeight = CustomText.getPreferredSize().height;
-		int height = Math.max(200, Math.min(44 + textHeight + 42, dim.height - 40));
+		int height = Math.max(200, Math.min(textTop + textHeight + 54, dim.height - 40));
 		frame.setSize(400, height);
 		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
-		CustomText.setBounds(0, 44, 400, textHeight);
+		CustomText.setBounds(0, textTop, 400, textHeight);
 
-		JButton OKButton = new JButton("OK");
-		OKButton.setBounds(170, height - 42, 60, 25);
+		JButton OKButton = new JButton(text.confirm());
 		OKButton.setBackground(new Color(0, 153, 51));
 		OKButton.setForeground(Color.white);
 		OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
 		OKButton.setFocusPainted(false);
+		int buttonWidth = Math.max(70, OKButton.getPreferredSize().width + 16);
+		OKButton.setBounds((400 - buttonWidth) / 2, height - 42, buttonWidth, 28);
 		OKButton.addActionListener(e -> {
 			frame.dispose();
 			windowSemaphore.release();
@@ -111,7 +115,7 @@ public class Gui {
 		frame.add(OKButton);
 		frame.add(CustomText);
 		frame.add(RestartText);
-		frame.setTitle("AutoModpack Window");
+		frame.setTitle(text.title());
 		frame.setIconImage(icon);
 		frame.setAlwaysOnTop(true);
 		frame.setVisible(true);
@@ -126,7 +130,9 @@ public class Gui {
 
 	private void openForked() throws IOException {
 		Path log = GameDirectory.current().resolve(GUI_LOG_FILE).toAbsolutePath().normalize();
-		DetachedProcesses.start(Gui.class, List.of("-Xmx100M"), List.of("--AM.text=" + text), GameDirectory.current(), log, guiClasspath());
+		DetachedProcesses.start(Gui.class, List.of("-Xmx100M"),
+				List.of("--AM.title=" + text.title(), "--AM.heading=" + text.heading(), "--AM.confirm=" + text.confirm(), "--AM.message=" + text.message()),
+				GameDirectory.current(), log, guiClasspath());
 	}
 
 	private static List<Path> guiClasspath() throws IOException {
@@ -137,16 +143,23 @@ public class Gui {
 		return classpath;
 	}
 
+	/** The forked window: the parent resolved every string, so a missing argument is a caller bug, not a fallback. */
 	public static void main(String[] args) throws Exception {
 		DetachedProcesses.ignoreHangup();
-		String text = "Failed to load text";
-		for (String arg : args) {
-			if (arg.startsWith("--AM.text=")) text = arg.substring(10);
-		}
 		Gui gui = new Gui();
-		gui.text = text;
+		gui.text = new RestartWindowText(argument(args, "--AM.title="), argument(args, "--AM.heading="), argument(args, "--AM.confirm="), argument(args, "--AM.message="));
 		gui.window();
 		System.exit(0);
+	}
+
+	private static String argument(String[] args, String prefix) throws IOException {
+		for (String arg : args) if (arg.startsWith(prefix)) return arg.substring(prefix.length());
+		throw new IOException("The restart window was spawned without " + prefix);
+	}
+
+	private static String escapeHtml(String value) {
+		if (value == null) return "";
+		return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
 	}
 
 	private static boolean hasAwtSupport() {

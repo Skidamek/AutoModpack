@@ -132,9 +132,4 @@ public final class UpdateRecovery {
 		if (loop.decision() == UpdateLoopDetector.Decision.RESTART)
 			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, each launch retries once and boots as installed", loop.restarts(), loop.maxRestarts());
 	}
-
-	/** AWT preload dialog; Minecraft locale files are not loaded yet. */
-	public static String deferredPopupMessage(String held) {
-		return "Some files are still open" + (held == null || held.isBlank() ? "" : " (" + held + ")") + ", so AutoModpack could not finish. Please start the game again.";
-	}
 }
