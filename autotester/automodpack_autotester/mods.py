@@ -31,9 +31,9 @@ from pathlib import Path
 
 from filelock import FileLock
 
-from .config import REPO_ROOT
+from .config import REPO_ROOT, shared_cache_root
 
-CACHE_DIR = REPO_ROOT / "autotester" / ".mod-cache"
+CACHE_DIR = shared_cache_root() / "mods"
 
 
 def _per_target(value, target_id, field: str):

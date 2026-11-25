@@ -2,82 +2,48 @@ paths:
   artifactDir: merged
   outDir: autotester/out
 
-images:
-  server: itzg/minecraft-server
-  client: automodpack-autotest-client:local
-  # Barebones static HTTPS host (python http.server + self-signed TLS) serving an exported contract tree.
-  staticHost: automodpack-autotest-static-host:local
-  # quay.io carries the same images where docker.io is rate-limited or blocked.
-  minio: quay.io/minio/minio:latest
-  minioClient: quay.io/minio/mc:latest
-  serverTagTemplate: "java{java}"
-
 run:
-  target: all
-  scenario: all
-  jobs: 2
+  target: 26.2-fabric
+  scenario: transport,gate
+  provider: local
+  fastTimers: true
+  prunePassed: true
+  # 0 = auto (scales with CPU cores and available RAM)
+  jobs: 0
 
-farm:
-  mode: farm
-  slots: 2
-  provide: native
-
-server:
-  memory: 2G
-  env:
-    EULA: "TRUE"
-    ONLINE_MODE: "FALSE"
-    ENABLE_AUTOPAUSE: "FALSE"
-    MOTD: "amp-autotest"
-    DIFFICULTY: "peaceful"
-    SPAWN_ANIMALS: "false"
-    SPAWN_MONSTERS: "false"
-    SPAWN_NPCS: "false"
-    GENERATE_STRUCTURES: "false"
-    LEVEL_TYPE: "flat"
-    GENERATOR_SETTINGS: "{\"lakes\":false,\"layers\":[{\"block\":\"minecraft:stone\",\"height\":1}],\"biome\":\"minecraft:plains\",\"structures\":{\"structures\":{}}}"
-    SPAWN_RADIUS: "0"
-
-serverTypes:
-  fabric: FABRIC
-  forge: FORGE
-  neoforge: NEOFORGE
+jvm:
+  serverMemory: 1G
+  clientMemory: 1G
+  # C1-only compilation cuts short-lived test JVM startup time and CPU usage dramatically.
+  fastStartup: true
 
 headlessmc:
-  # GitHub repository and release tag the HeadlessMC 3 launcher binary is
-  # downloaded from. ref must be a published release tag.
-  repo: "https://github.com/headlesshq/headlessmc.git"
-  ref: "3.0.0-RC8"
+  repo: "https://github.com/headlesshq/headlessmc"
+  ref: "3.0.0-RC9"
 
 timeouts:
   serverStartSeconds: 180
-  clientStartSeconds: 600
-  # Direct Xvfb readiness measured 0.022-0.054s across five cold containers; this is a process-health tripwire.
-  displayStartSeconds: 5
-  # User-defined absolute ceiling for a target, independent of individual step budgets.
-  caseSeconds: 1800
-  downloadFileSeconds: 180
-  rejoinSeconds: 90
+  clientStartSeconds: 300
+  caseSeconds: 600
+  bridgeCallSeconds: 20
 
-# Loader-discovered startup helpers are detached as soon as the bridge is ready, before scenario behavior inspects ordinary mods.
-clientRuntimeMods:
-  1.19.2-fabric:
-    - url: https://cdn.modrinth.com/data/hvFnDODi/versions/0.1.3/lazydfu-0.1.3.jar
-      sha512: dc3766352c645f6da92b13000dffa80584ee58093c925c2154eb3c125a2b2f9a3af298202e2658b039c6ee41e81ca9a2e9d4b942561f7085239dd4421e0cce0a
-  1.19.2-forge:
-    - url: https://mediafilez.forgecdn.net/files/4327/266/lazydfu-1.19-1.0.2.jar
-      sha512: b0bba36ad1d0eb72290b29af4842d80d53450fefab27ca0e92846ffefdf4857044aa5fe0294fdbf047b4344d4b66a37a334b1cdc0df5512f11d8e3f21e5daa75
-  1.18.2-fabric:
-    - url: https://cdn.modrinth.com/data/hvFnDODi/versions/0.1.2/lazydfu-0.1.2.jar
-      sha512: 20b1cd3e62051c7d7498ecdc49912acb918fc4748d469c67c078cc97197289760e64b9339a4d4a03d175f648c8be8601d131776a9a6bdb8832cecdda6fc46498
-  1.18.2-forge:
-    - url: https://mediafilez.forgecdn.net/files/3544/496/lazydfu-1.0-1.18%2B.jar
-      sha512: 16341b86d830766817a0705f3835e9eb73e095d91f1c27331e9b93f02021896f667e9ff6564b6ae2e75d265a18a930c65a5e9a75b513aa1aecbd491bb225dc9b
-
-serverCache:
-  enabled: true
-  volumePrefix: "amp-server-cache"
-  clean: false
+server:
+  properties:
+    online-mode: "false"
+    white-list: "false"
+    enforce-whitelist: "false"
+    enable-rcon: "true"
+    difficulty: "peaceful"
+    spawn-animals: "false"
+    spawn-monsters: "false"
+    spawn-npcs: "false"
+    generate-structures: "false"
+    level-type: "minecraft:flat"
+    generator-settings: '{"lakes":false,"layers":[{"block":"minecraft:stone","height":1}],"biome":"minecraft:plains","structures":{"structures":{}}}'
+    spawn-protection: "0"
+    view-distance: "4"
+    simulation-distance: "4"
+    motd: "amp-autotest-v2"
 
 automodpack:
   config:
@@ -86,13 +52,11 @@ automodpack:
     modpack:
       General:
         main:
-          # The shipped default marks this group required and default-selected; the
-          # autotester config replaces the whole block, so it has to say so too or
-          # every client resolves an empty selection and syncs nothing.
           required: true
           default-selected: true
           from-server:
             - "mods/*.jar"
+            - "config/**"
             - "kubejs/**"
             - "!kubejs/server_scripts/**"
             - "emotes/*"
@@ -116,3 +80,15 @@ automodpack:
     validateSecrets: true
     secretLifetime: 336
     selfUpdater: false
+
+windowsVm:
+  # Default location for the KVM/QEMU golden image and live snapshot.
+  dir: "~/.cache/automodpack-autotest/windows-vm"
+  memory: "6G"
+  cpus: 6
+  machine: "pc"
+  diskInterface: "ide"
+  nic: "e1000e"
+  tpm: true
+  snapshotName: "ready"
+  agentPort: 19450

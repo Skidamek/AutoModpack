@@ -1,69 +1,53 @@
+"""Configuration, target resolution, shared cache paths, and memoized artifact inspection."""
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
+import hashlib
+import io
+import json
+import os
+import tomllib
+import zipfile
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-import hashlib
-import tomllib
 
 import yaml
 
 
 def _find_root() -> Path:
     cwd = Path.cwd().resolve()
-    for p in (cwd, cwd / "autotester", cwd.parent / "autotester"):
+    for p in (cwd, cwd / "autotester", cwd.parent / "autotester", Path(__file__).resolve().parent.parent):
         if (p / "settings.yaml").is_file():
             return p
-    raise FileNotFoundError(
-        "settings.yaml not found - run from project root or autotester/"
-    )
+    raise FileNotFoundError("settings.yaml not found - run from project root or autotester/")
 
 
 ROOT = _find_root()
 REPO_ROOT = ROOT.parent
 
 
+def shared_cache_root() -> Path:
+    """Checkout-independent cache shared across worktrees (~/.cache/automodpack-autotest)."""
+    override = os.environ.get("AUTOMODPACK_AUTOTEST_CACHE")
+    if override:
+        return Path(override).expanduser().resolve()
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".cache"
+    return (base / "automodpack-autotest").resolve()
+
+
 def resolve_settings_path(settings: dict, key: str, default: str) -> Path:
-    """One ``paths:`` entry from settings, resolved against the repo root unless absolute."""
-    path = Path(str(settings.get("paths", {}).get(key, default)))
+    path = Path(str((settings.get("paths") or {}).get(key, default))).expanduser()
     return (REPO_ROOT / path).resolve() if not path.is_absolute() else path.resolve()
 
 
 @lru_cache(maxsize=1)
 def checkout_tag() -> str:
-    """Short stable tag of this checkout, so concurrent checkouts never share named docker resources."""
-    return hashlib.sha256(str(REPO_ROOT.resolve()).encode()).hexdigest()[:8]
-
-
-def server_cache_volume(target_id: str, prefix: str) -> str:
-    """Per-checkout server cache volume: reuses the modpack cache within one checkout, never across two."""
-    return f"{prefix}-{checkout_tag()}-{target_id}"
-
-# Paths owned by a client generation reset. Connection/trust data and ordinary
-# game files are deliberately outside this set.
-CLIENT_GENERATION_STATE_PATHS = (
-    "history",
-    "overlays",
-    "baselines",
-    "generated-copies",
-    "generated-copies.json",
-    "active",
-    "incoming",
-    "backup",
-    "active-state.json",
-    "update-transaction.json",
-    "repair.json",
-    "preservation",
-    "selections.json",
-    "restart-state.json",
-    "incoming-manifest.json.temp",
-    "helper",
-)
+    return hashlib.sha256(str(REPO_ROOT.resolve()).encode("utf-8")).hexdigest()[:8]
 
 
 def load_yaml(path: Path) -> dict:
-    with path.open() as f:
+    with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -77,7 +61,7 @@ def load_stonecutter_properties() -> dict:
         return tomllib.load(f)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Target:
     id: str
     minecraft: str
@@ -93,190 +77,66 @@ def load_targets() -> dict[str, Target]:
     raw = load_yaml(ROOT / "targets.yaml")
     defaults = raw.get("defaults", {})
     stonecutter = load_stonecutter_properties()
-    targets = []
+    targets: dict[str, Target] = {}
     for item in raw.get("targets", []):
         target_id = item["id"]
         version, default_loader = target_id.rsplit("-", 1)
         loader = item.get("loader", default_loader)
         minecraft = item.get("minecraft", stonecutter[version]["deps"]["minecraft"])
-        loader_dependencies = stonecutter.get(target_id, {}).get("deps", {})
-        forge_coordinate = loader_dependencies.get("forge")
-        forge_version = forge_coordinate.removeprefix(f"{minecraft}-") if forge_coordinate else None
-
-        targets.append(
-            Target(
-                id=target_id,
-                minecraft=minecraft,
-                loader=loader,
-                java=item.get("java", defaults.get("java", 21)),
-                fabric_loader=item.get(
-                    "fabricLoader",
-                    defaults.get("fabricLoader", stonecutter["fabric"]["deps"]["fabric-loader"]),
-                ),
-                forge_version=item.get("forgeVersion", defaults.get("forgeVersion", forge_version)),
-                neoforge_version=item.get(
-                    "neoforgeVersion",
-                    defaults.get("neoforgeVersion", loader_dependencies.get("neoforge")),
-                ),
-                artifact_pattern=item.get(
-                    "artifactPattern",
-                    defaults.get("artifactPattern", "automodpack-*.jar"),
-                ),
-            )
+        loader_deps = stonecutter.get(target_id, {}).get("deps", {})
+        forge_coord = loader_deps.get("forge")
+        forge_version = forge_coord.removeprefix(f"{minecraft}-") if forge_coord else None
+        targets[target_id] = Target(
+            id=target_id,
+            minecraft=minecraft,
+            loader=loader,
+            java=int(item.get("java", defaults.get("java", 21))),
+            fabric_loader=item.get("fabricLoader", defaults.get("fabricLoader", stonecutter["fabric"]["deps"]["fabric-loader"])),
+            forge_version=item.get("forgeVersion", defaults.get("forgeVersion", forge_version)),
+            neoforge_version=item.get("neoforgeVersion", defaults.get("neoforgeVersion", loader_deps.get("neoforge"))),
+            artifact_pattern=str(item.get("artifactPattern", defaults.get("artifactPattern", "automodpack-*.jar"))),
         )
-    return {t.id: t for t in targets}
+    return targets
 
 
-def load_scenarios() -> dict[str, dict]:
-    return {
-        f.stem: load_yaml(f)
-        for f in sorted((ROOT / "scenarios").glob("*.yaml"))
-        if not f.name.startswith("_")
-    }
+@lru_cache(maxsize=16)
+def _verify_autotest_jar_cached(path_str: str, mtime_ns: int, size: int) -> bool:
+    """Memoized check that an artifact jar contains AutoTestBridge (decompresses zstd solid once per build)."""
+    import zstandard
 
-
-def connection_path_variants(scenario: dict, mode: str | None = None) -> list[dict]:
-    """Expand a scenario's declared connection-path matrix into case variants, or only ``mode``'s."""
-    paths = scenario.get("connectionPaths")
-    variants = []
-    if paths is None:
-        variants.append(scenario)
-    for path in paths or ():
-        variant = deepcopy(scenario)
-        connection_mode = str(path["mode"]).upper()
-        variant["id"] = f"{scenario['id']}-{connection_mode.lower()}"
-        variant["connectionPath"] = deepcopy(path)
-        variants.append(variant)
-    if mode is None:
-        return variants
-    return [variant for variant in variants if str((variant.get("connectionPath") or {}).get("mode", "")).upper() == mode]
-
-
-@lru_cache(maxsize=1)
-def load_macros() -> dict:
-    """Shared reusable step sequences from ``scenarios/_lib.yaml`` (if present).
-
-    Cached: the library is static for a run and read once per process.
-    """
-    lib = ROOT / "scenarios" / "_lib.yaml"
-    return load_yaml(lib) if lib.is_file() else {}
-
-
-def scenario_matches_target(scenario: dict, target: "Target") -> bool:
-    """Whether ``scenario`` is in scope for ``target``.
-
-    A scenario can scope itself with any of these header keys; a target must pass
-    every one that is present (globs allowed where noted):
-
-      targets:   [ "1.21.1-neoforge", "neoforge-*" ]   # glob on target id
-      loaders:   [ neoforge ]                            # exact loader
-      minecraft: [ "1.21.1", "1.21.*" ]                  # glob on mc version
-
-    With no scoping keys, the scenario applies to every target (current behavior).
-    """
-    from fnmatch import fnmatch
-
-    def _ok(key, value) -> bool:
-        raw = scenario.get(key)
-        if raw is None:
+    with zipfile.ZipFile(path_str) as jar:
+        names = set(jar.namelist())
+        if any(n.startswith("pl/skidam/automodpack/client/autotest/") and n.endswith(".class") for n in names):
             return True
-        patterns = [raw] if isinstance(raw, str) else list(raw)
-        return any(fnmatch(str(value), str(p)) for p in patterns)
-
-    loaders = scenario.get("loaders")
-    if loaders is not None:
-        allowed = [loaders] if isinstance(loaders, str) else list(loaders)
-        if target.loader not in {str(x) for x in allowed}:
+        if "impl/manifest.json" not in names or "impl/all.zst" not in names:
             return False
-    return _ok("targets", target.id) and _ok("minecraft", target.minecraft)
+        manifest = json.loads(jar.read("impl/manifest.json"))
+        solid = zstandard.decompress(jar.read("impl/all.zst"))
+    for entry in manifest["impls"]:
+        chunk = solid[entry["offset"] : entry["offset"] + entry["length"]]
+        with zipfile.ZipFile(io.BytesIO(chunk)) as impl:
+            if any(n.startswith("pl/skidam/automodpack/client/autotest/") and n.endswith(".class") for n in impl.namelist()):
+                return True
+    return False
 
 
-def _fill_unit(name: str, size_bytes: int) -> str:
-    """The one fill shape both the streamed writer and the in-memory builder spell: ``name:size_bytes\n`` repeated."""
-    return f"{name.encode('ascii', 'backslashreplace').decode('ascii')}:{size_bytes}\n"
+def resolve_artifact(target: Target, artifact_dir: Path) -> Path:
+    pattern = target.artifact_pattern.format(id=target.id, minecraft=target.minecraft, loader=target.loader)
+    matches = sorted(artifact_dir.glob(pattern))
+    if not matches:
+        raise FileNotFoundError(f"No artifact for {target.id} matching {pattern!r} in {artifact_dir}")
+    if len(matches) != 1:
+        raise RuntimeError(f"Ambiguous artifacts for {target.id} matching {pattern!r}: {', '.join(p.name for p in matches)}")
+    artifact = matches[0].resolve()
+    st = artifact.stat()
+    if not _verify_autotest_jar_cached(str(artifact), st.st_mtime_ns, st.st_size):
+        raise RuntimeError(f"Artifact {artifact} has no AutoTestBridge classes; rebuild with -Pautomodpack.autotest")
+    return artifact
 
 
-def generated_content(path: str, size_bytes: int) -> str:
-    """Deterministic ASCII fill of exactly ``size_bytes`` bytes for a hosted fixture file."""
-    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
-        raise ValueError(f"sizeBytes must be a non-negative integer, got {size_bytes!r}")
-    unit = _fill_unit(path, size_bytes)
-    return (unit * (size_bytes // len(unit) + 1))[:size_bytes]
-
-
-def write_generated(path: Path, name: str, size_bytes: int) -> None:
-    """Streams ``generated_content`` to disk in chunks: gigabyte fixtures never sit in RAM."""
-    unit = _fill_unit(name, size_bytes)
-    with open(path, "wb") as handle:
-        written = 0
-        while written < size_bytes:
-            chunk = unit * min(len(unit), (size_bytes - written) // len(unit) + 1)
-            chunk = chunk[: size_bytes - written]
-            handle.write(chunk.encode("utf-8"))
-            written += len(chunk)
-
-
-@dataclass(frozen=True)
-class HostedFile:
-    """One hosted fixture: literal content, or a deterministic fill of ``size_bytes`` bytes."""
-
-    path: Path
-    content: str | None = None
-    size_bytes: int | None = None
-
-
-@dataclass(frozen=True)
-class ServerFiles:
-    """The modpack a scenario hosts on the server, parsed from ``serverFiles``."""
-
-    modpack_name: str
-    marker: Path
-    files: list[HostedFile] = field(default_factory=list)
-
-
-def parse_server_files(scenario: dict) -> ServerFiles:
-    sf = scenario.get("serverFiles", {}) or {}
-    return ServerFiles(
-        modpack_name=str(sf.get("modpackName", "amp-autotest")),
-        marker=Path(str(sf.get("marker", "config/amp-autotest-marker.json"))),
-        files=[HostedFile(
-            Path(str(f["path"])),
-            content=None if "sizeBytes" in f else str(f.get("content", "")),
-            size_bytes=f["sizeBytes"] if "sizeBytes" in f else None,
-        ) for f in (sf.get("files") or [])] + expand_generated(sf.get("generated")),
-    )
-
-
-def expand_generated(declarations) -> list[HostedFile]:
-    """Expands ``generated`` declarations into their hosted files: ``pattern`` numbered ``{n}`` from ``first``,
-    each file a constant ``sizeBytes`` or the arithmetic ``sizeFrom + sizeStep * k`` wrapped at ``sizeModulus``
-    when given - the wrap is how an edge run spells one repeating ladder of near-chunk sizes."""
-    expanded = []
-    for index, declaration in enumerate(declarations or []):
-        where = f"serverFiles.generated[{index}]"
-        if not isinstance(declaration, dict):
-            raise ValueError(f"{where}: expected a mapping")
-        try:
-            pattern, count = str(declaration["pattern"]), declaration["count"]
-        except KeyError as missing:
-            raise ValueError(f"{where}: missing {missing.args[0]}") from None
-        if "{n" not in pattern:
-            raise ValueError(f"{where}.pattern: expected a numbering field like {{n}}, got {pattern!r}")
-        first = declaration.get("first", 1)
-        if not isinstance(first, int) or isinstance(first, bool) or first < 0:
-            raise ValueError(f"{where}.first: expected a non-negative integer, got {first!r}")
-        if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
-            raise ValueError(f"{where}.count: expected a positive integer, got {count!r}")
-        size_bytes, size_from = declaration.get("sizeBytes"), declaration.get("sizeFrom")
-        if (size_bytes is None) == (size_from is None):
-            raise ValueError(f"{where}: exactly one of sizeBytes or sizeFrom is required")
-        size_step, modulus = declaration.get("sizeStep", 0), declaration.get("sizeModulus")
-        for field, value in (("sizeBytes", size_bytes), ("sizeFrom", size_from), ("sizeStep", size_step), ("sizeModulus", modulus)):
-            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
-                raise ValueError(f"{where}.{field}: expected a non-negative integer, got {value!r}")
-        for k in range(count):
-            size = size_bytes if size_bytes is not None else size_from + size_step * k
-            if modulus:
-                size %= modulus
-            expanded.append(HostedFile(Path(pattern.format(n=first + k)), content=None, size_bytes=size))
-    return expanded
+def default_jobs(settings: dict) -> int:
+    configured = int((settings.get("run") or {}).get("jobs", 0) or 0)
+    if configured > 0:
+        return configured
+    cpus = os.cpu_count() or 2
+    return max(1, min(cpus // 2, 4))
