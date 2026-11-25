@@ -252,7 +252,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** A session for one update attempt against the currently selected target, carrying this attempt's consent and attach intent. */
 	private UpdateSession newSession() {
 		return new UpdateSession(storage, planBuilder, objectAcquisition, sourceCatalogue, changelogs, connectionInfo, getSelectedTarget(), review.firstConnection(),
-				review.consentedLocalModFiles(), attaching);
+				review.existingMods(), attaching);
 	}
 
 	/** Replaces any in-flight attempt so prepare, review, and commit cannot drift across two sessions. */

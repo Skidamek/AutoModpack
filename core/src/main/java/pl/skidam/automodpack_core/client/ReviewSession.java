@@ -6,10 +6,9 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
@@ -33,6 +32,7 @@ import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ExistingMods;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -68,8 +68,8 @@ final class ReviewSession {
 	private final AtomicBoolean playerCancelled;
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private boolean firstConnection;
-	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
-	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
+	private Set<String> firstInstallLocalModPaths = Set.of();
+	private ExistingMods existingMods = ExistingMods.NONE;
 	private boolean archiveLocalMods;
 	private Boolean launchConsent;
 
@@ -90,13 +90,17 @@ final class ReviewSession {
 
 	/** Clears any earlier review's leftover consent so a launch apply can never inherit it. */
 	void resetLocalModConsent() {
-		consentedLocalModFiles = Map.of();
+		existingMods = ExistingMods.NONE;
 		archiveLocalMods = false;
 	}
 
-	/** The confirm screens' checkbox holds the player's answer until the update it belongs to commits. */
-	Map<String, UpdatePlan.FileState> consentedLocalModFiles() {
-		return consentedLocalModFiles;
+	/** The first-install answer the confirm screen collected, carried into the plan this review commits. */
+	ExistingMods existingMods() {
+		return existingMods;
+	}
+
+	boolean effectiveLaunchWritesUnverified() {
+		return launchConsent != null ? launchConsent : updater.launchWritesUnverified();
 	}
 
 	boolean localModArchive() {
@@ -152,7 +156,7 @@ final class ReviewSession {
 		}
 		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(updater.getSelectedTarget()), firstInstallLocalModPaths(),
-				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), updater.launchWritesUnverified(), reviewConsent());
+				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), existingMods.keepExisting(), effectiveLaunchWritesUnverified(), reviewConsent());
 	}
 
 	public List<JournalEntry> getFirstInstallPatchNotes() {
@@ -173,13 +177,13 @@ final class ReviewSession {
 
 	/** Direct regular files currently visible in the loader's standard mods directory during first install. */
 	List<String> firstInstallLocalModPaths() {
-		return List.copyOf(firstInstallLocalModFiles.keySet());
+		return List.copyOf(firstInstallLocalModPaths);
 	}
 
 	/** Sets the first-install cleanup consent represented in the canonical update plan. */
 	void setFirstInstallLocalModCleanup(boolean archive) {
 		if (!firstConnection || confirmationState.get() != ConfirmationState.WAITING) return;
-		consentedLocalModFiles = archive ? firstInstallLocalModFiles : Map.of();
+		existingMods = archive ? ExistingMods.archive(firstInstallLocalModPaths) : ExistingMods.keep();
 	}
 
 	/** First-install review catalogue with Modrinth/CurseForge pages from the completed lookup. */
@@ -210,20 +214,27 @@ final class ReviewSession {
 		LOGGER.info("First-time install; scanning existing mods before the review screen");
 		sourceCatalogue.startSourceFetch();
 		if (isCancelledByPlayer()) throw new InterruptedException("Modpack update cancelled by the player");
-		firstInstallLocalModFiles = updater.storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
+		refreshFirstInstallLocalMods();
+		resetLaunchConsent();
 		if (isCancelledByPlayer()) throw new InterruptedException("Modpack update cancelled by the player");
 		if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 		ScreenManager.welcome(reviewPayload());
 	}
 
-	private Map<String, UpdatePlan.FileState> scanFirstInstallLocalMods() throws IOException {
+	/** The mods the cleanup answer applies to, and the default answer the confirm screen shows: archive them all. */
+	private void refreshFirstInstallLocalMods() throws IOException {
+		firstInstallLocalModPaths = updater.storedTarget() == null ? scanFirstInstallLocalMods() : Set.of();
+		existingMods = ExistingMods.archive(firstInstallLocalModPaths);
+	}
+
+	private Set<String> scanFirstInstallLocalMods() throws IOException {
 		Path modsDirectory = storage.modsDirectory();
-		if (Files.notExists(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return Map.of();
+		if (Files.notExists(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return Set.of();
 		FileTrees.requirePlayerDirectory(modsDirectory, "Loader-visible mods directory");
 		Environment environment = Environment.installed();
 		Path thisModJar = environment == null ? null : environment.thisModJar();
 		Path loadedMod = thisModJar == null ? null : thisModJar.toAbsolutePath().normalize();
-		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
+		TreeSet<String> observed = new TreeSet<>();
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = storage.clientConfig().current();
 		Set<String> listedPins = PinnedMods.index(currentConfig == null ? List.of() : currentConfig.pinnedModIds);
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
@@ -235,13 +246,10 @@ final class ReviewSession {
 					FileInspection.Mod inspected = modCache.getModOrNull(normalized, cache);
 					if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
 				}
-				String relative = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
-				String hash = cache.getOrComputeHash(normalized);
-				if (hash == null) throw new IOException("Cannot hash local mod file: " + normalized);
-				observed.put(relative, new UpdatePlan.FileState(hash, Files.size(normalized), true));
+				observed.add(LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString()));
 			}
 		}
-		return Collections.unmodifiableMap(observed);
+		return Collections.unmodifiableSortedSet(observed);
 	}
 
 	public void startConfirmedUpdate() {
@@ -351,7 +359,7 @@ final class ReviewSession {
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		updater.getSelectedTarget(); // the engine's requireNonNull states the unavailable-target error
 		resetLocalModCleanup();
-		resetLaunchConsent();
+		if (!firstConnection) resetLaunchConsent();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;

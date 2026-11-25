@@ -119,7 +119,7 @@ class ServerTombstonePlanTest {
 		Map<FileKey, FileState> files = Map.of(game("config/Foo.toml"), state(OLD), game("config/foo.toml"), state(OLD));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(), UpdatePlanner.Owed.NOTHING, Map.of(game("config/Foo.toml"), game("config/foo.toml"))));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE, UpdatePlanner.Owed.NOTHING, Map.of(game("config/Foo.toml"), game("config/foo.toml"))));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.operation() == OperationType.DELETE));
 		assertTrue(plan.preservations().isEmpty());

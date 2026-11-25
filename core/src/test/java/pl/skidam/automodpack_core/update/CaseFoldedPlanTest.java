@@ -100,7 +100,7 @@ class CaseFoldedPlanTest {
 		Map<FileKey, FileState> files = new TreeMap<>(FileKey.ORDER);
 		files.put(new FileKey(Root.GAME_DIR, "config/cafe\u0301.toml"), new FileState(OLD, 9, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(), UpdatePlanner.Owed.NOTHING, Map.of()));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE, UpdatePlanner.Owed.NOTHING, Map.of()));
 
 		assertEquals(List.of(new Operation(Root.GAME_DIR, "config/caf\u00e9.toml", OperationType.INSTALL_OBJECT, NEW, 9, null)), gameOperations(plan),
 				"the NFC path holds nothing on NTFS, so the install must not expect the player's NFD file there");
@@ -138,7 +138,7 @@ class CaseFoldedPlanTest {
 		if (oneFile) files.put(new FileKey(Root.GAME_DIR, AFTER), new FileState(OLD, 9, true));
 		Map<FileKey, FileKey> sameFiles = oneFile ? Map.of(new FileKey(Root.GAME_DIR, AFTER), new FileKey(Root.GAME_DIR, BEFORE)) : Map.of();
 		return UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(), UpdatePlanner.Owed.NOTHING, sameFiles));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE, UpdatePlanner.Owed.NOTHING, sameFiles));
 	}
 
 	private static List<Operation> gameOperations(UpdatePlan plan) {

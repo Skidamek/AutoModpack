@@ -70,7 +70,7 @@ class UpdatePlannerTest {
 		FileState local = new FileState(OLD_HASH, 8, true);
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.archive(Set.of(path)));
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
 
@@ -78,6 +78,24 @@ class UpdatePlannerTest {
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
 				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
 		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_LOCAL_MODS));
+	}
+
+	@Test
+	void archiveConsentForAPathThatVanishedSinceTheReviewPlansNothing() {
+		String path = "mods/local.jar";
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.archive(Set.of(path))));
+
+		assertTrue(plan.operations().isEmpty());
+		assertTrue(plan.preservations().isEmpty());
+	}
+
+	@Test
+	void existingModsRejectsKeepingAndArchivingAtOnce() {
+		assertThrows(IllegalArgumentException.class, () -> new ExistingMods(true, Set.of("mods/local.jar")));
+		assertTrue(ExistingMods.NONE.archived().isEmpty());
+		assertTrue(ExistingMods.keep().keepExisting());
 	}
 
 	@Test
@@ -89,7 +107,7 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.archive(Set.of(path))));
 
 		Operation live = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals(path)).findFirst().orElseThrow();
 		assertEquals(OperationType.DELETE, live.operation());
@@ -108,7 +126,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields target = packManifest("newpack", Map.of());
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.archive(Set.of(path))));
 
 		assertEquals(List.of(new Preservation(Root.GAME_DIR, path, OLD_HASH, 8, PreservationProof.PLAYER_CONSENT)), plan.preservations());
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
@@ -124,7 +142,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields target = packManifest("abc1234", Map.of());
 
 		assertThrows(IllegalArgumentException.class, () -> new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(path, local)));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.archive(Set.of(path))));
 	}
 
 	@Test
@@ -218,6 +236,24 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void firstInstallKeepLocalModsPreservesFilesMatchingServerTombstones() {
+		String path = "mods/removed.jar";
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry(path, OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan kept = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.keep(), UpdatePlanner.Owed.NOTHING, Map.of()));
+		assertTrue(kept.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)));
+		assertTrue(kept.preservations().isEmpty());
+
+		UpdatePlan cleaned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE, UpdatePlanner.Owed.NOTHING, Map.of()));
+		assertTrue(cleaned.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
+		assertEquals(List.of(new Preservation(Root.GAME_DIR, path, OLD_HASH, 8, PreservationProof.SERVER_LEDGER)), cleaned.preservations());
+	}
+
+	@Test
 	void firstInstallConsentSkipsAPinnedLiveMod() {
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.pinnedModIds = List.of("controlify");
@@ -225,7 +261,7 @@ class UpdatePlannerTest {
 		FileState local = new FileState(OLD_HASH, 8, true);
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), files, Set.of(), List.of(),
-				List.of(new ModInfo(path, OLD_HASH, 8, "1.0.0", Set.of("controlify"), Set.of())), List.of(), List.of(), null, config, Map.of(path, local));
+				List.of(new ModInfo(path, OLD_HASH, 8, "1.0.0", Set.of("controlify"), Set.of())), List.of(), List.of(), null, config, ExistingMods.archive(Set.of(path)));
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
 
@@ -783,7 +819,7 @@ class UpdatePlannerTest {
 		}
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(),
-				new UpdatePlanner.SelectionContext(installed.modpackId, installed), new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+				new UpdatePlanner.SelectionContext(installed.modpackId, installed), new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.OVERLAY), plan.operations().toString());
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.operation() == OperationType.DELETE && operation.root() != Root.PROJECTION && operation.expectedExistingHash() == null));
@@ -814,9 +850,9 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> live = Map.of(tombstone, new FileState(null, -1, false), new FileKey(Root.GAME_DIR, path), new FileState(OTHER_HASH, 4, true));
 
 		UpdatePlan withLive = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, live, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE));
 		UpdatePlan withoutLive = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(tombstone, new FileState(null, -1, false)), Set.of(), List.of(), List.of(), List.of(),
-				List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), Map.of()));
+				List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE));
 
 		assertTrue(withLive.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.operation() == OperationType.DELETE
 				&& OTHER_HASH.equals(operation.expectedExistingHash())));
@@ -853,7 +889,7 @@ class UpdatePlannerTest {
 	private static UpdatePlanner.Input stackedInput(ModpackJsons.ModpackContentFields previous, ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files,
 			UpdatePlanner.Owed owed) {
 		return new UpdatePlanner.Input(previous, target, files, Set.of(), List.of(), List.of(), List.of(), List.of(), new UpdatePlanner.SelectionContext(target.modpackId, previous),
-				new ClientConfigJsons.ClientConfigFieldsV3(), Map.of(), owed);
+				new ClientConfigJsons.ClientConfigFieldsV3(), ExistingMods.NONE, owed);
 	}
 
 	private static UpdatePlanner.Input input(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {

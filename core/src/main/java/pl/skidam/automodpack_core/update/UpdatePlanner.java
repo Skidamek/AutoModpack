@@ -54,22 +54,21 @@ public final class UpdatePlanner {
 			List<NestedCandidate> nestedCandidates,
 			SelectionContext selection,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
-			Map<String, FileState> consentedLocalModFiles,
+			ExistingMods existingMods,
 			Owed owed,
 			Map<FileKey, FileKey> sameFiles) {
 		public Input {
-			if (installedManifest != null && installedManifest.modpackId.equals(targetManifest.modpackId) && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
+			if (installedManifest != null && installedManifest.modpackId.equals(targetManifest.modpackId) && existingMods != null && !existingMods.archived().isEmpty())
 				throw new IllegalArgumentException("Local-mod consent cannot be used for the installed pack's own update");
+			if (installedManifest != null && existingMods != null && existingMods.keepExisting())
+				throw new IllegalArgumentException("Keeping existing mods can only be used on first install");
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
 			standardMods = List.copyOf(standardMods);
 			previousNestedCopies = List.copyOf(previousNestedCopies);
 			nestedCandidates = List.copyOf(nestedCandidates);
-			Map<String, FileState> normalizedConsent = new TreeMap<>();
-			for (var entry : (consentedLocalModFiles == null ? Map.<String, FileState>of() : consentedLocalModFiles).entrySet())
-				normalizedConsent.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
-			consentedLocalModFiles = Collections.unmodifiableMap(normalizedConsent);
+			existingMods = existingMods == null ? ExistingMods.NONE : existingMods;
 			owed = owed == null ? Owed.NOTHING : owed;
 			sameFiles = Map.copyOf(sameFiles == null ? Map.of() : sameFiles);
 		}
@@ -77,17 +76,17 @@ public final class UpdatePlanner {
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
 				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
 				List<NestedCopy> previousNestedCopies, List<NestedCandidate> nestedCandidates, SelectionContext selection,
-				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Map<String, FileState> consentedLocalModFiles, Owed owed) {
+				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, ExistingMods existingMods, Owed owed) {
 			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCandidates, selection,
-					plannedClientConfig, consentedLocalModFiles, owed, Map.of());
+					plannedClientConfig, existingMods, owed, Map.of());
 		}
 
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
 				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
 				List<NestedCopy> previousNestedCopies, List<NestedCandidate> nestedCandidates, SelectionContext selection,
-				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Map<String, FileState> consentedLocalModFiles) {
+				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, ExistingMods existingMods) {
 			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCandidates, selection,
-					plannedClientConfig, consentedLocalModFiles, Owed.NOTHING);
+					plannedClientConfig, existingMods, Owed.NOTHING);
 		}
 
 		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
@@ -95,7 +94,7 @@ public final class UpdatePlanner {
 				List<NestedCopy> previousNestedCopies, List<NestedCandidate> nestedCandidates, SelectionContext selection,
 				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
 			this(installedManifest, targetManifest, files, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCandidates, selection,
-					plannedClientConfig, Map.of());
+					plannedClientConfig, ExistingMods.NONE);
 		}
 
 	}
@@ -264,11 +263,12 @@ public final class UpdatePlanner {
 		// The player's own file comes back only when the player leaves the path, by switching packs or deselecting its group; a path the pack dropped or moved away is just dropped.
 		Function<String, InstanceTree.TrackedFile> baselines = path -> switchesPack || deselectedKeys.contains(PathFold.key(path)) ? priorGameDir.apply(path) : null;
 		Set<String> baselineObjects = input.selection() == null ? Set.of() : input.selection().availableBaselineObjects();
-		planConsentedLocalMods(input, standardModsByPath, session);
+		planArchivedLocalMods(input, standardModsByPath, session);
 		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, baselines, baselineObjects, listedPins, standardModsByPath, session);
 		if (installedLedger != null)
 			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), baselines, baselineObjects, switchesPack, listedPins, standardModsByPath, session);
-		planServerKnownCleanup(ledger.tombstonesSince(installedLedger, targetItems.keySet()), listedPins, standardModsByPath, session);
+		if (!(installedLedger == null && input.existingMods().keepExisting()))
+			planServerKnownCleanup(ledger.tombstonesSince(installedLedger, targetItems.keySet()), listedPins, standardModsByPath, session);
 		planSelectionChange(input, target, session);
 		Set<String> liveCopyPaths = liveCopyPaths(targetItems, input.forceCopyServicePaths());
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
@@ -402,8 +402,7 @@ public final class UpdatePlanner {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
 					long liveSize = overlay == null ? item.size : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
-						FileState consented = input.consentedLocalModFiles().get(relative);
-						session.install(liveKey, liveHash, liveSize, consented == null ? null : consented.sha1());
+						session.install(liveKey, liveHash, liveSize);
 						if (activeMod) session.restart(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
@@ -411,27 +410,23 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static void planConsentedLocalMods(Input input, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
+	private static void planArchivedLocalMods(Input input, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		if (input.installedManifest() != null && input.installedManifest().modpackId.equals(input.targetManifest().modpackId)) {
-			if (!input.consentedLocalModFiles().isEmpty()) throw new IllegalArgumentException("Local-mod consent cannot be used for the installed pack's own update");
+			if (!input.existingMods().archived().isEmpty()) throw new IllegalArgumentException("Local-mod consent cannot be used for the installed pack's own update");
 			return;
 		}
-		if (input.consentedLocalModFiles().isEmpty()) return;
 		Set<String> listedPins = listedPins(input);
-		for (var entry : input.consentedLocalModFiles().entrySet()) {
-			String relative = LogicalPath.normalize(entry.getKey());
+		for (String relative : input.existingMods().archived()) {
 			Path path = Path.of(relative);
 			if (path.getNameCount() != 2 || !path.getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
 				throw new IllegalArgumentException("First-install consent path must be a direct mods child: " + relative);
-			FileState observed = entry.getValue();
-			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
-				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
 			if (pinnedLiveMod(listedPins, standardModsByPath, relative)) continue;
 			FileKey key = new FileKey(Root.GAME_DIR, relative);
 			FileState current = session.projected(key);
-			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
-			session.preserve(new Preservation(Root.GAME_DIR, relative, observed.sha1().toLowerCase(Locale.ROOT), observed.size(), PreservationProof.PLAYER_CONSENT));
-			session.delete(key, observed.sha1());
+			// The folder moved since the review: the path no longer holds a file, and the answer has nothing to move.
+			if (current == null || !current.regularFile() || !HashUtils.isSha1(current.sha1())) continue;
+			session.preserve(new Preservation(Root.GAME_DIR, relative, current.sha1().toLowerCase(Locale.ROOT), current.size(), PreservationProof.PLAYER_CONSENT));
+			session.delete(key, current.sha1());
 			session.restart(RestartReason.REMOVED_LOCAL_MODS);
 		}
 	}

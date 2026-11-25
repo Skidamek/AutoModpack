@@ -5,7 +5,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import org.apache.logging.log4j.LogManager;
@@ -30,6 +29,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ExistingMods;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateCommit;
@@ -57,9 +57,9 @@ final class UpdateSession implements UpdateAttempt {
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final SelectedModpackTarget target;
 	private final boolean firstConnection;
-	private final Map<String, UpdatePlan.FileState> consentedLocalModFiles;
+	private final ExistingMods firstConnectionMods;
 	private final boolean attaching;
-	private Map<String, UpdatePlan.FileState> switchLocalModConsent = Map.of();
+	private ExistingMods switchMods = ExistingMods.NONE;
 	private boolean preparedObjects;
 	private ClientUpdatePlanBuilder.PreparedPlan prepared;
 	private ReviewedUpdatePlan review;
@@ -68,7 +68,7 @@ final class UpdateSession implements UpdateAttempt {
 
 	UpdateSession(ClientStorage storage, ClientUpdatePlanBuilder planBuilder, ModpackObjectAcquisition objectAcquisition, SourceCatalogue sourceCatalogue,
 			Changelogs changelogs, ConnectionJsons.ConnectionInfo connectionInfo, SelectedModpackTarget target, boolean firstConnection,
-			Map<String, UpdatePlan.FileState> consentedLocalModFiles, boolean attaching) {
+			ExistingMods localMods, boolean attaching) {
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.planBuilder = Objects.requireNonNull(planBuilder, "planBuilder");
 		this.objectAcquisition = Objects.requireNonNull(objectAcquisition, "objectAcquisition");
@@ -77,7 +77,7 @@ final class UpdateSession implements UpdateAttempt {
 		this.connectionInfo = connectionInfo;
 		this.target = Objects.requireNonNull(target, "target");
 		this.firstConnection = firstConnection;
-		this.consentedLocalModFiles = consentedLocalModFiles == null ? Map.of() : consentedLocalModFiles;
+		this.firstConnectionMods = localMods == null ? ExistingMods.NONE : localMods;
 		this.attaching = attaching;
 	}
 
@@ -315,8 +315,7 @@ final class UpdateSession implements UpdateAttempt {
 	}
 
 	private ClientUpdatePlanBuilder.Input planInput() {
-		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : switchLocalModConsent;
-		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, storage.clientConfig().current(), consent);
+		return new ClientUpdatePlanBuilder.Input(target, connectionInfo, storage.clientConfig().current(), firstConnection ? firstConnectionMods : switchMods);
 	}
 
 	/**
@@ -328,7 +327,7 @@ final class UpdateSession implements UpdateAttempt {
 		if (!archive || prepared == null || prepared.unownedLocalMods().isEmpty()) return;
 		ModpackJsons.ModpackContentFields installed = storedTarget();
 		if (installed != null && installed.modpackId.equals(target.manifest().modpackId())) return;
-		switchLocalModConsent = prepared.unownedLocalMods();
+		switchMods = ExistingMods.archive(prepared.unownedLocalMods().keySet());
 		prepare(true, preparedObjects);
 	}
 

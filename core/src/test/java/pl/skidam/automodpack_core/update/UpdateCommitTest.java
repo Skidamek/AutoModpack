@@ -969,7 +969,7 @@ class UpdateCommitTest {
 		UpdatePlan.FileState localState = new UpdatePlan.FileState(localHash, localBytes.length, true);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/shared.jar"), localState);
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				clientConfig(target.manifest().modpackId()), Map.of("mods/shared.jar", localState)));
+				clientConfig(target.manifest().modpackId()), ExistingMods.archive(Set.of("mods/shared.jar"))));
 
 		assertTrue(UpdateTestFixtures.commit(storage, plan, target) instanceof UpdateCommit.Applied);
 

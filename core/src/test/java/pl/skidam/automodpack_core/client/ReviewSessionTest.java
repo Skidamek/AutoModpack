@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
@@ -135,18 +137,48 @@ class ReviewSessionTest {
 
 		// The consent checkbox is inert before the review is open.
 		harness.actions().setFirstInstallLocalModCleanup().accept(true);
-		assertTrue(harness.review().consentedLocalModFiles().isEmpty());
+		assertTrue(harness.review().existingMods().archived().isEmpty());
 
 		harness.review().beginFirstInstallReview();
+		assertEquals(1, harness.review().existingMods().archived().size());
+		assertFalse(harness.review().existingMods().keepExisting());
 		harness.actions().setFirstInstallLocalModCleanup().accept(true);
-		assertEquals(1, harness.review().consentedLocalModFiles().size());
+		assertEquals(1, harness.review().existingMods().archived().size());
+		assertFalse(harness.review().existingMods().keepExisting());
 
 		harness.actions().setFirstInstallLocalModCleanup().accept(false);
-		assertTrue(harness.review().consentedLocalModFiles().isEmpty());
+		assertTrue(harness.review().existingMods().archived().isEmpty());
+		assertTrue(harness.review().existingMods().keepExisting());
 
 		harness.actions().cancelConfirmation().run();
 		harness.actions().setFirstInstallLocalModCleanup().accept(true);
-		assertTrue(harness.review().consentedLocalModFiles().isEmpty());
+		assertTrue(harness.review().existingMods().archived().isEmpty());
+	}
+
+	@Test
+	void firstInstallKeepExistingAndLaunchConsentSurviveReselectAndCancelRebuild() throws Exception {
+		Harness harness = harness(true);
+		harness.review().beginFirstInstallReview();
+		assertFalse(screens.lastWelcome.keepExistingMods());
+		assertFalse(screens.lastWelcome.launchWritesUnverified());
+
+		harness.actions().setFirstInstallLocalModCleanup().accept(false);
+		harness.actions().setLaunchWritesUnverified().accept(true);
+		harness.actions().reselectAndPreview().accept(new SelectionIntent(Set.of("main")));
+
+		assertEquals(RecordingScreens.Kind.WELCOME, screens.last);
+		assertTrue(screens.lastWelcome.keepExistingMods());
+		assertTrue(screens.lastWelcome.launchWritesUnverified());
+		assertTrue(harness.review().existingMods().keepExisting());
+		assertTrue(harness.review().existingMods().archived().isEmpty());
+
+		harness.actions().cancelFromPlayer().run();
+		harness.actions().startConfirmedUpdate().run();
+		awaitTrue(() -> harness.actions().reviewActive().getAsBoolean());
+
+		assertEquals(RecordingScreens.Kind.WELCOME, screens.last);
+		assertTrue(screens.lastWelcome.keepExistingMods());
+		assertTrue(screens.lastWelcome.launchWritesUnverified());
 	}
 
 	@Test
@@ -188,6 +220,7 @@ class ReviewSessionTest {
 
 		volatile Kind last;
 		volatile boolean waitOpen;
+		volatile ReviewPayload lastWelcome;
 
 		@Override
 		public void waiting(Runnable onCancel) {
@@ -197,6 +230,7 @@ class ReviewSessionTest {
 
 		@Override
 		public void welcome(ReviewPayload payload) {
+			lastWelcome = payload;
 			show(Kind.WELCOME);
 			waitOpen = false;
 		}

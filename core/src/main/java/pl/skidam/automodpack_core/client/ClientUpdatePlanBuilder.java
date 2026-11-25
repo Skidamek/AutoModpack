@@ -41,6 +41,7 @@ import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStateJournal;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ExistingMods;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
 import pl.skidam.automodpack_core.update.InstanceTree;
 import pl.skidam.automodpack_core.update.PlannedAgainst;
@@ -106,15 +107,15 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	record Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
-			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, Map<String, UpdatePlan.FileState> consentedLocalModFiles) {
+			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, ExistingMods existingMods) {
 		Input {
 			Objects.requireNonNull(selectedTarget, "selectedTarget");
 			Objects.requireNonNull(currentConfig, "currentConfig");
-			consentedLocalModFiles = Map.copyOf(consentedLocalModFiles == null ? Map.of() : consentedLocalModFiles);
+			existingMods = existingMods == null ? ExistingMods.NONE : existingMods;
 		}
 
 		Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
-			this(selectedTarget, connectionInfo, currentConfig, Map.of());
+			this(selectedTarget, connectionInfo, currentConfig, ExistingMods.NONE);
 		}
 
 		/** The target's flat manifest, a validated component of the selected target rather than a separately carried copy. */
@@ -172,7 +173,7 @@ final class ClientUpdatePlanBuilder {
 		String expectedSelectedModpackId = storage.selectedModpackId();
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, forceCopyServices, targetMods, standardMods,
-				previousCopies, nestedCandidates, selection, plannedConfig, input.consentedLocalModFiles(), projection.owed(), sameFiles(files, input.target().modpackId)))
+				previousCopies, nestedCandidates, selection, plannedConfig, input.existingMods(), projection.owed(), sameFiles(files, input.target().modpackId)))
 				.withPlannedSelectedModpackId(input.target().modpackId);
 		requireFileSlots(plan);
 		UpdatePlan planned = withSwitchConsequences(plan, LauncherVersionSwapper.Versions.advertisedBy(input.target()), projection, logicalConfig.syncVersions);
