@@ -159,7 +159,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 			this.addRenderableWidget(ackCheckbox);
 		}
 		launchWritesCheckbox = null;
-		if (actions != null) {
+		if (actions != null && unverified) {
 			launchWritesCheckbox = new CheckboxWidget(this.font, 0, 0, panelWidth(BODY), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> {
 				launchWrites = value;
 				actions.setLaunchWritesUnverified().accept(value);

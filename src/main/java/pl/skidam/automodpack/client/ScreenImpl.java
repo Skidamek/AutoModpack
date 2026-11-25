@@ -315,7 +315,7 @@ public class ScreenImpl implements ScreenService {
 
 		public static void preview(PreviewPayload payload) {
 			Screen parent = returnTarget(flowParent());
-			if (payload.writesUnverifiedJar()) {
+			if (payload.requiresUnverifiedGate()) {
 				Screens.setScreen(new PackConfirmScreen(parent, payload));
 				return;
 			}

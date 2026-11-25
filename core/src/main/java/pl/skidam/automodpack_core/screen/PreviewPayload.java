@@ -15,6 +15,11 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 public record PreviewPayload(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
 		SourceCounts sourceCounts, boolean launchWritesUnverified, ReviewConsent actions, Runnable continueAction, Runnable cancelAction) {
 
+	/** True when an unverified jar is written by a flow that does not already carry the pack's launch-writes consent. */
+	public boolean requiresUnverifiedGate() {
+		return writesUnverifiedJar && !launchWritesUnverified;
+	}
+
 	/** A plan a live review session stands behind: the screen can reach the review's customize actions through it. */
 	public static PreviewPayload review(UpdatePreview preview, String modpackName, String origin, boolean writesUnverifiedJar, SelectedModpackTarget target, List<String> unverifiedJarPaths,
 			SourceCounts sourceCounts, boolean launchWritesUnverified, ReviewConsent actions, Runnable continueAction, Runnable cancelAction) {

@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
@@ -208,6 +209,17 @@ class ReviewSessionTest {
 		harness.review().resetLaunchConsent();
 		harness.review().applyLaunchConsent();
 		assertFalse(LaunchApplyState.allowsUnverifiedLaunchWrites(harness.storage(), modpackId), "a cancelled preview's tick never reaches the next commit");
+	}
+
+	@Test
+	void unverifiedJarGateOnlyAppliesWhenTheFlowCarriesNoLaunchConsent() {
+		assertTrue(payload(true, false).requiresUnverifiedGate());
+		assertFalse(payload(true, true).requiresUnverifiedGate());
+		assertFalse(payload(false, false).requiresUnverifiedGate());
+	}
+
+	private static PreviewPayload payload(boolean writesUnverifiedJar, boolean launchWritesUnverified) {
+		return new PreviewPayload(null, "", "", writesUnverifiedJar, null, List.of(), null, launchWritesUnverified, null, () -> {}, () -> {});
 	}
 
 	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewConsent actions, ClientStorage storage) {}

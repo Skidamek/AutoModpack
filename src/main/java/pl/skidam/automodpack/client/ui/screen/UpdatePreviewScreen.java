@@ -46,6 +46,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Runnable cancelAction;
 	private final ChangeSet changes;
 	private final boolean launchWrites;
+	private final boolean writesUnverifiedJar;
+	private final List<String> unverifiedJarPaths;
 	private boolean finished;
 	private int titleTop;
 	private CheckboxWidget launchWritesCheckbox;
@@ -64,6 +66,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.cancelAction = Objects.requireNonNull(payload.cancelAction(), "cancelAction");
 		this.changes = preview.changeSet();
 		this.launchWrites = payload.launchWritesUnverified();
+		this.writesUnverifiedJar = payload.writesUnverifiedJar();
+		this.unverifiedJarPaths = payload.unverifiedJarPaths() == null ? List.of() : payload.unverifiedJarPaths();
 	}
 
 	@Override
@@ -119,7 +123,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private boolean showsLaunchWritesCheckbox() {
-		return (mode == UpdatePreview.Mode.UPDATE || mode == UpdatePreview.Mode.ROLLBACK) && actions != null && target != null;
+		return (mode == UpdatePreview.Mode.UPDATE || mode == UpdatePreview.Mode.ROLLBACK) && actions != null && target != null && (writesUnverifiedJar || launchWrites);
 	}
 
 	/** A pack change that would leave the player's own mod files in place asks about them once, here. */
@@ -156,6 +160,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		else lines.add(UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").withStyle(ChatFormatting.GREEN));
 		if (!preview.conflicts().isEmpty())
 			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").withStyle(ChatFormatting.RED));
+		if (writesUnverifiedJar) lines.addAll(wrapParagraph(this.font, UiFormat.plural(Math.max(1, unverifiedJarPaths.size()), "automodpack.update.unverifiedTrusted").getString(), wrapWidth, ChatFormatting.YELLOW));
 		ChangeSet.Summary summary = changes.summary();
 		lines.addAll(ChangeSummary.diffLines(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
 		if (mode == UpdatePreview.Mode.UPDATE && (summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || preview.uncachedAcquisitionBytes() > 0))
