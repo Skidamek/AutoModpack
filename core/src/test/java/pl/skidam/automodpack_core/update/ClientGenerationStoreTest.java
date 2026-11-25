@@ -46,6 +46,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
@@ -867,6 +868,47 @@ class ClientGenerationStoreTest {
 		storage.clearActiveState();
 		generations.forgetModpack(FIRST_PACK);
 		assertTrue(generations.compactionReceipt(FIRST_PACK).isEmpty(), "the receipt is deleted with the pack");
+	}
+
+	@Test
+	void activePointerSurvivesMirrorLineageReplacementAcrossReadsCollectionAndCompaction() throws Exception {
+		ClientStorage storage = storage();
+		String installedHash = store(storage, "installed-object");
+		PackDocument installed = document(FIRST_PACK, installedHash, Files.size(storage.objectFile(installedHash)), Instant.parse("2026-01-01T00:00:00Z"));
+		TestPacks.stageGeneration(storage, installed);
+		writeHead(storage, FIRST_PACK, installed);
+		storage.writeActiveState(installed, new SelectionIntent(Set.of("main")));
+
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		assertNotNull(generations.hosting(FIRST_PACK), "the matching head and pointer host the active generation");
+
+		// Replace the mirror with an unrelated lineage for the same modpackId that no longer contains the installed token.
+		FileTrees.delete(storage.historyPackDirectory(FIRST_PACK));
+		String newLineageHash = store(storage, "new-lineage-object");
+		PackDocument newLineage = document(FIRST_PACK, newLineageHash, Files.size(storage.objectFile(newLineageHash)), Instant.parse("2026-02-01T00:00:00Z"));
+		TestPacks.stageGeneration(storage, newLineage);
+		writeHead(storage, FIRST_PACK, newLineage);
+
+		assertEquals(installed.contentToken(), generations.activeDocument().orElseThrow().contentToken());
+		assertEquals(installed, generations.activeDocument().orElseThrow());
+		SelectedModpackTarget target = generations.readActiveTarget().orElseThrow();
+		assertEquals(installed.manifest(), target.document().manifest());
+		assertEquals(installed.policySha1(), target.document().policySha1());
+
+		// The head describes a generation this client does not run, so it is refused instead of served in its place.
+		IOException refused = assertThrows(IOException.class, () -> generations.hosting(FIRST_PACK));
+		assertTrue(refused.getMessage().contains("different generation"));
+
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+		assertTrue(Files.exists(storage.objectFile(installed.policySha1())), "active policy stays pinned after mirror lineage replacement");
+		assertTrue(Files.exists(storage.objectFile(installedHash)), "active content stays pinned after mirror lineage replacement");
+
+		ClientGenerationStore.CompactionResult compaction = generations.compact();
+		assertTrue(Files.exists(storage.objectFile(installed.policySha1())), "active policy survives compaction after mirror lineage replacement");
+		assertTrue(Files.exists(storage.objectFile(installedHash)), "active content survives compaction after mirror lineage replacement");
+		assertTrue(Files.exists(storage.objectFile(newLineageHash)), "newest mirror generation stays intact");
+		assertEquals(0, compaction.collection().after().missingReferencedObjectCount());
+		assertEquals(installed, generations.activeDocument().orElseThrow());
 	}
 
 	@Test

@@ -187,6 +187,25 @@ public final class ClientGenerationStore {
 
 	/** One build per caller: the pointer's own parse and validation are what the cache answers, and the derived document is cheap enough to rebuild. */
 	private PackDocument activeDocument(ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
+		if (state.manifest != null && HashUtils.isSha1(state.manifestSha1)) {
+			try {
+				GroupManifest manifest = GroupManifestValidator.validate(state.manifest);
+				String policySha1 = HashUtils.normalizeSha1(state.manifestSha1);
+				Instant createdAt;
+				if (state.createdAt != null && !state.createdAt.isBlank()) {
+					createdAt = Instant.parse(state.createdAt);
+				} else {
+					Optional<JournalEntry> entry = findMirrorEntry(state.modpackId, state.contentToken);
+					createdAt = entry.map(JournalEntry::createdAt).orElse(Instant.EPOCH);
+				}
+				String waitingMusicSha1 = advertisedTrack(state.modpackId, state.contentToken, policySha1);
+				return new PackDocument(manifest, state.contentToken, policySha1, createdAt, OwnershipLedger.fromFields(state.ownershipLedger), waitingMusicSha1);
+			} catch (IOException e) {
+				throw e;
+			} catch (RuntimeException e) {
+				throw new IOException("Client active state could not be reconstructed: " + state.contentToken, e);
+			}
+		}
 		return document(state.modpackId, mirrorEntry(state.modpackId, state.contentToken), OwnershipLedger.fromFields(state.ownershipLedger), state.manifest, state.manifestSha1);
 	}
 
@@ -210,6 +229,8 @@ public final class ClientGenerationStore {
 			throw new IOException("The active modpack's mirror is incomplete: " + state.modpackId);
 		GenerationJsons.HeadDocumentFields headFields = ConfigTools.read(head, GenerationJsons.HeadDocumentFields.class)
 				.orElseThrow(() -> new IOException("The active modpack's head document is empty: " + head));
+		if (!sameGeneration(state, headFields))
+			throw new IOException("The active modpack's mirror head names a different generation than the active state: " + state.modpackId);
 		GroupManifest manifest = policyDocument(headFields.policySha1);
 		if (!state.modpackId.equals(manifest.modpackId()))
 			throw new IOException("The active modpack's head names a different pack: " + manifest.modpackId());
@@ -218,6 +239,17 @@ public final class ClientGenerationStore {
 			if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("The active modpack is missing a hosted object: " + path);
 		}
 		return hosting;
+	}
+
+	/**
+	 * Whether the mirrored head names exactly the generation the active pointer runs. A mirror can be replaced by
+	 * another lineage for the same pack, and then its head describes something this client does not run; serving it
+	 * would hand guests a pack the host never installed.
+	 */
+	private static boolean sameGeneration(ClientStorageJsons.ClientGenerationStateFields state, GenerationJsons.HeadDocumentFields head) {
+		if (!HashUtils.isSha1(head.contentToken) || !HashUtils.normalizeSha1(head.contentToken).equals(HashUtils.normalizeSha1(state.contentToken))) return false;
+		if (!HashUtils.isSha1(state.manifestSha1)) return true;
+		return HashUtils.isSha1(head.policySha1) && HashUtils.normalizeSha1(head.policySha1).equals(HashUtils.normalizeSha1(state.manifestSha1));
 	}
 
 	private ClientStorageJsons.ClientGenerationStateFields requireActive(String modpackId) throws IOException {
@@ -429,21 +461,24 @@ public final class ClientGenerationStore {
 		Set<String> archivedMirrors = pruneUnreferencedMirrorsLocked(Set.copyOf(mirroredPackIds()));
 		ExpectedSizes kept = new ExpectedSizes();
 		List<KeptPack> keptPacks = new ArrayList<>();
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		for (String modpackId : installedPackIds()) {
 			List<JournalEntry> entries = new JournalMirror(storage).entries(modpackId);
-			if (entries.isEmpty()) continue;
+			Set<String> keptTokens = new TreeSet<>();
 			for (JournalEntry entry : entries) if (ClientObjectStore.holdsObject(storage, entry.policySha1())) kept.optional(entry.policySha1(), -1, "kept policy document");
-			JournalEntry newest = entries.get(entries.size() - 1);
-			retainGenerationContent(newest, kept);
-			Set<String> keptTokens = new TreeSet<>(Set.of(newest.contentToken()));
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state != null && state.modpackId.equals(modpackId)) {
-				JournalEntry active = mirrorEntry(modpackId, state.contentToken);
-				retainGenerationContent(active, kept);
-				keptTokens.add(active.contentToken());
+			if (!entries.isEmpty()) {
+				JournalEntry newest = entries.get(entries.size() - 1);
+				retainGenerationContent(newest, kept);
+				keptTokens.add(newest.contentToken());
+				keptPacks.add(new KeptPack(modpackId, newest.seq()));
 			}
-			removeGeneratedCopies(modpackId, keptTokens);
-			keptPacks.add(new KeptPack(modpackId, newest.seq()));
+			if (activeState != null && activeState.modpackId.equals(modpackId)) {
+				// The sweep pins the active generation from the pointer; only a pointer written before it carried its
+				// manifest still needs the mirror to say which objects those are.
+				keptTokens.add(activeState.contentToken);
+				if (activeState.manifest == null) retainGenerationContent(mirrorEntry(modpackId, activeState.contentToken), kept);
+			}
+			if (!keptTokens.isEmpty()) removeGeneratedCopies(modpackId, keptTokens);
 		}
 		for (var claim : ClientObjectStore.collectMirrorClaims(storage, archivedMirrors).entrySet())
 			kept.optional(claim.getKey(), claim.getValue(), "timeline-restorable pack history");
@@ -456,8 +491,11 @@ public final class ClientGenerationStore {
 
 	/** The content objects of one kept generation: every file of its folded policy tree. */
 	private void retainGenerationContent(JournalEntry entry, ExpectedSizes kept) throws IOException {
-		for (var pathEntry : ContentTree.fromManifest(policyDocument(entry.policySha1())).files().entrySet())
-			for (ContentTree.ContentFile file : pathEntry.getValue()) kept.optional(file.sha1(), file.size(), "kept generation content");
+		retainGenerationContent(policyDocument(entry.policySha1()), kept);
+	}
+
+	private void retainGenerationContent(GroupManifest manifest, ExpectedSizes kept) throws IOException {
+		ClientObjectStore.retainGeneration(ContentTree.fromManifest(manifest), kept, "kept generation content");
 	}
 
 	/** Deletes the generated-copy state of trimmed generations; it pins objects and only serves generations the compaction no longer keeps. */
@@ -789,8 +827,12 @@ public final class ClientGenerationStore {
 
 	/** The advertised track's hash when the head mirror names this exact generation; the mirror is the only offline record of the track. */
 	private String advertisedTrack(String modpackId, JournalEntry entry) throws IOException {
+		return advertisedTrack(modpackId, entry.contentToken(), entry.policySha1());
+	}
+
+	private String advertisedTrack(String modpackId, String contentToken, String policySha1) throws IOException {
 		GenerationJsons.HeadDocumentFields head = new HeadMirror(storage).read(modpackId);
-		return head != null && entry.contentToken().equals(head.contentToken) && entry.policySha1().equals(head.policySha1) ? head.waitingMusicSha1 : "";
+		return head != null && contentToken.equals(head.contentToken) && policySha1.equals(head.policySha1) ? head.waitingMusicSha1 : "";
 	}
 
 	/**
@@ -801,7 +843,7 @@ public final class ClientGenerationStore {
 	 * stand in for one that is present; when nothing reconstructs, the newest token match is returned for its
 	 * missing-object error, naming the policy sha1 the server currently serves.
 	 */
-	private JournalEntry mirrorEntry(String modpackId, String contentToken) throws IOException {
+	private Optional<JournalEntry> findMirrorEntry(String modpackId, String contentToken) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		String normalizedToken = HashUtils.normalizeSha1(contentToken);
 		JournalEntry newest = null;
@@ -811,9 +853,15 @@ public final class ClientGenerationStore {
 			newest = entry;
 			if (Files.exists(storage.objectFile(ClientObjectStore.normalizeHash(entry.policySha1())), LinkOption.NOFOLLOW_LINKS)) newestWitnessed = entry;
 		}
-		if (newestWitnessed != null) return newestWitnessed;
-		if (newest != null) return newest;
-		throw new IOException("The journal mirror has no entry for generation " + normalizedToken + ": " + normalizedModpackId);
+		if (newestWitnessed != null) return Optional.of(newestWitnessed);
+		return Optional.ofNullable(newest);
+	}
+
+	private JournalEntry mirrorEntry(String modpackId, String contentToken) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		String normalizedToken = HashUtils.normalizeSha1(contentToken);
+		return findMirrorEntry(normalizedModpackId, normalizedToken)
+				.orElseThrow(() -> new IOException("The journal mirror has no entry for generation " + normalizedToken + ": " + normalizedModpackId));
 	}
 
 	/**

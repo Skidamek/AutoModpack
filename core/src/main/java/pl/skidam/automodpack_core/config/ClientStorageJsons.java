@@ -39,6 +39,12 @@ public class ClientStorageJsons {
 		/** The hash that manifest was served under; without it a document rebuilt from the mirror would pair this manifest with another generation's hash. */
 		public String manifestSha1 = "";
 		/**
+		 * The generation's creation instant, part of the document the pointer describes on its own. Absent in a pointer
+		 * written before the pointer carried it, which resolves through the journal mirror. Unreadable content is
+		 * corruption of unique state and fails the boot in place instead of passing for absent.
+		 */
+		public String createdAt = "";
+		/**
 		 * The group selection this pointer was committed under: the applied answer to "what is installed". Null lists
 		 * mean a pointer written before the selection was recorded; readers fall back to the selection store, which
 		 * was the applied record before the store became the player's desired state.

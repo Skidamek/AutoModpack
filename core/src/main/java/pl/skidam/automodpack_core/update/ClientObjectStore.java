@@ -27,7 +27,9 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.protocol.PartialResume;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
@@ -388,16 +390,30 @@ public final class ClientObjectStore {
 		if (disagreements > 0) LOGGER.warn("Local state and the journal mirror disagree about the size of {} objects; keeping the locally verified receipts", disagreements);
 	}
 
-	/** Adds every durable client pin outside the mirror's history: overlays, generated copies, the state history, the pending transaction, and repair state. */
+	/** Adds every durable client pin outside the mirror's history: overlays, generated copies, the active generation, the state history, the pending transaction, and repair state. */
 	static void collectNonHistoryReferences(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		collectOverlays(storage, retained);
 		collectGeneratedCopies(storage, retained);
+		collectActiveGeneration(storage, retained);
 		collectStateJournal(storage, retained);
 		collectTransaction(storage, retained);
 		collectProjectionFallback(storage, retained);
 		collectRepair(storage, retained);
 		collectWaitingMusic(storage, retained);
 		validateActiveProjection(storage);
+	}
+
+	private static void collectActiveGeneration(ClientStorage storage, ExpectedSizes retained) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (active == null || active.manifest == null) return;
+		if (HashUtils.isSha1(active.manifestSha1)) retained.optional(HashUtils.normalizeSha1(active.manifestSha1), -1, "active generation policy");
+		retainGeneration(ContentTree.fromManifest(GroupManifestValidator.validate(active.manifest)), retained, "active generation content");
+	}
+
+	/** Every content object of one generation, at the sizes its tree records. */
+	static void retainGeneration(ContentTree tree, ExpectedSizes retained, String source) throws IOException {
+		for (var pathEntry : tree.files().entrySet())
+			for (ContentTree.ContentFile file : pathEntry.getValue()) retained.optional(file.sha1(), file.size(), source);
 	}
 
 	/** Each pack's current head may advertise a waiting track; the hash is the only record, so the object stays pinned. */

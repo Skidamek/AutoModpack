@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -93,6 +94,8 @@ final class ActivePackPointer {
 		// A carried manifest has to be the generation this pointer names, or the pointer would describe something it does not run.
 		if (state.manifest != null && !ContentTree.fromManifest(GroupManifestValidator.validate(state.manifest)).token().equals(state.contentToken))
 			throw new IllegalArgumentException("Client active state carries a manifest that is not its own generation");
+		// An absent timestamp reads through the mirror; an unreadable one is corruption of the pointer, never silent absence.
+		if (state.createdAt != null && !state.createdAt.isBlank()) Instant.parse(state.createdAt);
 		return state;
 	}
 
@@ -153,6 +156,7 @@ final class ActivePackPointer {
 		state.ownershipLedger = document.ownershipLedger().toFields();
 		state.manifest = document.manifest().toFields();
 		state.manifestSha1 = document.policySha1();
+		state.createdAt = document.createdAt().toString();
 		state.detached = currentDetachmentFor(state.modpackId);
 		return state;
 	}
@@ -174,6 +178,7 @@ final class ActivePackPointer {
 		copy.ownershipLedger = state.ownershipLedger;
 		copy.manifest = state.manifest;
 		copy.manifestSha1 = state.manifestSha1;
+		copy.createdAt = state.createdAt;
 		copy.selectedGroups = state.selectedGroups;
 		copy.selectedCategories = state.selectedCategories;
 		copy.excludedGroups = state.excludedGroups;
