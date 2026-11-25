@@ -2,10 +2,12 @@ package pl.skidam.automodpack_core.screen;
 
 import java.util.List;
 import java.util.OptionalLong;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 
 /**
  * The first-install welcome snapshot: everything the confirm screen renders, settled before the screen opens, plus the
@@ -13,4 +15,10 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
  * measured; the screen hides the stat instead of failing the review over it.
  */
 public record ReviewPayload(SelectedModpackTarget target, ChangeSet catalogue, List<JournalEntry> patchNotes, String origin, List<String> unverifiedJarPaths,
-		SourceCounts sourceCounts, List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, boolean keepExistingMods, boolean launchWritesUnverified, ReviewConsent actions) {}
+		SourceCounts sourceCounts, List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, boolean keepExistingMods, boolean launchWritesUnverified, Set<DownloadSource.Provider> unreachableProviders,
+		ReviewConsent actions) {
+
+	public ReviewPayload {
+		unreachableProviders = unreachableProviders == null ? Set.of() : Set.copyOf(unreachableProviders);
+	}
+}

@@ -148,6 +148,22 @@ final class SourceCatalogue {
 		return false;
 	}
 
+	/** Platforms the running lookup could not reach; empty when no lookup ran or both answered. */
+	Set<DownloadSource.Provider> unreachableProviders() {
+		FetchManager manager = sourceFetchManager;
+		return manager == null ? Set.of() : manager.unreachableProviders();
+	}
+
+	/** Drops the settled or aborted lookup and runs a fresh one, so a platform that was down gets another chance. */
+	void retrySourceFetch() throws IOException, InterruptedException {
+		FetchManager manager = sourceFetchManager;
+		if (manager != null) {
+			manager.cancel();
+			sourceFetchManager = null;
+		}
+		startSourceFetch();
+	}
+
 	FetchManager sourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
 		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur);

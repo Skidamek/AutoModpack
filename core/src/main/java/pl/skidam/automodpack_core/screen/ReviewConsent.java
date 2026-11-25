@@ -15,4 +15,4 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
  */
 public record ReviewConsent(Consumer<Boolean> setFirstInstallLocalModCleanup, Consumer<Boolean> setLocalModCleanup, BooleanSupplier localModArchive, Runnable startConfirmedUpdate,
 		Consumer<SelectionIntent> reselectAndPreview, Consumer<Boolean> setLaunchWritesUnverified, Runnable cancelConfirmation, Runnable cancelFromPlayer, BooleanSupplier reviewActive,
-		BooleanSupplier reviewCancelled, BooleanSupplier cancelledByPlayer, BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability) {}
+		BooleanSupplier reviewCancelled, BooleanSupplier cancelledByPlayer, BooleanSupplier reviewPreviewing, Supplier<SourceAvailability> sourceAvailability, Runnable retrySourceLookup) {}

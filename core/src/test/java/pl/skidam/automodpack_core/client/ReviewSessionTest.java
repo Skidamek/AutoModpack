@@ -219,7 +219,7 @@ class ReviewSessionTest {
 	}
 
 	private static PreviewPayload payload(boolean writesUnverifiedJar, boolean launchWritesUnverified) {
-		return new PreviewPayload(null, "", "", writesUnverifiedJar, null, List.of(), null, launchWritesUnverified, null, () -> {}, () -> {});
+		return new PreviewPayload(null, "", "", writesUnverifiedJar, null, List.of(), null, launchWritesUnverified, Set.of(), null, () -> {}, () -> {});
 	}
 
 	private record Harness(ModpackUpdater updater, ReviewSession review, ReviewConsent actions, ClientStorage storage) {}

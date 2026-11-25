@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -33,6 +34,7 @@ public class FetchManager {
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
 	private final PlatformCache platformCache;
 	private final Lookups lookups;
+	private final Set<DownloadSource.Provider> unreachableProviders = ConcurrentHashMap.newKeySet();
 
 	private final Object metadataRefetchLock = new Object();
 	private CompletableFuture<Map<String, List<DownloadSource>>> inFlightRefetch;
@@ -158,7 +160,10 @@ public class FetchManager {
 		if (missing.isEmpty()) return;
 
 		List<ModrinthAPI> results = lookups.modrinthBySha1s().apply(missing);
-		if (results == null) return;
+		if (results == null) {
+			unreachableProviders.add(DownloadSource.Provider.MODRINTH);
+			return;
+		}
 
 		Map<String, String> slugs = lookups.slugsByProjectIds().apply(results.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
 		for (ModrinthAPI info : results) {
@@ -185,7 +190,10 @@ public class FetchManager {
 		if (missing.isEmpty()) return;
 
 		List<CurseForgeAPI> results = lookups.curseForgeByMurmurs().apply(missing);
-		if (results == null) return;
+		if (results == null) {
+			unreachableProviders.add(DownloadSource.Provider.CURSEFORGE);
+			return;
+		}
 
 		for (CurseForgeAPI info : results) {
 			Datas datas = fetchDatas.get(info.sha1Hash());
@@ -346,6 +354,11 @@ public class FetchManager {
 	public boolean listedOn(String sha1, DownloadSource.Provider provider) {
 		Datas data = dataFor(sha1);
 		return data != null && snapshot(data.fetchedData().listings()).contains(provider);
+	}
+
+	/** Platforms whose lookup returned no answer at all, as opposed to an answer that matched nothing. */
+	public Set<DownloadSource.Provider> unreachableProviders() {
+		return Set.copyOf(unreachableProviders);
 	}
 
 	/** Whether this sha1 takes part in the third-party lookup at all. */

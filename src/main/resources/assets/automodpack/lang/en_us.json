@@ -34,6 +34,8 @@
   "automodpack.confirm.matchedCurseforge": "Mod files matched on CurseForge: %s",
   "automodpack.confirm.matchedCurseforgeJoined": "CurseForge: %s",
   "automodpack.confirm.unverifiedExplain": "They can be harmless custom mods, edited mods, or malicious mods. AutoModpack cannot tell which.",
+  "automodpack.confirm.unreachablePlatforms": "Could not reach %s to verify mod sources. Some or all of these files may still be unverified.",
+  "automodpack.confirm.retryVerification": "Retry check",
   "automodpack.confirm.ack": "I understand the risk and trust this server.",
   "automodpack.confirm.launchWrites": "Allow updates with mods not on CurseForge or Modrinth without extra confirmation, including on launch.",
   "automodpack.launchNotice.button": "Pack updated while starting",

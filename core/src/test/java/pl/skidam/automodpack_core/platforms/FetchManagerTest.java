@@ -1,12 +1,14 @@
 package pl.skidam.automodpack_core.platforms;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,6 +62,41 @@ class FetchManagerTest {
 			second.fetchAsync().join();
 			assertTrue(second.hasListing(SHA1), "the persisted listing must verify the next lookup");
 			assertTrue(second.sourcesFor(SHA1).isEmpty());
+		}
+	}
+
+	@Test
+	void anUnreachableModrinthLookupIsRecordedWithoutVerifyingTheFile() throws Exception {
+		FetchManager.Lookups lookups = new FetchManager.Lookups(sha1s -> null, ids -> Map.of(), hashes -> List.of());
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			FetchManager manager = new FetchManager(List.of(new FetchManager.FetchData("mods/a.jar", SHA1, MURMUR, "mod")), cache, lookups);
+			manager.fetchAsync().join();
+			assertEquals(Set.of(DownloadSource.Provider.MODRINTH), manager.unreachableProviders());
+			assertFalse(manager.hasListing(SHA1), "an unreachable platform is not a verified listing");
+			assertTrue(manager.sourcesFor(SHA1).isEmpty());
+		}
+	}
+
+	@Test
+	void anUnreachableCurseForgeLookupIsRecordedWithoutVerifyingTheFile() throws Exception {
+		FetchManager.Lookups lookups = new FetchManager.Lookups(sha1s -> List.of(), ids -> Map.of(), hashes -> null);
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			FetchManager manager = new FetchManager(List.of(new FetchManager.FetchData("mods/a.jar", SHA1, MURMUR, "mod")), cache, lookups);
+			manager.fetchAsync().join();
+			assertEquals(Set.of(DownloadSource.Provider.CURSEFORGE), manager.unreachableProviders());
+			assertFalse(manager.hasListing(SHA1), "an unreachable platform is not a verified listing");
+			assertTrue(manager.sourcesFor(SHA1).isEmpty());
+		}
+	}
+
+	@Test
+	void anEmptyAnswerIsASettledMissNotAnUnreachablePlatform() throws Exception {
+		FetchManager.Lookups lookups = new FetchManager.Lookups(sha1s -> List.of(), ids -> Map.of(), hashes -> List.of());
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			FetchManager manager = new FetchManager(List.of(new FetchManager.FetchData("mods/a.jar", SHA1, MURMUR, "mod")), cache, lookups);
+			manager.fetchAsync().join();
+			assertTrue(manager.unreachableProviders().isEmpty());
+			assertFalse(manager.hasListing(SHA1));
 		}
 	}
 

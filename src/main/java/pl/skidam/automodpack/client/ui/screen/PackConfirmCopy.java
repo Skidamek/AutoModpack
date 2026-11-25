@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -12,6 +13,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.SourceCounts;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.JarUtils;
 
 /** Shared copy and catalogue helpers for the pack confirm screen. */
@@ -32,6 +34,17 @@ final class PackConfirmCopy {
 
 	static String unverifiedExplain() {
 		return VersionedText.str("automodpack.confirm.unverifiedExplain");
+	}
+
+	/** Why jars still read as unverified: a platform that never answered is not the same as a platform that answered with nothing. */
+	static String unreachableNotice(Set<DownloadSource.Provider> unreachable) {
+		if (unreachable == null || unreachable.isEmpty()) return "";
+		boolean modrinth = unreachable.contains(DownloadSource.Provider.MODRINTH);
+		boolean curseforge = unreachable.contains(DownloadSource.Provider.CURSEFORGE);
+		if (modrinth && curseforge) return VersionedText.str("automodpack.confirm.unreachablePlatforms", "Modrinth and CurseForge");
+		if (modrinth) return VersionedText.str("automodpack.confirm.unreachablePlatforms", "Modrinth");
+		if (curseforge) return VersionedText.str("automodpack.confirm.unreachablePlatforms", "CurseForge");
+		return "";
 	}
 
 	static String intro(String origin) {

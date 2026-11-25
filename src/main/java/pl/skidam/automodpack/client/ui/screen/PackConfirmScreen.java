@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
@@ -33,6 +34,7 @@ import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 
 /** Confirm before an update starts; the unverified-jar list and typed-ack gate appear only when unverified jars were selected. */
 public final class PackConfirmScreen extends VersionedScreen {
@@ -102,6 +104,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 		return firstInstall ? welcome.unverifiedJarPaths() : later.unverifiedJarPaths();
 	}
 
+	private Set<DownloadSource.Provider> unreachableProviders() {
+		Set<DownloadSource.Provider> unreachable = firstInstall ? welcome.unreachableProviders() : later.unreachableProviders();
+		return unreachable == null ? Set.of() : unreachable;
+	}
+
 	@Override
 	protected void init() {
 		super.init();
@@ -125,16 +132,21 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		ActionDefinition historyAction = notes ? optionalAction(VersionedText.text("automodpack.management.history"), button -> openHistory()) : null;
 		ActionDefinition customizeAction = customize ? optionalAction(PackConfirmCopy.customizeLabel(), button -> customize()) : null;
+		ActionDefinition retryAction = unverified && !unreachableProviders().isEmpty() && actions != null && actions.retrySourceLookup() != null
+				? optionalAction(VersionedText.text("automodpack.confirm.retryVerification"), button -> retryVerification())
+				: null;
 		Component cancelLabel = VersionedText.text(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.text(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
 		ActionDefinition cancelAction = secondaryAction(cancelLabel, button -> cancel());
 		ActionDefinition reviewAction = optionalAction(VersionedText.text("automodpack.browser.reviewFiles"), button -> openFiles());
 		ActionDefinition primaryDef = primaryAction(primaryLabel, button -> confirm());
 		List<ActionRow> rows = new ArrayList<>();
-		// History and Customize are both compact optional actions: one shared row instead of two full-width ones.
-		if (historyAction != null && customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction, customizeAction));
-		else if (historyAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction));
-		else if (customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, customizeAction));
+		// History, Customize, and Retry check are all compact optional actions: one shared row instead of three full-width ones.
+		List<ActionDefinition> auxiliary = new ArrayList<>();
+		if (historyAction != null) auxiliary.add(historyAction);
+		if (customizeAction != null) auxiliary.add(customizeAction);
+		if (retryAction != null) auxiliary.add(retryAction);
+		if (!auxiliary.isEmpty()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, auxiliary.toArray(ActionDefinition[]::new)));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, cancelAction, reviewAction, primaryDef));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
@@ -210,6 +222,10 @@ public final class PackConfirmScreen extends VersionedScreen {
 		appendSourceLines(topLines, wrapWidth);
 		topLines.add(blankLine());
 		List<MutableComponent> bottomLines = new ArrayList<>();
+		if (!unreachableProviders().isEmpty()) {
+			bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unreachableNotice(unreachableProviders()), wrapWidth, ChatFormatting.YELLOW));
+			bottomLines.add(blankLine());
+		}
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedExplain(), wrapWidth, ChatFormatting.RED));
 		bottomLines.add(blankLine());
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth, ChatFormatting.RED));
@@ -391,6 +407,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 			}
 		};
 		ScreenImpl.setScreen(new GroupSelectionScreen(this, target(), actions, action));
+	}
+
+	private void retryVerification() {
+		if (actions == null || actions.retrySourceLookup() == null) return;
+		actions.retrySourceLookup().run();
 	}
 
 	private void openFiles() {

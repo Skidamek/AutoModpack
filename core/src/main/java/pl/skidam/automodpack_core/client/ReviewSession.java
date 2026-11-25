@@ -141,7 +141,7 @@ final class ReviewSession {
 	ReviewConsent reviewConsent() {
 		return new ReviewConsent(this::setFirstInstallLocalModCleanup, this::setLocalModCleanup, this::localModArchive, this::startConfirmedUpdate, this::reselectAndPreview, this::setLaunchWritesUnverified,
 				this::cancelConfirmation, this::cancelFromPlayer, () -> confirmationState.get() == ConfirmationState.WAITING, () -> confirmationState.get() == ConfirmationState.CANCELLED,
-				this::isCancelledByPlayer, () -> confirmationState.get() == ConfirmationState.PREVIEWING, sourceCatalogue::sourceAvailability);
+				this::isCancelledByPlayer, () -> confirmationState.get() == ConfirmationState.PREVIEWING, sourceCatalogue::sourceAvailability, this::retrySourceLookup);
 	}
 
 	/** The first-install welcome snapshot; everything is settled before the screen opens, so the review never moves under it. */
@@ -156,7 +156,7 @@ final class ReviewSession {
 		}
 		return new ReviewPayload(updater.getSelectedTarget(), reviewCatalogue(), getFirstInstallPatchNotes(), joinOrigin(), unverifiedSelectedJarPaths(),
 				sourceCatalogue.selectedJarSourceCounts(updater.getSelectedTarget()), firstInstallLocalModPaths(),
-				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), existingMods.keepExisting(), effectiveLaunchWritesUnverified(), reviewConsent());
+				uncached < 0 ? OptionalLong.empty() : OptionalLong.of(uncached), existingMods.keepExisting(), effectiveLaunchWritesUnverified(), sourceCatalogue.unreachableProviders(), reviewConsent());
 	}
 
 	public List<JournalEntry> getFirstInstallPatchNotes() {
@@ -295,6 +295,32 @@ final class ReviewSession {
 		}
 		ScreenManager.waiting(this::cancelFromPlayer);
 		ModpackUpdater.executor().execute(() -> startUpdate(true));
+	}
+
+	/**
+	 * Re-runs the platform lookup and returns the review to the surface it came from. The unverified-jar gate is
+	 * untouched: a failed retry leaves the files exactly as unverified as they were.
+	 */
+	private void retrySourceLookup() {
+		ModpackUpdater.executor().execute(() -> {
+			ScreenManager.waiting(this::cancelFromPlayer);
+			try {
+				sourceCatalogue.retrySourceFetch();
+				if (firstConnection && confirmationState.get() == ConfirmationState.WAITING) ScreenManager.welcome(reviewPayload());
+				else startUpdate(true);
+			} catch (Exception e) {
+				if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
+					if (abortedByPlayer(e)) {
+						playerCancelled.compareAndSet(false, true);
+						LOGGER.info("Modpack update preparation was aborted by the player");
+					}
+					confirmCancellationHandled();
+					return;
+				}
+				updater.close();
+				ModpackUpdater.showUpdateFailure(e);
+			}
+		});
 	}
 
 	/**

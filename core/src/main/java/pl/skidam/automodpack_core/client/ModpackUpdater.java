@@ -47,6 +47,7 @@ import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateLoopDetector;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -147,6 +148,11 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
 	List<String> unverifiedSelectedJarPaths() {
 		return review.unverifiedSelectedJarPaths();
+	}
+
+	/** Platforms the source lookup could not reach, so the screen can offer a retry instead of a silent miss. */
+	Set<DownloadSource.Provider> unreachableProviders() {
+		return sourceCatalogue.unreachableProviders();
 	}
 
 	/** Jar counts by lookup source over the selected target; the lookup settles before review screens open. */
@@ -673,7 +679,7 @@ public class ModpackUpdater implements AutoCloseable {
 		boolean updateOrRollback = preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK;
 		boolean writesUnverifiedJar = updateOrRollback && review.planWritesUnverifiedJar(preview.plan());
 		return PreviewPayload.review(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
-				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), review.reviewConsent(), continueAction, cancelAction);
+				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), launchWritesUnverified(), sourceCatalogue.unreachableProviders(), review.reviewConsent(), continueAction, cancelAction);
 	}
 
 	boolean isCurrentAttempt(UpdateAttempt candidate) {
