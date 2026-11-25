@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -116,12 +114,5 @@ final class HostProbe {
 			}
 			settled.accept(scheduler.report(RescuePolicy.HOST_DOMAIN, received, elapsed) ? Outcome.MEASURED : Outcome.TOO_LITTLE);
 		});
-	}
-
-	static List<DownloadData> platformAttempts(Iterable<DownloadData> inFlight) {
-		List<DownloadData> attempts = new ArrayList<>();
-		for (DownloadData data : inFlight)
-			if (data.route == DownloadData.Route.PLATFORM) attempts.add(data);
-		return attempts;
 	}
 }

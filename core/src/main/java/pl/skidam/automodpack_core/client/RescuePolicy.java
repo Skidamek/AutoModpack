@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,6 +44,7 @@ public final class RescuePolicy {
 	private static final long ADEQUATE_PLATFORM_SPEED = 10L * 1024 * 1024;
 
 	private final DownloadScheduler scheduler;
+	private final Set<String> engagedDomains = ConcurrentHashMap.newKeySet();
 
 	public RescuePolicy(DownloadScheduler scheduler) {
 		this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
@@ -60,18 +63,22 @@ public final class RescuePolicy {
 		Double host = scheduler.measuredSpeed(HOST_DOMAIN);
 		if (host == null) return platformDomains;
 		double fastest = 0;
+		boolean anyCandidate = false;
 		for (String domain : platformDomains) {
+			if (HOST_DOMAIN.equals(domain)) continue;
 			Double measured = scheduler.measuredSpeed(domain);
 			if (measured == null) return platformDomains;
 			fastest = Math.max(fastest, measured);
+			anyCandidate = true;
 		}
+		if (!anyCandidate) return platformDomains;
 		if (adequate(fastest)) {
 			LOGGER.debug("a platform domain measures at least {}; staying platform-first", ByteFormat.formatSpeed(ADEQUATE_PLATFORM_SPEED));
 			return platformDomains;
 		}
 		if (host < ENGAGE_RATIO * fastest) {
-			LOGGER.debug("the host measured {}, {}x the fastest platform domain at {}; staying platform-first", ByteFormat.formatSpeed(host.longValue()),
-					ratio(host, fastest), ByteFormat.formatSpeed((long) fastest));
+			LOGGER.debug("the host measured {}, {}x the fastest platform domain at {}; staying platform-first", ByteFormat.formatSpeed(host.longValue()), ratio(host, fastest),
+					ByteFormat.formatSpeed((long) fastest));
 			return platformDomains;
 		}
 		List<String> rerouted = new ArrayList<>(platformDomains.size() + 1);
@@ -100,9 +107,7 @@ public final class RescuePolicy {
 
 	/** True while this platform domain is measurably slower than the host and under the adequacy bar: the state a queued task is routed on and the in-flight one is rerouted on. */
 	public boolean hostFarFaster(String domain) {
-		Double host = scheduler.measuredSpeed(HOST_DOMAIN);
-		Double measured = scheduler.measuredSpeed(domain);
-		return host != null && measured != null && !adequate(measured) && host >= ENGAGE_RATIO * measured;
+		return engagement(domain) != null;
 	}
 
 	/** Whether a platform delivering at this rate already does the job, so no rescue is owed it however much faster the host reads. */
@@ -110,13 +115,29 @@ public final class RescuePolicy {
 		return bytesPerSecond >= ADEQUATE_PLATFORM_SPEED;
 	}
 
-	/** The engagement, logged once per engaged domain: the observed ratio travels with it, so the constant above has a trail to tune against. */
-	public void engaged(String domain) {
+	/**
+	 * The engagement, logged once per engaged domain: the observed ratio travels with it, so the constant above has a trail to tune against. Returns the same verdict as {@link #hostFarFaster(String)}, so a reroute reads
+	 * the samples once.
+	 */
+	public boolean engaged(String domain) {
+		Engagement engagement = engagement(domain);
+		if (engagement == null) return false;
+		if (engagedDomains.add(domain)) {
+			LOGGER.info("the AutoModpack host measured {}, {}x the platform domain {} at {}; the host wire takes its traffic", ByteFormat.formatSpeed((long) engagement.host()),
+					ratio(engagement.host(), engagement.platform()), domain, ByteFormat.formatSpeed((long) engagement.platform()));
+		}
+		return true;
+	}
+
+	/** The two rates behind an engagement, read once so the verdict and its log agree. */
+	private record Engagement(double host, double platform) {}
+
+	/** The engagement this domain warrants right now, null while it does not: the host measured, the domain measured, under the bar and outrun by {@link #ENGAGE_RATIO}. */
+	private Engagement engagement(String domain) {
 		Double host = scheduler.measuredSpeed(HOST_DOMAIN);
 		Double measured = scheduler.measuredSpeed(domain);
-		if (host == null || measured == null) return;
-		LOGGER.info("the AutoModpack host measured {}, {}x the platform domain {} at {}; the host wire takes its traffic", ByteFormat.formatSpeed(host.longValue()),
-				ratio(host, measured), domain, ByteFormat.formatSpeed(measured.longValue()));
+		if (host == null || measured == null || adequate(measured) || host < ENGAGE_RATIO * measured) return null;
+		return new Engagement(host, measured);
 	}
 
 	private static String ratio(double host, double platform) {

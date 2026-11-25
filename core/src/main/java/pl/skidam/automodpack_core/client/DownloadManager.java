@@ -187,8 +187,8 @@ public class DownloadManager implements DownloadView {
 			DownloadData chosen = null;
 			Path chosenDirectory = null;
 			long chosenTile = -1;
-			for (DownloadData inFlight : HostProbe.platformAttempts(queue.inFlightTasks())) {
-				if (!probe.worthMeasuring(inFlight)) continue;
+			for (DownloadData inFlight : queue.inFlightTasks()) {
+				if (inFlight.route != Route.PLATFORM || !probe.worthMeasuring(inFlight)) continue;
 				Path slices = PartialResume.directory(stagingDirectory, inFlight.sha1);
 				long tile;
 				try {
@@ -223,10 +223,9 @@ public class DownloadManager implements DownloadView {
 	private List<Rerouted> rescueReroutes() {
 		List<Rerouted> reroutes = null;
 		for (DownloadData data : queue.inFlightTasks()) {
-			if (data.route != Route.PLATFORM || data.attemptControl == null || !rescue.hostFarFaster(data.activeDomain)) continue;
+			if (data.route != Route.PLATFORM || data.attemptControl == null || !rescue.engaged(data.activeDomain)) continue;
 			if (reroutes == null) reroutes = new ArrayList<>();
 			reroutes.add(new Rerouted(data.name, data.activeDomain, data.attemptControl));
-			rescue.engaged(data.activeDomain);
 		}
 		return reroutes == null ? List.of() : reroutes;
 	}
