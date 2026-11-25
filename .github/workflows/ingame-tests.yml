@@ -59,7 +59,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
-          cache-provider: basic
       - name: Build instrumented one jar and fixtures
         run: ./gradlew build -Pautomodpack.autotest
       - name: Upload jars

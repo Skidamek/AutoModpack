@@ -45,7 +45,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
-          cache-provider: basic
           cache-read-only: ${{ inputs.gradle_cache_read_only }}
       - name: Build targets
         # -x test: the core suite runs in CI on every push; a release only ships artifacts.
