@@ -34,6 +34,24 @@ class NetUtilsTest {
 	}
 
 	@Test
+	void matchesFingerprintNormalizesSeparatorsAndCase() {
+		String expected = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+		String upper = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
+		String colonSeparated = "01:23:45:67:89:AB:CD:EF:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef";
+		String spacedAndHyphenated = " 0123-4567 89ab-cdef 0123-4567 89ab-cdef\n0123-4567 89ab-cdef 0123-4567 89ab-cdef ";
+
+		assertTrue(NetUtils.matchesFingerprint(expected, expected));
+		assertTrue(NetUtils.matchesFingerprint(upper, expected));
+		assertTrue(NetUtils.matchesFingerprint(colonSeparated, expected));
+		assertTrue(NetUtils.matchesFingerprint(spacedAndHyphenated, upper));
+		assertFalse(NetUtils.matchesFingerprint(expected.substring(0, 63), expected));
+		assertFalse(NetUtils.matchesFingerprint(expected + "0", expected));
+		assertFalse(NetUtils.matchesFingerprint(null, expected));
+		assertFalse(NetUtils.matchesFingerprint(expected, null));
+		assertFalse(NetUtils.matchesFingerprint("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
+	}
+
+	@Test
 	void privateKeyIsOwnerOnlyOnPosix(@TempDir Path directory) throws Exception {
 		Assumptions.assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
 		Path keyPath = directory.resolve("private-key.pem");

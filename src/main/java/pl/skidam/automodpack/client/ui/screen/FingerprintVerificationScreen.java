@@ -99,7 +99,7 @@ public class FingerprintVerificationScreen extends VersionedScreen implements Lo
 		fieldY = stackTop + stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM;
 
 		int fieldLeft = panelLeft(BODY);
-		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.text("automodpack.validation.fingerprint.field"), VersionedText.text("automodpack.learnmore"), 64);
+		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.text("automodpack.validation.fingerprint.field"), VersionedText.text("automodpack.learnmore"), 128);
 	}
 
 	private void forceValidate() {
@@ -113,7 +113,7 @@ public class FingerprintVerificationScreen extends VersionedScreen implements Lo
 	private void verifyFingerprint() {
 		String input = textField.getValue().strip();
 		inputText = input;
-		if (input.equals(serverFingerprint)) {
+		if (NetUtils.matchesFingerprint(input, serverFingerprint)) {
 			forceValidate();
 		} else {
 			LOGGER.error("Server fingerprint validation failed, try again");

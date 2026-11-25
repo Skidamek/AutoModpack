@@ -30,6 +30,7 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 import javax.security.auth.x500.X500Principal;
 
@@ -166,10 +167,20 @@ public class NetUtils {
 		}
 	}
 
+	private static final Pattern FINGERPRINT_SEPARATORS = Pattern.compile("[\\s:-]");
+	private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-f]{64}");
+
 	public static String normalizeFingerprint(String fingerprint) {
 		String normalized = fingerprint == null ? "" : fingerprint.replace(":", "").trim().toLowerCase(Locale.ROOT);
 		if (!normalized.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("Certificate fingerprint must be 64 hexadecimal characters");
 		return normalized;
+	}
+
+	public static boolean matchesFingerprint(String input, String expectedFingerprint) {
+		if (input == null || expectedFingerprint == null) return false;
+		String normalizedInput = FINGERPRINT_SEPARATORS.matcher(input).replaceAll("").toLowerCase(Locale.ROOT);
+		String normalizedExpected = FINGERPRINT_SEPARATORS.matcher(expectedFingerprint).replaceAll("").toLowerCase(Locale.ROOT);
+		return SHA256_HEX.matcher(normalizedInput).matches() && SHA256_HEX.matcher(normalizedExpected).matches() && normalizedInput.equals(normalizedExpected);
 	}
 
 	public static String shortenFingerprint(String fingerprint) {
