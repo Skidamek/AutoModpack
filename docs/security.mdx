@@ -85,8 +85,10 @@ When the certificate changes, update the `fp` value and wait out DNS caching bef
 For a copy-paste flow, generate an authenticated join address:
 
 ```
-/automodpack host fingerprint share <minecraft-address>
+/automodpack invite <minecraft-address>
 ```
+
+It prints the pinned address together with the plain one. When TLS terminates in front of the built-in host, whether through `disable-internal-tls` or an externally served endpoint, it prints only the plain address and names the certificate clients actually verify.
 
 The pinned form appends the fingerprint to a normal address:
 

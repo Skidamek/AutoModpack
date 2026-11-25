@@ -24,11 +24,16 @@ Patch notes for the next publish can also be written to `automodpack/host-modpac
 - `host activity` - Shows modpack request activity since startup: totals, recent transfers, in-flight downloads; hover for per-player stats.
 - `host fingerprint` - Prints the [certificate fingerprint](security#how-clients-verify-a-server) of the modpack host.
 - `host fingerprint dns <minecraft-hostname>` - Prints a DNSSEC record that lets clients verify a self-signed certificate automatically.
-- `host fingerprint share <minecraft-address>` - Prints a plain and a pinned copyable join address.
-- `host bootstrap pin <origin>` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients.
-- `host bootstrap install <origin> [endpoint] [connection-mode]` - Writes an install export with the published pack, a provisioning secret, and the advertised endpoint. Requires `disable-internal-tls` to be off.
+- `host bootstrap pin <origin> [name <server-name>]` - Writes `automodpack/automodpack-bootstrap.exported.json` with a TLS pin, for distributing to clients. The optional server name also adds the pack to the client's server list.
+- `host bootstrap install <origin> [endpoint <endpoint> <connection-mode>] [name <server-name>]` - Writes an install export with the published pack, a provisioning secret, and the endpoint clients download from. Requires `disable-internal-tls` to be off.
+
+Without an explicit `endpoint`, the export advertises `advertised-endpoint-host` and `advertised-endpoint-port` when they are set. Otherwise the host is the origin, and the port follows the connection mode: HOLEPUNCH uses the Minecraft port, MAGIC uses `bind-port` when set and the Minecraft port otherwise, and HTTP requires `bind-port`. An explicit `endpoint` always wins.
 
 Both bootstrap exports contain trust data or a provisioning secret. Treat them like credentials; anyone holding one can provision themselves onto your pack. See [bootstrap files](how-it-works/files-on-disk#bootstrap) for how clients import them.
+
+## Inviting players
+
+- `invite <minecraft-address>` - Prints copyable join addresses for players. With local TLS it prints the pinned AutoModpack address, the plain Minecraft address, and the `host bootstrap install` command for one-file setup. When `disable-internal-tls` is on, it prints the plain address and says there is no AutoModpack fingerprint to pin. When the advertised endpoint is served by a reverse proxy or tunnel, it prints the plain address and says clients verify against that front-end's certificate.
 
 ## Configuration
 

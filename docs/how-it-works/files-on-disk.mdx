@@ -4,11 +4,11 @@ AutoModpack keeps its files in an `automodpack/` folder inside the game director
 
 ## Bootstrap
 
-Bootstrap allows making a very simple user friednly setup for private server, it only requires installing AutoModpack and provide a single file to client, on a first client boot, AutoModpack will install the default selection of a modpack, boot straight into it and keep in sync.
+Bootstrap makes setup for a private server simple: players install AutoModpack, drop in one file, and the first launch installs the default modpack selection, boots straight into it, and keeps it in sync.
 
 The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. Put a copy there, start the game, and AutoModpack imports it and deletes it. AutoModpack must already be installed. The file lives inside `automodpack/` because a pack can never write there; the same file name at the instance root is ignored with a warning. If the file includes `serverName`, the import also creates the entry in the vanilla server list.
 
-`/automodpack host bootstrap` writes `~/automodpack/automodpack-bootstrap.exported.json`. Copy that file to clients as `automodpack-bootstrap.json`. It is never imported by the instance that wrote it, so running the command on a logical server does not reroute the same instance. An install export contains a provisioning secret, so treat it like a credential.
+`/automodpack host bootstrap pin` and `/automodpack host bootstrap install` write `~/automodpack/automodpack-bootstrap.exported.json`. Copy that file to clients as `automodpack-bootstrap.json`. It is never imported by the instance that wrote it, so running the command on a logical server does not reroute the same instance. An install export contains a provisioning secret, so treat it like a credential.
 
 ## You edit these
 
