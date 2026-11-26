@@ -51,6 +51,8 @@ dependencies {
 	deps.forEach { runtimeOnly(it) }
 	deps.forEach { testImplementation(it) }
 
+	// Tests fabricate a CA, its leaves and its CRLs with it, so the parser meets a third party's encoding; no production
+	// code may name it - core derives and signs its own TLS certificate with the JDK.
 	testImplementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
