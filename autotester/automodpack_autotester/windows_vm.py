@@ -114,7 +114,7 @@ def build_qemu_argv(
         )
     if ephemeral:
         argv.append("-snapshot")
-    if load_snapshot and cfg.snapshot_name:
+    elif load_snapshot and cfg.snapshot_name:
         argv.extend(["-loadvm", cfg.snapshot_name])
     if iso is not None:
         argv.extend(["-cdrom", str(iso)])
@@ -206,14 +206,20 @@ class _SharedVmSession:
         self.cfg = cfg
         self._lock = threading.Lock()
         self._agent: AgentRpcClient | None = None
+        self._failed: Exception | None = None
         self._vm_proc: subprocess.Popen | None = None
         self._tpm_proc: subprocess.Popen | None = None
         self._tmp_dir: Path | None = None
+
+    def is_connected(self) -> bool:
+        return self._agent is not None
 
     def agent(self) -> AgentRpcClient:
         with self._lock:
             if self._agent is not None:
                 return self._agent
+            if self._failed is not None:
+                raise self._failed
             env_agent = os.environ.get("AUTOMODPACK_WINDOWS_AGENT", f"127.0.0.1:{self.cfg.guest_agent_port}")
             host, port_str = env_agent.rsplit(":", 1)
             try:
@@ -224,10 +230,12 @@ class _SharedVmSession:
             except Exception:
                 pass
             if not self.cfg.golden_disk.is_file():
-                raise RuntimeError(
+                err = RuntimeError(
                     f"No running Windows agent at {env_agent} and golden image not found at {self.cfg.golden_disk}. "
                     "Run `autotester windows-vm init --from-disk <win.qcow2>` and `autotester windows-vm snapshot` first."
                 )
+                self._failed = err
+                raise err
             tmp_dir = Path(tempfile.mkdtemp(prefix="amp-winvm-"))
             self._tmp_dir = tmp_dir
             tpm_sock: Path | None = None
@@ -241,51 +249,60 @@ class _SharedVmSession:
             host_port = ports.ports[0]
             ports.release()
             qmp = tmp_dir / "qmp.sock"
-            has_snap = _disk_has_snapshot(self.cfg.golden_disk, self.cfg.snapshot_name)
+            # QEMU forbids combining -snapshot (anonymous overlay) with -loadvm (internal snapshot on the backing image);
+            # an ephemeral -snapshot boot starts Windows + AutoModpackWindowsAgent cleanly in ~25s without mutating golden_disk.
             argv = build_qemu_argv(
                 self.cfg,
                 host_agent_port=host_port,
                 qmp_socket=qmp,
                 tpm_socket=tpm_sock,
-                load_snapshot=has_snap,
+                load_snapshot=False,
                 ephemeral=True,
             )
             log = (tmp_dir / "qemu.log").open("wb")
             self._vm_proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT)
-            agent = AgentRpcClient("127.0.0.1", host_port)
-            deadline = time.monotonic() + (45.0 if has_snap else 180.0)
+            probe_agent = AgentRpcClient("127.0.0.1", host_port, timeout=3.0)
+            deadline = time.monotonic() + 180.0
             while time.monotonic() < deadline:
                 if self._vm_proc.poll() is not None:
-                    raise RuntimeError(f"QEMU exited early (code={self._vm_proc.returncode})\n{(tmp_dir / 'qemu.log').read_text(errors='replace')}")
+                    err = RuntimeError(f"QEMU exited early (code={self._vm_proc.returncode})\n{(tmp_dir / 'qemu.log').read_text(errors='replace')}")
+                    self._failed = err
+                    self._close_locked()
+                    raise err
                 try:
-                    agent.call("ping")
-                    self._agent = agent
-                    return agent
+                    probe_agent.call("ping")
+                    self._agent = AgentRpcClient("127.0.0.1", host_port, timeout=30.0)
+                    return self._agent
                 except Exception:
                     time.sleep(0.25)
-            self.close()
-            raise TimeoutError("Windows KVM worker agent did not respond after boot/snapshot restore")
+            self._close_locked()
+            err = TimeoutError("Windows KVM worker agent did not respond after boot/snapshot restore")
+            self._failed = err
+            raise err
 
     def close(self) -> None:
         with self._lock:
-            if self._vm_proc is not None:
-                self._vm_proc.terminate()
-                try:
-                    self._vm_proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    self._vm_proc.kill()
-                self._vm_proc = None
-            if self._tpm_proc is not None:
-                self._tpm_proc.terminate()
-                try:
-                    self._tpm_proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self._tpm_proc.kill()
-                self._tpm_proc = None
-            if self._tmp_dir is not None:
-                shutil.rmtree(self._tmp_dir, ignore_errors=True)
-                self._tmp_dir = None
-            self._agent = None
+            self._close_locked()
+
+    def _close_locked(self) -> None:
+        if self._vm_proc is not None:
+            self._vm_proc.terminate()
+            try:
+                self._vm_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self._vm_proc.kill()
+            self._vm_proc = None
+        if self._tpm_proc is not None:
+            self._tpm_proc.terminate()
+            try:
+                self._tpm_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._tpm_proc.kill()
+            self._tpm_proc = None
+        if self._tmp_dir is not None:
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+            self._tmp_dir = None
+        self._agent = None
 
 
 def _disk_has_snapshot(disk: Path, name: str) -> bool:
@@ -465,6 +482,8 @@ class WindowsVmClient:
         return 0
 
     def stop(self, *, force: bool = True) -> None:
+        if not self._session.is_connected():
+            return
         if self.bridge is not None and not force:
             try:
                 self.bridge.quit()
@@ -604,6 +623,8 @@ def cli_windows_vm(args, settings: dict) -> int:
             agent = AgentRpcClient("127.0.0.1", cfg.guest_agent_port, timeout=3.0)
             deadline = time.monotonic() + 180.0
             while time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    raise RuntimeError(f"QEMU exited early while waiting for Windows agent (code={proc.returncode})")
                 try:
                     agent.call("ping")
                     break
@@ -612,15 +633,25 @@ def cli_windows_vm(args, settings: dict) -> int:
             else:
                 raise TimeoutError("Windows guest agent did not respond within 180s (ensure windows_agent.py autostart is configured)")
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as qmp:
+                qmp.settimeout(180.0)
                 qmp.connect(str(qmp_path))
-                qmp.recv(4096)
+                qmp_r = qmp.makefile("r", encoding="utf-8")
+                qmp_r.readline()  # greeting
                 qmp.sendall(b'{"execute":"qmp_capabilities"}\n')
-                qmp.recv(4096)
+                qmp_r.readline()  # capabilities ack
                 cmd = json.dumps({"execute": "human-monitor-command", "arguments": {"command-line": f"savevm {cfg.snapshot_name}"}}) + "\n"
                 qmp.sendall(cmd.encode("utf-8"))
-                qmp.recv(4096)
+                while True:
+                    line = qmp_r.readline()
+                    if not line:
+                        raise RuntimeError("QMP closed while saving snapshot")
+                    msg = json.loads(line)
+                    if "error" in msg:
+                        raise RuntimeError(f"QMP savevm failed: {msg['error']}")
+                    if "return" in msg:
+                        break
                 qmp.sendall(b'{"execute":"quit"}\n')
-            proc.wait(timeout=30)
+            proc.wait(timeout=60)
             print(f"Saved live RAM snapshot {cfg.snapshot_name!r} in {cfg.golden_disk}")
             return 0
         finally:

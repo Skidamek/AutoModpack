@@ -69,10 +69,14 @@ def test_qemu_argv_uses_kvm_snapshot_and_ephemeral_overlay(tmp_path: Path):
     argv = build_qemu_argv(cfg, host_agent_port=29450, qmp_socket=tmp_path / "qmp.sock", tpm_socket=tmp_path / "swtpm.sock")
     assert "-enable-kvm" in argv
     assert "-snapshot" in argv
-    assert "-loadvm" in argv
-    assert "ready" in argv
+    assert "-loadvm" not in argv
     assert "-tpmdev" in argv
     assert any("hostfwd=tcp:127.0.0.1:29450-:19450" in a for a in argv)
+
+    snap_argv = build_qemu_argv(cfg, host_agent_port=29450, qmp_socket=tmp_path / "qmp.sock", tpm_socket=tmp_path / "swtpm.sock", ephemeral=False, load_snapshot=True)
+    assert "-snapshot" not in snap_argv
+    assert "-loadvm" in snap_argv
+    assert "ready" in snap_argv
 
     provider = WindowsVmProvider({"windowsVm": {"dir": str(tmp_path)}})
     assert provider.capabilities.native_windows_ntfs is True
