@@ -12,4 +12,5 @@ configure<BasePluginExtension> {
 
 tasks.withType<JavaCompile> {
 	options.encoding = "UTF-8"
+	options.debugOptions.debugLevel = "lines,source"
 }

@@ -196,7 +196,8 @@ abstract class OneJarTask : DefaultTask() {
             generateSequence { input.nextEntry }.forEach { entry ->
                 if (entry.isDirectory) return@forEach
                 if (!seen.add(entry.name)) throw GradleException("Duplicate entry ${entry.name} in the outer jar")
-                val bytes = input.readBytes()
+                val rawBytes = input.readBytes()
+                val bytes = if (entry.name.endsWith(".class")) ClassLocalVarStripper.strip(rawBytes) else rawBytes
                 val copy = ZipEntry(entry.name).apply {
                     time = 0L
                 }

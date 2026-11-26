@@ -36,6 +36,7 @@ if (!isAutotestBuild) {
 // result from the other mode, especially when a target is built through Stonecutter.
 tasks.withType<JavaCompile>().configureEach {
 	inputs.property("automodpackBuildMode", automodpackBuildMode)
+	options.debugOptions.debugLevel = "lines,source"
 }
 
 tasks.withType<Jar>().configureEach {
