@@ -149,6 +149,9 @@ class FileCacheTest {
 	void immutableHashAnswersACtimeOnlyDisturbanceWithoutRehashing() throws Exception {
 		Path file = temporaryDirectory.resolve("immutable.bin");
 		Files.writeString(file, "immutable-bytes", StandardCharsets.UTF_8);
+		// A file written in the tick the record is proven in is racily clean and pays one rehash, which a coarse clock (an
+		// NTFS tick, FAT's two seconds) makes likely; the ctime tripwire this test is about is only reachable on a settled record.
+		Files.setLastModifiedTime(file, FileTime.from(Instant.ofEpochSecond(1_700_000_000L)));
 		String realHash = HashUtils.getHash(file);
 		FileCache.FileFingerprint real = FileCache.statSnapshot(file).fingerprint();
 		FileCache.FileFingerprint changedCtime = new FileCache.FileFingerprint(real.lastModifiedNanos(), real.creationTimeNanos(), real.changeTimeNanos() + 1, real.size(), real.fileKey());
