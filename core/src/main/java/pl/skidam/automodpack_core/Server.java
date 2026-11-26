@@ -12,7 +12,6 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
-import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.protocol.Trust;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -46,7 +45,6 @@ public class Server {
 
 		FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current(), true).layout().fetchCacheDirectory());
 		Trust.start();
-		OneCrl.startRefresh();
 		Hosting.installExecutor(new ModpackExecutor());
 		var generation = Hosting.executor().publish();
 

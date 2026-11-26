@@ -49,7 +49,8 @@ public class Preload {
 			FetchCache.useDirectory(DataRootResolver.resolve(GameDirectory.current()).layout().fetchCacheDirectory());
 			Trust.start();
 			// The refresh is fire-and-forget, so it must not run while the game is still loading classes (see Deferred).
-			Deferred.shared().run(OneCrl::startRefresh);
+			// Servers keep the zero-network bundled OneCRL floor from Trust.start() without fetching Mozilla on boot.
+			if (Environment.current().isClient()) Deferred.shared().run(OneCrl::startRefresh);
 			RuntimeJar.prepareForBoot();
 			recoverPendingSelfUpdate();
 			if (Environment.current().isClient()) {
