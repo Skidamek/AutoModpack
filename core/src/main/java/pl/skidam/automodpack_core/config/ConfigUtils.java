@@ -20,7 +20,7 @@ public class ConfigUtils {
 
 	/** Reads, normalizes and saves the server config file, then swaps it into the running document. Empty when no file exists; throws when it cannot be read, parsed or saved, leaving the running document untouched. */
 	public static Optional<ReloadedServerConfig> reloadServerConfig() {
-		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = ReconfConfigs.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
+		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = TomlConfigs.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
 		if (read.isEmpty()) return Optional.empty();
 		ServerConfigJsons.ServerConfigFieldsV3 config = read.get();
 		normalizeServerConfig(config, true);
@@ -36,7 +36,7 @@ public class ConfigUtils {
 	}
 
 	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
-		ServerConfigJsons.ServerConfigFieldsV3 config = ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		ServerConfigJsons.ServerConfigFieldsV3 config = TomlConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
 		// Seeded on first load only. Handshake still accepts this server's loader if the file later omits it.
 		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(Environment.current().loader()));
@@ -48,7 +48,7 @@ public class ConfigUtils {
 	/** Saves by reconciliation: the admin's comments and layout survive; only real value changes splice. */
 	private static void saveServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		try {
-			ReconfConfigs.save(SERVER_CONFIG_FILE, config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+			TomlConfigs.save(SERVER_CONFIG_FILE, config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save server configuration", e);
 		}

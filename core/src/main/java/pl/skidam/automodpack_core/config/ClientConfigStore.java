@@ -38,7 +38,7 @@ public final class ClientConfigStore {
 	 * storage starts from what the file says instead of carrying a copy that no longer exists.
 	 */
 	public void adoptFromDisk() {
-		current = ReconfConfigs.read(file, ClientConfigFieldsV3.class).orElse(null);
+		current = TomlConfigs.read(file, ClientConfigFieldsV3.class).orElse(null);
 	}
 
 	/** A preference change: derive from the document, write it, land it, one critical section. */
@@ -76,7 +76,7 @@ public final class ClientConfigStore {
 
 	private void write(ClientConfigFieldsV3 document) {
 		try {
-			ReconfConfigs.save(file, document, ClientConfigFieldsV3.class, ClientConfigFieldsV3::new);
+			TomlConfigs.save(file, document, ClientConfigFieldsV3.class, ClientConfigFieldsV3::new);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 		}

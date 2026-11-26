@@ -9,7 +9,7 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NestedConflicts;
@@ -61,7 +61,7 @@ public final class ClientOfflineRepair {
 	private OfflineRepair.Request request() throws IOException {
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget()
 				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
-		Set<String> pins = PinnedMods.index(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		Set<String> pins = PinnedMods.index(TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new).pinnedModIds);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache mods = ModFileCache.open(storage.modCacheDirectory())) {
 			Set<String> forceCopyPaths = ForceCopyPaths.ofActiveMods(target.flatTarget().list, loader.forceCopyServices(), item -> verifiedSource(item.file, item.size, item.sha1, cache),

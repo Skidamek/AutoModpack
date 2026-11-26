@@ -8,9 +8,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.OneCrl;
 import pl.skidam.automodpack_core.protocol.Trust;
@@ -31,7 +31,7 @@ public class Server {
 		Hosting.installServer(server);
 
 		try {
-			ServerConfigStore.install(ReconfConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone));
+			ServerConfigStore.install(TomlConfigs.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons::standalone));
 		} catch (ConfigTools.ConfigException e) {
 			LOGGER.error("Failed to load standalone host configuration: {}", e.getMessage());
 			return;

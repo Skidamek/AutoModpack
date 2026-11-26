@@ -1,8 +1,8 @@
 # Server configuration
 
-`automodpack/server.conf` in the server root directory. The file is created on the first start with defaults.
+`automodpack/server.toml` in the server root directory. The file is created on the first start with defaults.
 
-The file uses a small subset of HOCON: comments (`#`), `key: value` options, inline lists, and braced nesting.
+The file is standard TOML: comments start with `#`, options are `key = value`, and related settings are grouped into `[tables]`. Comments, blank lines, and formatting are preserved when AutoModpack updates the file.
 
 ## Editing the file
 
@@ -21,7 +21,7 @@ Apply changes with `/automodpack config reload` or a restart. When the reload ch
 
 ## Groups
 
-The `modpack` section holds the pack: `modpack.name` is the display name players see, and the categories follow it, each mapping category name, then group id, then the declaration. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `from-server` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+The `[modpack]` section holds `name` (the display name players see), and `[modpack.groups.<category>.<id>]` tables declare the groups under each category. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `from-server` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
 
 Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaks-with`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `display-name` is the always-safe rename, so keep anything volatile (versions, dates) out of ids and category names. A group with a blank `display-name` shows its id instead.
 
@@ -35,9 +35,9 @@ Each group carries three rule lists, relative to the server root.
 
 | Setting | Factory value for `main` | Description |
 |---|---|---|
-| `modpack.<category>.<id>.from-server` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Extra paths pulled from the server root into the pack. The server root contributes only what a rule matches. |
-| `modpack.<category>.<id>.exclude` | `**/.*`, `**/.*/**`, `**/*.{tmp,disabled,bak}`, `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `from-server`. These rules do not add files. |
-| `modpack.<category>.<id>.editable` | `options.txt`, `config/**` | Pack files that players may edit locally, mods included: editable mod jars live in the player's `mods` folder, replaceable and removable. Listing a path here does not add it to the pack. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
+| `modpack.groups.<category>.<id>.from-server` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Extra paths pulled from the server root into the pack. The server root contributes only what a rule matches. |
+| `modpack.groups.<category>.<id>.exclude` | `**/.*`, `**/.*/**`, `**/*.{tmp,disabled,bak}`, `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `from-server`. These rules do not add files. |
+| `modpack.groups.<category>.<id>.editable` | `options.txt`, `config/**` | Pack files that players may edit locally, mods included: editable mod jars live in the player's `mods` folder, replaceable and removable. Listing a path here does not add it to the pack. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
 
 ### Globbing wildcards
 
@@ -55,23 +55,17 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 
 | Setting | Default | Description |
 |---|---|---|
-| `modpack.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The map key is the id used by rules and by `requires` and `breaks-with`. |
-| `modpack.<category>.<id>.description` | `""` | Short player-facing description of the group. |
-| `modpack.<category>.<id>.selection` | `OPTIONAL` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL` (any case). `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
-| `modpack.<category>.<id>.auto-exclude-server-side-mods` | `METADATA` | One of `DISABLED`, `METADATA` or `PLATFORMS` (any case). Best-effort drop of dedicated-server jars. `DISABLED` ships every jar. See [Dedicated-server jars](../pack-content#dedicated-server-jars). |
-| `modpack.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
-| `modpack.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
-| `modpack.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
+| `modpack.groups.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The table key is the id used by rules and by `requires` and `breaks-with`. |
+| `modpack.groups.<category>.<id>.description` | `""` | Short player-facing description of the group. |
+| `modpack.groups.<category>.<id>.selection` | `"OPTIONAL"` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL` (any case). `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
+| `modpack.groups.<category>.<id>.auto-exclude-server-side-mods` | `"METADATA"` | One of `DISABLED`, `METADATA` or `PLATFORMS` (any case). Best-effort drop of dedicated-server jars. `DISABLED` ships every jar. See [Dedicated-server jars](../pack-content#dedicated-server-jars). |
+| `modpack.groups.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
+| `modpack.groups.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
+| `modpack.groups.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
 
-### Migrating the old selection flags
+### Migrating from `server.conf` or v4 JSON
 
-Earlier versions wrote two booleans per group, `required` and `default-selected`. They still load: each group holding either one is read as a `selection` value, and the next save rewrites the file with that single key. Nothing is lost in between - a reload applies the same translation, and a group that already has `selection` keeps it.
-
-One pair has no equivalent: `required: true` together with `default-selected: false` asks for a group players cannot deselect and do not receive by default. It becomes `REQUIRED`, which is preselected, and the server log says so when the file is migrated. Write `selection` directly and nothing is collapsed.
-
-### Migrating pack-level server-side exclusion
-
-Earlier versions had one pack-level `auto-exclude-server-side-mods` boolean. It still loads: `false` becomes `DISABLED` on every group that does not already set the key, and `true` (or a missing key) leaves those groups at `METADATA`. The next save writes the key on each group and removes the pack-level one.
+If `server.toml` does not exist yet, AutoModpack automatically migrates a v5-rc `server.conf` (or a v4 `automodpack-server.json` / `server-config.json`) into a fresh `server.toml`, including legacy `required`/`default-selected` group flags and pack-level `auto-exclude-server-side-mods`, and renames the old file to `.backup`.
 
 ### Platforms
 
@@ -83,18 +77,18 @@ When a client cannot detect a platform at all, groups without `compatible-platfo
 
 | Setting | Default | Description |
 |---|---|---|
-| `connection-mode` | `HOLEPUNCH` | One of `HOLEPUNCH`, `MAGIC` or `HTTP` (any case). HOLEPUNCH uses the Minecraft port. MAGIC can share it or use `bind-port`. HTTP uses `bind-port`. The modes and their port behavior are described in [hosting](../how-it-works/hosting). |
-| `bind-address` | `""` | Local address for a dedicated listener. Empty binds to all interfaces. Used only when the selected mode starts one. |
-| `bind-port` | `-1` | Controls built-in listeners according to `connection-mode`; see the [mode matrix](../how-it-works/hosting#connection-modes-and-ports). Values unused by the selected mode are preserved. |
-| `advertised-endpoint-host` | `""` | Public hostname or IP sent to clients as the download endpoint. Empty uses the hostname the player connected to. |
-| `advertised-endpoint-port` | `-1` | Public TCP port sent to clients. `-1` uses the connected port. |
-| `bandwidth-limit` | `0` | Upload speed limit in MiB/s per client. `0` means unlimited. |
-| `disable-internal-tls` | `false` | Skips AutoModpack's own TLS termination. Clients always start TLS, so an external terminator must forward decrypted traffic. Expert setting; see [hosting](../how-it-works/hosting#tls). |
-| `accept-proxy-protocol` | `false` | Honors HAProxy PROXY protocol headers on dedicated listeners. Enable only behind a trusted proxy: a claimed source address feeds IP bans and audit logs, and a forged one lets a banned player past the ban. |
-| `validate-secrets` | `true` | Requires a per-player secret, issued through the Minecraft login, for pack downloads. See [security](../security#download-authorization). A standalone host process has no login to provision secrets, so a fresh standalone config defaults this to `false`. |
-| `secret-lifetime` | `336` | How long a download secret stays valid, in hours. 336 hours is 14 days. |
-| `export-http-directory` | `""` | Non-empty: after every publish, the URL-contract tree (`head`, `journal`, `objects/`) is exported to this directory, ready to serve with any static HTTPS host. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
-| `export-http-include-all` | `false` | Keeps every object in the HTTP contract export, including files Modrinth or CurseForge still serve to clients directly. Off, the platforms carry those downloads and your mirror holds no fallback for a file a platform later deletes; on, the exported tree stays complete. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
+| `network.connection-mode` | `"HOLEPUNCH"` | One of `HOLEPUNCH`, `MAGIC` or `HTTP` (any case). HOLEPUNCH uses the Minecraft port. MAGIC can share it or use `network.bind-port`. HTTP uses `network.bind-port`. The modes and their port behavior are described in [hosting](../how-it-works/hosting). |
+| `network.bind-address` | `""` | Local address for a dedicated listener. Empty binds to all interfaces. Used only when the selected mode starts one. |
+| `network.bind-port` | `-1` | Controls built-in listeners according to `network.connection-mode`; see the [mode matrix](../how-it-works/hosting#connection-modes-and-ports). Values unused by the selected mode are preserved. |
+| `network.advertised-host` | `""` | Public hostname or IP sent to clients as the download endpoint. Empty uses the hostname the player connected to. |
+| `network.advertised-port` | `-1` | Public TCP port sent to clients. `-1` uses the connected port. |
+| `network.bandwidth-limit` | `0` | Upload speed limit in MiB/s per client. `0` means unlimited. |
+| `network.disable-internal-tls` | `false` | Skips AutoModpack's own TLS termination. Clients always start TLS, so an external terminator must forward decrypted traffic. Expert setting; see [hosting](../how-it-works/hosting#tls). |
+| `network.accept-proxy-protocol` | `false` | Honors HAProxy PROXY protocol headers on dedicated listeners. Enable only behind a trusted proxy: a claimed source address feeds IP bans and audit logs, and a forged one lets a banned player past the ban. |
+| `secrets.validate` | `true` | Requires a per-player secret, issued through the Minecraft login, for pack downloads. See [security](../security#download-authorization). A standalone host process has no login to provision secrets, so a fresh standalone config defaults this to `false`. |
+| `secrets.lifetime-hours` | `336` | How long a download secret stays valid, in hours. 336 hours is 14 days. |
+| `export-http.directory` | `""` | Non-empty: after every publish, the URL-contract tree (`head`, `journal`, `objects/`) is exported to this directory, ready to serve with any static HTTPS host. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
+| `export-http.include-all` | `false` | Keeps every object in the HTTP contract export, including files Modrinth or CurseForge still serve to clients directly. Off, the platforms carry those downloads and your mirror holds no fallback for a file a platform later deletes; on, the exported tree stays complete. See [HTTP contract export](../how-it-works/hosting#http-contract-export). |
 
 Setting `modpack-host` to `false` turns off every built-in listener while clients keep receiving connection information. AutoModpack cannot validate external routing from the Minecraft server process, so a reverse proxy setup is your responsibility; the [proxies page](../compatibility/proxies) covers known-good setups.
 
@@ -104,7 +98,7 @@ With `require-modpack` off, players who join without AutoModpack stay in the gam
 
 | Setting | Default | Description |
 |---|---|---|
-| `nag-un-modded-clients` | `true` | Shows a chat message to players without the mod. |
-| `nag-message` | `Install the AutoModpack mod to get this server's modpack!` | The message text. |
-| `nag-clickable-message` | `Click here to get the AutoModpack!` | The clickable link text. |
-| `nag-clickable-link` | AutoModpack on Modrinth | The URL opened on click. |
+| `nag.enabled` | `true` | Shows a chat message to players without the mod. |
+| `nag.message` | `Install the AutoModpack mod to get this server's modpack!` | The message text. |
+| `nag.clickable-message` | `Click here to get the AutoModpack!` | The clickable link text. |
+| `nag.clickable-link` | AutoModpack on Modrinth | The URL opened on click. |

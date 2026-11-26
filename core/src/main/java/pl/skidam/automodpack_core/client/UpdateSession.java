@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -166,7 +166,7 @@ final class UpdateSession implements UpdateAttempt {
 			ModpackJsons.ModpackContentFields installed = storedTarget();
 			if (installed == null) return true;
 			if (!PackTarget.fromFlat(installed).equals(PackTarget.fromFlat(target.flatTarget()))) return true;
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 			ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(storage.clientConfig().current(), expectedClientConfig);
 			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = connectionInfo != null && connectionInfo.isComplete()
@@ -338,7 +338,7 @@ final class UpdateSession implements UpdateAttempt {
 	/** Rebuilds a pending update from current mutable inputs, refusing when the approved outcome no longer holds; the commit engine applies what this returns. */
 	static UpdateCommit.Built rebuildPending(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
 		ClientUpdatePlanBuilder builder = new ClientUpdatePlanBuilder(storage, modpackLoader, loaderType);
-		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		SelectedModpackTarget target = targetFor(storage, pending);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {

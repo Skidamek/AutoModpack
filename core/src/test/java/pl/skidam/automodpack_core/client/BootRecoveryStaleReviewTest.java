@@ -17,7 +17,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.loader.LoaderServices;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
@@ -61,7 +61,7 @@ class BootRecoveryStaleReviewTest {
 					new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION, "config/a.txt", UpdatePlan.OperationType.INSTALL_OBJECT, hash, 5L, null)),
 					List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, "config/a.txt", true, hash, 5L)),
 					new ClientConfigJsons.ClientConfigFieldsV3(), modpackId, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
-			ClientConfigJsons.ClientConfigFieldsV3 expectedConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+			ClientConfigJsons.ClientConfigFieldsV3 expectedConfig = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 			new UpdateJournal(storage).write(UpdateTransaction.create(plan, target, storage.overlayDigest(modpackId), new PlannedAgainst(expectedConfig, "", null)));
 

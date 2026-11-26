@@ -29,7 +29,7 @@ val gsonVersion = versionProperty("versionGson")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val junitVersion = versionProperty("versionJunit")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
-val reconfVersion = versionProperty("versionReconf")
+val tomlEditVersion = versionProperty("versionTomlEdit")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 val deps =
@@ -44,7 +44,7 @@ val deps =
 
 dependencies {
 	implementation("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
-	implementation(":reconf:$reconfVersion")
+	implementation("pl.skidam:toml-edit:$tomlEditVersion")
 	implementation("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	// minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle

@@ -35,7 +35,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -722,7 +722,7 @@ class UpdateCommitTest {
 		// The configuration moved after planning, so recovery must rebuild before it can replay.
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
 		newer.playMusic = false;
-		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		new UpdateJournal(storage).write(pending);
 		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		AtomicInteger rebuilds = new AtomicInteger();
@@ -781,7 +781,7 @@ class UpdateCommitTest {
 		UpdateTransaction pending = UpdateTestFixtures.createTransaction(storage, pendingPlan, target);
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(pending.expectedClientConfig);
 		newer.playMusic = false;
-		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		new UpdateJournal(storage).write(pending);
 		UpdateCommit commits = UpdateTestFixtures.commits(storage);
 		AtomicInteger rebuilds = new AtomicInteger();
@@ -808,16 +808,16 @@ class UpdateCommitTest {
 				new Operation(Root.PROJECTION, "mods/config-drift.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/config-drift.jar", true, hash, bytes.length)));
 		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
-		ReconfConfigs.save(storage.clientConfigFile(), expected, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), expected, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), new PlannedAgainst(expected, "", null));
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
 		newer.playMusic = false;
-		ReconfConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), newer, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
 		UpdateCommit.Outcome execution = UpdateTestFixtures.commits(storage).run(new UpdateCommit.Fresh(() -> UpdateCommit.Built.of(transaction), null));
 
 		assertTrue(execution instanceof UpdateCommit.ReplanRequired);
-		assertFalse(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
+		assertFalse(TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
@@ -890,7 +890,7 @@ class UpdateCommitTest {
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
-		ReconfConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), current, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		new UpdateJournal(storage).write(transaction);
 
 		assertEquals(target.manifest().modpackId(), ClientProjectionView.observe(storage).logicalSelectedModpackId());

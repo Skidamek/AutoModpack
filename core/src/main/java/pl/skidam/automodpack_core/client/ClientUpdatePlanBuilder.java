@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.launchers.PrismMeta;
 import pl.skidam.automodpack_core.loader.FileInspection;
@@ -148,7 +148,7 @@ final class ClientUpdatePlanBuilder {
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
 	PreparedPlan buildPlan(Input input, ClientProjectionView projectionView, FileCache cache, ModFileCache modCache) throws IOException {
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(input.currentConfig(), expectedClientConfig);
 		ModpackJsons.ModpackContentFields installed = projection.target();
@@ -207,7 +207,7 @@ final class ClientUpdatePlanBuilder {
 		ModpackJsons.ModpackContentFields installed = projectionView.target();
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState == null || installed == null) throw new IOException("Active modpack generation state is missing");
-		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(expectedClientConfig, expectedClientConfig);
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = currentConfig;

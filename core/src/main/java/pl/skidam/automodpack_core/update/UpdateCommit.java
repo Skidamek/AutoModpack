@@ -22,7 +22,7 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -642,9 +642,9 @@ public final class UpdateCommit {
 		SelectedModpackTarget resolved = knownTarget != null ? knownTarget : validator.resolvedTarget(transaction, validator.targetDocument(transaction));
 		if (transaction.plan().plannedClientConfig() != null && !preserveNewerSelection)
 			try {
-				ClientConfigJsons.ClientConfigFieldsV3 stored = ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				ClientConfigJsons.ClientConfigFieldsV3 stored = TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 						.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-				ReconfConfigs.save(storage.clientConfigFile(), stored.rebase(transaction.expectedClientConfig, transaction.plan().plannedClientConfig()),
+				TomlConfigs.save(storage.clientConfigFile(), stored.rebase(transaction.expectedClientConfig, transaction.plan().plannedClientConfig()),
 						ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 			} catch (IOException e) {
 				throw new ConfigTools.ConfigException("Failed to save client configuration", e);

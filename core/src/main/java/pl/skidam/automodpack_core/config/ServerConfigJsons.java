@@ -45,7 +45,6 @@ public class ServerConfigJsons {
 		public boolean modpackHost = true;
 		@SerializedName("generate-modpack-on-start")
 		public boolean generateModpackOnStart = true;
-		@ReconfConfigs.Comment("host-modpack/<id>/ is included in full. from-server pulls extra files from the server root. exclude and editable apply after that; they do not add files.")
 		public ModpackFields modpack = ModpackFields.withMainGroup();
 		@SerializedName("require-modpack")
 		public boolean requireModpack = true;
@@ -69,12 +68,10 @@ public class ServerConfigJsons {
 		public boolean disableInternalTLS = false;
 		@SerializedName("accept-proxy-protocol")
 		public boolean acceptProxyProtocol = false;
-		@ReconfConfigs.Comment("HOLEPUNCH uses the Minecraft port. MAGIC can share it or use bindPort. HTTP uses bindPort.")
 		@SerializedName("connection-mode")
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
 		@SerializedName("bandwidth-limit")
 		public int bandwidthLimit = 0;
-		@ReconfConfigs.Comment("require a login-issued download secret")
 		@SerializedName("validate-secrets")
 		public boolean validateSecrets = true;
 		@SerializedName("secret-lifetime")
@@ -85,10 +82,8 @@ public class ServerConfigJsons {
 		public boolean exportHttpIncludeAll = false;
 		@SerializedName("self-updater")
 		public boolean selfUpdater = false;
-		@ReconfConfigs.Comment("extra loaders allowed to join; this server's loader is always accepted")
 		@SerializedName("accepted-loaders")
 		public Set<String> acceptedLoaders = new HashSet<>();
-		@ReconfConfigs.Comment("tell clients the pack Minecraft and loader versions")
 		@SerializedName("advertise-versions-to-sync")
 		public boolean advertiseVersionsToSync = true;
 	}
@@ -184,9 +179,7 @@ public class ServerConfigJsons {
 		@SerializedName("display-name")
 		public String displayName = "";
 		public String description = "";
-		@ReconfConfigs.Comment("REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked.")
 		public GroupSelectionMode selection = GroupSelectionMode.OPTIONAL;
-		@ReconfConfigs.Comment("DISABLED ships every jar. METADATA and PLATFORMS drop dedicated-server jars on a best-effort basis. Use exclude for anything else.")
 		@SerializedName("auto-exclude-server-side-mods")
 		public ServerSideModExclusion autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
 
@@ -201,12 +194,9 @@ public class ServerConfigJsons {
 		 * and {@code exclude} is the only way to leave content out of it, while nothing is synced from the server
 		 * directory unless a {@code from-server} rule includes it - exclude carves exceptions out of either.
 		 */
-		@ReconfConfigs.Comment("extra paths from the server root")
 		@SerializedName("from-server")
 		public Set<String> fromServer = Set.of();
-		@ReconfConfigs.Comment("drop these from the pack; they do not add files")
 		public Set<String> exclude = Set.of();
-		@ReconfConfigs.Comment("pack files players may change; listing a path here does not add it to the pack")
 		public Set<String> editable = Set.of();
 	}
 }

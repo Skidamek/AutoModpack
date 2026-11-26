@@ -20,7 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
@@ -64,7 +64,7 @@ class RepairPinnedModsTest {
 		Path stale = write(storage.gamePath("mods/oldlib.jar"), staleDeleted);
 		Path unpinned = write(storage.gamePath("mods/other.jar"), jar("other"));
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3().withPinnedModIds(List.of("sodium", "journeymap"));
-		ReconfConfigs.save(storage.clientConfigFile(), config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		TomlConfigs.save(storage.clientConfigFile(), config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientOfflineRepair repair = new ClientOfflineRepair(storage, request -> {}, temporaryDirectory.resolve("automodpack.jar"));
 
 		OfflineRepair.Prepared before = repair.inspect();

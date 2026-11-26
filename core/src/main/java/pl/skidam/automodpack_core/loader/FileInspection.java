@@ -21,8 +21,10 @@ import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.MiniToml;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
+import pl.skidam.tomledit.ParseResult;
+import pl.skidam.tomledit.TomlEdit;
+import pl.skidam.tomledit.TomlValue;
 
 public class FileInspection {
 	private static final Logger LOGGER = LogManager.getLogger(FileInspection.class);
@@ -336,14 +338,16 @@ public class FileInspection {
 				String name = entry.getName();
 
 				if (isMetadataFilename(name)) {
-					// Prevent reader from closing the ZipInputStream
-					BufferedReader reader = new BufferedReader(new InputStreamReader(new FilterInputStream(zis) {
-						@Override
-						public void close() {}
-					}, StandardCharsets.UTF_8));
-
-					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader, name.endsWith("neoforge.mods.toml"));
-					else metadata = parseJsonMetadata(reader);
+					if (name.endsWith(".toml")) {
+						metadata = parseTomlMetadata(zis.readAllBytes(), name.endsWith("neoforge.mods.toml"));
+					} else {
+						// Prevent reader from closing the ZipInputStream
+						BufferedReader reader = new BufferedReader(new InputStreamReader(new FilterInputStream(zis) {
+							@Override
+							public void close() {}
+						}, StandardCharsets.UTF_8));
+						metadata = parseJsonMetadata(reader);
+					}
 				} else if (JarUtils.hasJarExtension(name)) {
 					// Wrap ZIS to protect current stream position
 					Mod child = readModFromStream(virtualPath.resolve(name), new FilterInputStream(zis) {
@@ -372,10 +376,11 @@ public class FileInspection {
 		Path metaPath = getMetadataPath(fs);
 		if (metaPath == null) return null;
 
-		try (BufferedReader reader = Files.newBufferedReader(metaPath)) {
+		try {
 			if (metaPath.toString().endsWith(".toml")) {
-				return parseTomlMetadata(reader, metaPath.getFileName().toString().equals("neoforge.mods.toml"));
-			} else {
+				return parseTomlMetadata(Files.readAllBytes(metaPath), metaPath.getFileName().toString().equals("neoforge.mods.toml"));
+			}
+			try (BufferedReader reader = Files.newBufferedReader(metaPath)) {
 				return parseJsonMetadata(reader);
 			}
 		} catch (IOException e) {
@@ -384,10 +389,15 @@ public class FileInspection {
 		return null;
 	}
 
-	private static ModMetadata parseTomlMetadata(BufferedReader reader, boolean neoforgeSemantics) {
+	private static ModMetadata parseTomlMetadata(byte[] bytes, boolean neoforgeSemantics) {
 		try {
-			Map<String, Object> result = MiniToml.parse(reader);
-			List<Map<String, Object>> mods = MiniToml.getTables(result, "mods");
+			ParseResult parsed = TomlEdit.parse(bytes);
+			if (!parsed.isOk()) {
+				LOGGER.error("TOML Parse Error: {}", parsed.error());
+				return null;
+			}
+			TomlValue.Table result = parsed.document().tree();
+			List<TomlValue.Table> mods = tomlTables(result, "mods");
 			if (mods.isEmpty()) return null;
 
 			String modId = null;
@@ -396,19 +406,19 @@ public class FileInspection {
 			Set<String> deps = new HashSet<>();
 			DisplayTest displayTest = null;
 
-			for (Map<String, Object> modTable : mods) {
-				if (modId == null) modId = MiniToml.getString(modTable, "modId");
+			for (TomlValue.Table modTable : mods) {
+				if (modId == null) modId = modTable.getString("modId").orElse(null);
 
-				String v = MiniToml.getString(modTable, "version");
+				String v = modTable.getString("version").orElse(null);
 				if (v != null && !v.equals("${file.jarVersion}")) version = v;
 
-				List<Object> prov = MiniToml.getList(modTable, "provides");
-				if (prov != null) for (Object p : prov) if (p instanceof String s) provides.add(s);
+				TomlValue.Array prov = modTable.getArray("provides").orElse(null);
+				if (prov != null) for (TomlValue p : prov.elements()) if (p instanceof TomlValue.Str s) provides.add(s.value());
 
 				// Legacy Forge reads displayTest per mod entry and refuses unknown values; NeoForge dropped the key
 				// entirely, so only mods.toml promises anything by it. A multi-mod jar keeps its strictest entry.
 				if (!neoforgeSemantics) {
-					DisplayTest entry = displayTestOf(MiniToml.getString(modTable, "displayTest"));
+					DisplayTest entry = displayTestOf(modTable.getString("displayTest").orElse(null));
 					if (displayTest == null || entry.ordinal() > displayTest.ordinal()) displayTest = entry;
 				}
 			}
@@ -416,10 +426,10 @@ public class FileInspection {
 			if (modId != null) {
 				// [[dependencies.<modId>]] is keyed by the mod's own id. side on a minecraft/forge/neoforge row is which
 				// physical side that dependency is checked on, not whether this jar loads on the client.
-				Map<String, Object> depsTable = MiniToml.getTable(result, "dependencies");
+				TomlValue.Table depsTable = result.getTable("dependencies").orElse(null);
 				if (depsTable != null) {
-					for (Map<String, Object> depTable : MiniToml.getTables(depsTable, modId)) {
-						String depId = MiniToml.getString(depTable, "modId");
+					for (TomlValue.Table depTable : tomlTables(depsTable, modId)) {
+						String depId = depTable.getString("modId").orElse(null);
 						if (depId == null) continue;
 
 						// NeoForge 20.5+ reads neoforge.mods.toml, gates on type alone and never reads mandatory; legacy
@@ -427,9 +437,10 @@ public class FileInspection {
 						// exist. The metadata file names the semantics, so a jar parses the same on every loader - a
 						// fabric client planning a neoforge pack included.
 						boolean required;
-						if (depTable.get("type") instanceof String typeName) required = "required".equalsIgnoreCase(typeName);
+						String typeName = depTable.getString("type").orElse(null);
+						if (typeName != null) required = "required".equalsIgnoreCase(typeName);
 						else if (neoforgeSemantics) required = true;
-						else required = !(depTable.get("mandatory") instanceof Boolean flag && !flag);
+						else required = depTable.getBoolean("mandatory").orElse(true);
 						if (!required) continue;
 
 						deps.add(depId);
@@ -441,6 +452,14 @@ public class FileInspection {
 			LOGGER.error("TOML Parse Error: {}", e.getMessage());
 			return null;
 		}
+	}
+
+	private static List<TomlValue.Table> tomlTables(TomlValue.Table parent, String key) {
+		TomlValue.Array array = parent.getArray(key).orElse(null);
+		if (array == null) return List.of();
+		List<TomlValue.Table> out = new ArrayList<>();
+		for (TomlValue elem : array.elements()) if (elem instanceof TomlValue.Table t) out.add(t);
+		return out;
 	}
 
 	private static DisplayTest displayTestOf(String value) {

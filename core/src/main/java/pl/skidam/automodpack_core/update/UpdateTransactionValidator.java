@@ -17,7 +17,7 @@ import java.util.UUID;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -189,7 +189,7 @@ final class UpdateTransactionValidator {
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 currentClientConfig() {
-		return ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		return TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
 	private boolean selectionChanged(UpdateTransaction transaction) throws IOException {

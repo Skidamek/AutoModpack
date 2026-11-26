@@ -11,7 +11,6 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 public class ClientConfigJsons {
 
 	public static class ClientConfigFieldsV3 {
-		@ReconfConfigs.Comment("fetch and apply the pack during launch")
 		@SerializedName("update-selected-modpack-on-launch")
 		public boolean updateSelectedModpackOnLaunch = true;
 		@SerializedName("self-updater")
@@ -24,7 +23,6 @@ public class ClientConfigJsons {
 		public boolean playMusic = true;
 		@SerializedName("show-modpack-settings-button")
 		public boolean showModpackSettingsButton = true;
-		@ReconfConfigs.Comment("mod ids that keep loading from this instance's own mods folder")
 		@SerializedName("pinned-mod-ids")
 		public List<String> pinnedModIds = new ArrayList<>();
 

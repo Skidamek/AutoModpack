@@ -84,12 +84,14 @@ public final class StoragePaths {
 	public static final long WAITING_MUSIC_MAX_BYTES = 5 * 1024 * 1024;
 	public static final Path MODPACK_CONTENT_FILE = Path.of("automodpack-content.json");
 	public static final Path PATCH_NOTES_FILE = Path.of("patch-notes.md");
-	public static final Path SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server.conf");
+	public static final Path SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server.toml");
+	public static final Path V5_RC_SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server.conf");
 	public static final Path V4_SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("automodpack-server.json");
 	public static final Path V4_SERVER_CONFIG_ALT_FILE = AUTOMODPACK_DIR.resolve("server-config.json");
 	public static final Path BOOTSTRAP_FILE = AUTOMODPACK_DIR.resolve("automodpack-bootstrap.json");
 	public static final Path BOOTSTRAP_EXPORT_FILE = AUTOMODPACK_DIR.resolve("automodpack-bootstrap.exported.json");
-	public static final Path CLIENT_CONFIG_FILE = AUTOMODPACK_DIR.resolve("client.conf");
+	public static final Path CLIENT_CONFIG_FILE = AUTOMODPACK_DIR.resolve("client.toml");
+	public static final Path V5_RC_CLIENT_CONFIG_FILE = AUTOMODPACK_DIR.resolve("client.conf");
 	public static final Path V4_CLIENT_CONFIG_FILE = AUTOMODPACK_DIR.resolve("automodpack-client.json");
 	public static final Path V4_CLIENT_CONFIG_ALT_FILE = AUTOMODPACK_DIR.resolve("client-config.json");
 

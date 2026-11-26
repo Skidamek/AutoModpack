@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ReconfConfigs;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
@@ -94,7 +94,7 @@ public final class BootRecovery {
 
 	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
-		ClientConfigJsons.ClientConfigFieldsV3 document = ReconfConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 document = TomlConfigs.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		if (document == null) throw new RuntimeException("Failed to load config!");
 		storage.clientConfig().adopt(document);
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
@@ -197,7 +197,7 @@ public final class BootRecovery {
 		}
 		UpdateRecovery.clearDeferredGuard(storage);
 		if (deferred.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			storage.clientConfig().adopt(ReconfConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+			storage.clientConfig().adopt(TomlConfigs.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing")));
 		}
 		LOGGER.info("Recovered update transaction {}", deferred.transactionId);

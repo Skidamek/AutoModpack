@@ -15,7 +15,7 @@ A server with this layout:
 
 ```
 ├── automodpack
-│   ├── server.conf
+│   ├── server.toml
 │   └── host-modpack
 │       └── main
 │           ├── config
@@ -45,19 +45,16 @@ A server with this layout:
     └── sodium-fabric.jar
 ```
 
-and this group declared in `server.conf`:
+and this group declared in `server.toml`:
 
-```
-modpack {
-  name: ""
-  General {
-    main {
-      from-server: [mods/*.jar, kubejs/**, emotes/*]
-      exclude: [kubejs/server_scripts/**]
-      editable: [options.txt, config/**]
-    }
-  }
-}
+```toml
+[modpack]
+name = ""
+
+[modpack.groups.General.main]
+from-server = ["mods/*.jar", "kubejs/**", "emotes/*"]
+exclude = ["kubejs/server_scripts/**"]
+editable = ["options.txt", "config/**"]
 ```
 
 produces this pack for clients:

@@ -43,7 +43,7 @@ repositories {
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
-val reconfVersion = versionProperty("versionReconf")
+val tomlEditVersion = versionProperty("versionTomlEdit")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
@@ -62,9 +62,9 @@ dependencies {
 	implementation("pl.skidam:mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
 	implementation("pl.skidam:mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
-	// reconf - the config format/edit layer for the human-editable configs (core's compile dep,
+	// toml-edit - the lossless TOML 1.1.0 CST editor for human-editable configs (core's compile dep,
 	// shadowed into the loader the same way as the mcholepunch jars).
-	implementation(":reconf:$reconfVersion")
+	implementation("pl.skidam:toml-edit:$tomlEditVersion")
 }
 
 configurations {

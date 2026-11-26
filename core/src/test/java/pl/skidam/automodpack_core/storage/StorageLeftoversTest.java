@@ -27,7 +27,7 @@ class StorageLeftoversTest {
 		Files.createFile(automodpack.resolve("automodpack-dummy-files.json"));
 		Files.createFile(automodpack.resolve("automodpack-server.json.backup-2"));
 		Files.createDirectories(automodpack.resolve("client").resolve("active"));
-		Files.createFile(automodpack.resolve("client.conf"));
+		Files.createFile(automodpack.resolve("client.toml"));
 		Files.createFile(automodpack.resolve("self-update.json.corrupt-1d2e3f"));
 
 		assertEquals(List.of(".private", "automodpack-client.json", "automodpack-client.json.backup", "automodpack-content.json.temp", "automodpack-dummy-files.json", "automodpack-server.json.backup-2", "modpacks"),
