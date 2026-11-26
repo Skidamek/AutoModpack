@@ -97,21 +97,26 @@ final class LeafRevocation {
 
 	private static final String OID_CRL_DISTRIBUTION_POINTS = "2.5.29.31";
 	private static final String OID_CRL_NUMBER = "2.5.29.20";
+	/** distributionPoint [0] of DistributionPoint and fullName [0] of DistributionPointName: two different [0]s, one tag. */
+	private static final int DISTRIBUTION_POINT = 0xA0;
+	private static final int FULL_NAME = 0xA0;
+	/** uniformResourceIdentifier [6] of GeneralName. */
+	private static final int UNIFORM_RESOURCE_IDENTIFIER = 0x86;
 
 	/** The first http URI among the leaf's full-name CRL distribution points, scheme lowercased; null when it names none. */
 	static String httpCrlUrl(X509Certificate leaf) throws IOException {
 		byte[] extension = leaf.getExtensionValue(OID_CRL_DISTRIBUTION_POINTS);
 		if (extension == null) return null;
-		Der.Element points = Der.unwrapExtension(extension);
+		Der.Element points = extensionValue(extension);
 		if (points.tag() != Der.TAG_SEQUENCE) throw new IOException("Expected SEQUENCE for CRLDistributionPoints");
 		for (Der.Element point : points.children()) {
 			if (point.tag() != Der.TAG_SEQUENCE) continue;
 			for (Der.Element field : point.children()) {
-				if (field.tag() != Der.TAG_CONTEXT_CONSTRUCTED_0) continue;
-				for (Der.Element choice : field.children()) {
-					if (choice.tag() != Der.TAG_CONTEXT_CONSTRUCTED_0) continue;
-					for (Der.Element general : choice.children()) {
-						if (general.tag() != Der.TAG_CONTEXT_PRIMITIVE_6) continue;
+				if (field.tag() != DISTRIBUTION_POINT) continue;
+				for (Der.Element name : field.children()) {
+					if (name.tag() != FULL_NAME) continue;
+					for (Der.Element general : name.children()) {
+						if (general.tag() != UNIFORM_RESOURCE_IDENTIFIER) continue;
 						String uri = new String(general.content(), StandardCharsets.US_ASCII);
 						if (uri.toLowerCase(Locale.ROOT).startsWith(HTTP)) return HTTP + uri.substring(HTTP.length());
 					}
@@ -119,6 +124,13 @@ final class LeafRevocation {
 			}
 		}
 		return null;
+	}
+
+	/** Unwraps the DER OCTET STRING that {@link X509Certificate#getExtensionValue(String)} wraps every extension value in. */
+	private static Der.Element extensionValue(byte[] value) throws IOException {
+		Der.Element outer = Der.readSingle(value);
+		if (outer.tag() != Der.TAG_OCTET_STRING) throw new IOException("Expected DER OCTET STRING for an extension value");
+		return Der.readSingle(outer.content());
 	}
 
 	private static X509CRL crl(byte[] body) {
@@ -142,7 +154,7 @@ final class LeafRevocation {
 		byte[] extension = crl.getExtensionValue(OID_CRL_NUMBER);
 		if (extension == null) return null;
 		try {
-			return Der.unwrapExtension(extension).asInteger();
+			return extensionValue(extension).asInteger();
 		} catch (IOException | RuntimeException unreadable) {
 			return null;
 		}

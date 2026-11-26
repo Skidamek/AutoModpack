@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,6 +40,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 
+import org.bouncycastle.asn1.ASN1Encodable;
+import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.CRLDistPoint;
@@ -51,6 +54,7 @@ import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.IssuingDistributionPoint;
 import org.bouncycastle.asn1.x509.KeyUsage;
+import org.bouncycastle.asn1.x509.ReasonFlags;
 import org.bouncycastle.cert.X509v2CRLBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CRLConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -139,6 +143,36 @@ class LeafRevocationTest {
 	void aLeafWithoutAnHttpDistributionPointHasNothingToCheck() throws Exception {
 		X509Certificate leaf = leaf(null);
 		assertEquals(Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, ca}, new FetchCache(null), DEADLINE).get(10, TimeUnit.SECONDS));
+	}
+
+	@Test
+	void theHttpUriIsFoundPastOtherDistributionPointFieldsAndGeneralNames() throws Exception {
+		// A point may name no distribution point at all and still carry the other fields; its general names may lead with a
+		// name that is not a URI. Neither may hide the one URI the leaf does publish.
+		DistributionPoint noName = new DistributionPoint(null, null, new GeneralNames(new GeneralName(GeneralName.dNSName, "ca.example")));
+		GeneralNames names = new GeneralNames(new GeneralName[]{new GeneralName(GeneralName.dNSName, "crl.example"), new GeneralName(GeneralName.uniformResourceIdentifier, "HTTP://crl.example/ca.crl")});
+		DistributionPoint withFields = new DistributionPoint(new DistributionPointName(names), new ReasonFlags(ReasonFlags.keyCompromise), new GeneralNames(new GeneralName(GeneralName.dNSName, "ca.example")));
+
+		assertEquals("http://crl.example/ca.crl", LeafRevocation.httpCrlUrl(leafWithDistributionPoints(new CRLDistPoint(new DistributionPoint[]{noName, withFields}))));
+	}
+
+	@Test
+	void aDistributionPointThatPublishesNoHttpCrlIsTrustedWithoutAFetch() throws Exception {
+		// The https twin is fetched only alongside an http distribution point, so an https-only leaf publishes nothing this
+		// check can read and its revocation stays unobserved; the leaf is trusted as it was before this check existed.
+		GeneralNames names = new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, "https://crl.example/ca.crl"));
+		X509Certificate leaf = leafWithDistributionPoints(new CRLDistPoint(new DistributionPoint[]{new DistributionPoint(new DistributionPointName(names), null, null)}));
+
+		assertNull(LeafRevocation.httpCrlUrl(leaf));
+		assertEquals(Status.GOOD, LeafRevocation.check(leaf, new X509Certificate[]{leaf, ca}, new FetchCache(null), DEADLINE).get(10, TimeUnit.SECONDS));
+	}
+
+	@Test
+	void anUnreadableDistributionPointIsNeverAGoodVerdict() throws Exception {
+		X509Certificate leaf = leafWithDistributionPoints(new DEROctetString(new byte[]{1, 2, 3}));
+
+		assertThrows(IOException.class, () -> LeafRevocation.httpCrlUrl(leaf), "the extension is not the SEQUENCE a CRLDistPoint is");
+		assertEquals(Status.UNKNOWN, LeafRevocation.check(leaf, new X509Certificate[]{leaf, ca}, new FetchCache(null), DEADLINE).get(10, TimeUnit.SECONDS));
 	}
 
 	@Test
@@ -380,14 +414,28 @@ class LeafRevocationTest {
 	}
 
 	private X509Certificate leaf(String crlPath) throws Exception {
-		X500Name subject = new X500Name("CN=127.0.0.1");
-		JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(CA_NAME, BigInteger.valueOf(serials.incrementAndGet()), Date.from(Instant.now().minusSeconds(60)),
-				Date.from(Instant.now().plusSeconds(3600)), subject, leafKeys.getPublic());
+		JcaX509v3CertificateBuilder builder = leafBuilder();
 		builder.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(new GeneralName(GeneralName.iPAddress, "127.0.0.1")));
 		if (crlPath != null) {
 			GeneralNames location = new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, url(crlPath)));
 			builder.addExtension(Extension.cRLDistributionPoints, false, new CRLDistPoint(new DistributionPoint[]{new DistributionPoint(new DistributionPointName(location), null, null)}));
 		}
+		return signedByCa(builder);
+	}
+
+	/** A leaf whose CRL distribution point extension holds exactly {@code value}, well formed or not. */
+	private X509Certificate leafWithDistributionPoints(ASN1Encodable value) throws Exception {
+		JcaX509v3CertificateBuilder builder = leafBuilder();
+		builder.addExtension(Extension.cRLDistributionPoints, false, value);
+		return signedByCa(builder);
+	}
+
+	private JcaX509v3CertificateBuilder leafBuilder() {
+		return new JcaX509v3CertificateBuilder(CA_NAME, BigInteger.valueOf(serials.incrementAndGet()), Date.from(Instant.now().minusSeconds(60)), Date.from(Instant.now().plusSeconds(3600)),
+				new X500Name("CN=127.0.0.1"), leafKeys.getPublic());
+	}
+
+	private X509Certificate signedByCa(JcaX509v3CertificateBuilder builder) throws Exception {
 		return new JcaX509CertificateConverter().getCertificate(builder.build(new JcaContentSignerBuilder("SHA256withRSA").build(caKeys.getPrivate())));
 	}
 

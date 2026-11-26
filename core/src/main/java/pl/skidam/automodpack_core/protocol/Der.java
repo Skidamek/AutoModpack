@@ -22,7 +22,6 @@ final class Der {
 	static final int TAG_UTC_TIME = 0x17;
 	static final int TAG_GENERALIZED_TIME = 0x18;
 	static final int TAG_SEQUENCE = 0x30;
-	static final int TAG_CONTEXT_PRIMITIVE_6 = 0x86;
 	static final int TAG_CONTEXT_CONSTRUCTED_0 = 0xA0;
 
 	static final byte[] NULL = new byte[]{TAG_NULL, 0x00};
@@ -141,13 +140,6 @@ final class Der {
 			pos += length;
 		}
 		return elements;
-	}
-
-	/** Unwraps the outer DER OCTET STRING that Java's X509Extension.getExtensionValue returns. */
-	static Element unwrapExtension(byte[] extensionValue) throws IOException {
-		Element outer = readSingle(extensionValue);
-		if (outer.tag() != TAG_OCTET_STRING) throw new IOException("Expected DER OCTET STRING for extension value");
-		return readSingle(outer.content());
 	}
 
 	private static byte[] encodeLength(int length) {
