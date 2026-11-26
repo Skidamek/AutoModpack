@@ -190,8 +190,8 @@ public class NetUtils {
 		return keyPairGenerator.generateKeyPair();
 	}
 
-	private static final byte[] ALG_SHA256_WITH_RSA = Der.sequence(Der.tlv(Der.TAG_OID, new byte[]{0x2A, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xF7, 0x0D, 0x01, 0x01, 0x0B}), Der.NULL);
-	private static final byte[] ALG_SHA256_WITH_ECDSA = Der.sequence(Der.tlv(Der.TAG_OID, new byte[]{0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02}));
+	private static final byte[] ALG_SHA256_WITH_RSA = Der.sequence(Der.oid("1.2.840.113549.1.1.11"), Der.NULL);
+	private static final byte[] ALG_SHA256_WITH_ECDSA = Der.sequence(Der.oid("1.2.840.10045.4.3.2"));
 	private static final byte[] X509_V3 = Der.tlv(Der.TAG_CONTEXT_CONSTRUCTED_0, Der.integer(BigInteger.TWO));
 	private static final BigInteger THREE = BigInteger.valueOf(3);
 

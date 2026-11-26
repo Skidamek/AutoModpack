@@ -63,6 +63,36 @@ final class Der {
 		return tlv(TAG_INTEGER, value.toByteArray());
 	}
 
+	/** An OBJECT IDENTIFIER from its dotted form, so an algorithm is named the way the standards name it. */
+	static byte[] oid(String dotted) {
+		String[] arcs = dotted.split("\\.");
+		if (arcs.length < 2) throw new IllegalArgumentException("An OID needs at least two arcs: " + dotted);
+		long root = arc(arcs[0], dotted);
+		if (root > 2) throw new IllegalArgumentException("The first OID arc is at most 2: " + dotted);
+		ByteArrayOutputStream content = new ByteArrayOutputStream();
+		writeArc(content, root * 40 + arc(arcs[1], dotted));
+		for (int i = 2; i < arcs.length; i++) writeArc(content, arc(arcs[i], dotted));
+		return tlv(TAG_OID, content.toByteArray());
+	}
+
+	private static long arc(String arc, String dotted) {
+		try {
+			long value = Long.parseLong(arc);
+			if (value < 0) throw new NumberFormatException();
+			return value;
+		} catch (NumberFormatException notAnArc) {
+			throw new IllegalArgumentException("Not a dotted OID: " + dotted, notAnArc);
+		}
+	}
+
+	/** Base 128, the high bit set on every byte but the last (ITU-T X.690 8.19). */
+	private static void writeArc(ByteArrayOutputStream content, long value) {
+		int arcsLeft = 1;
+		for (long remaining = value >>> 7; remaining != 0; remaining >>>= 7) arcsLeft++;
+		for (int shift = (arcsLeft - 1) * 7; shift > 0; shift -= 7) content.write((int) (value >>> shift) | 0x80);
+		content.write((int) value & 0x7F);
+	}
+
 	static byte[] bitString(byte[] bytes) {
 		byte[] body = new byte[bytes.length + 1];
 		body[0] = 0;
