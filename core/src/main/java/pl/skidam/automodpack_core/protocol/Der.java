@@ -67,9 +67,11 @@ final class Der {
 		String[] arcs = dotted.split("\\.");
 		if (arcs.length < 2) throw new IllegalArgumentException("An OID needs at least two arcs: " + dotted);
 		long root = arc(arcs[0], dotted);
+		long second = arc(arcs[1], dotted);
 		if (root > 2) throw new IllegalArgumentException("The first OID arc is at most 2: " + dotted);
+		if (root < 2 && second > 39) throw new IllegalArgumentException("The second OID arc is at most 39 when the first is 0 or 1: " + dotted);
 		ByteArrayOutputStream content = new ByteArrayOutputStream();
-		writeArc(content, root * 40 + arc(arcs[1], dotted));
+		writeArc(content, root * 40 + second);
 		for (int i = 2; i < arcs.length; i++) writeArc(content, arc(arcs[i], dotted));
 		return tlv(TAG_OID, content.toByteArray());
 	}

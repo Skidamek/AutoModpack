@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,5 +14,6 @@ class DerTest {
 		assertArrayEquals(new byte[]{0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02}, Der.oid("1.2.840.10045.4.3.2"), "ecdsa-with-SHA256");
 		// A second arc past 127 spans more than one base-128 octet, which the first arc's join does not hide.
 		assertArrayEquals(new byte[]{0x06, 0x03, (byte) 0x82, 0x18, 0x03}, Der.oid("2.200.3"));
+		assertThrows(IllegalArgumentException.class, () -> Der.oid("1.40.1"));
 	}
 }
