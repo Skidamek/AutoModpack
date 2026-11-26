@@ -1,6 +1,6 @@
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.github.luben.zstd.Zstd
-import io.airlift.compress.zstd.ZstdDecompressor
+import com.github.luben.zstd.ZstdCompressCtx
+import io.airlift.compress.zstd.ZstdInputStream
 import lu.luz.jzopfli.ZopfliH
 import lu.luz.jzopfli.Zopfli_lib
 import org.gradle.api.DefaultTask
@@ -35,14 +35,23 @@ import java.util.zip.ZipInputStream
  * ship once on the outer, taken from the impls while stripping (byte-identical across targets, which
  * is checked, not assumed). `impl/all.zst` is one-shot zstd level 20 over the whole solid,
  * compressed by the pinned zstd-jni natives (single-threaded by nature, one version everywhere, no
- * CLI on PATH); the frame header carries the uncompressed size the runtime's aircompressor decode
- * relies on. `impl/manifest.json` indexes the solid. Outer deflated entries use pure-Java Zopfli
+ * CLI on PATH) with its window capped at 8 MiB, the widest the runtime's aircompressor stream
+ * decodes, and a frame header carrying the uncompressed size that decode relies on.
+ * `impl/manifest.json` indexes the solid. Outer deflated entries use pure-Java Zopfli
  * and [TightZipWriter] (DOS-epoch timestamps, no 0x5455 extra fields, no bit-3 data descriptors).
  * `mc-protocols.json` mirrors the covers verbatim (one key per cover, a tilde key's number
  * answering the whole patch line) for the holepunch handshake.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
 internal const val ZSTD_LEVEL = 20
+
+/**
+ * The frame's window, capped: the runtime unwraps the solid with aircompressor's *streaming* decoder, whose window
+ * ceiling is 8 MiB (windowLog 23). A one-shot frame over a 27 MB solid otherwise takes the whole solid as its window and
+ * the client cannot decode a byte of it. The cap costs 28 KB on the shipped solid; [OneJarTask] proves every packed
+ * frame decodes through that same streaming decoder.
+ */
+internal const val ZSTD_WINDOW_LOG = 23
 
 /** Zopfli iterations for outer deflated entries: deterministic per-entry, parallelized across entries. */
 internal const val ZOPFLI_ITERATIONS = 5
@@ -181,7 +190,7 @@ abstract class OneJarTask : DefaultTask() {
         }
 
         val solidBytes = solid.toByteArray()
-        val zstdBinary = Zstd.compress(solidBytes, ZSTD_LEVEL)
+        val zstdBinary = ZstdCompressCtx().use { it.setLevel(ZSTD_LEVEL).setWindowLog(ZSTD_WINDOW_LOG).compress(solidBytes) }
         verifyRuntimeDecodable(zstdBinary, solidBytes)
         // The digest is the UNCOMPRESSED solid's hash: it changes only when the impls change, so
         // bumping zstd-jni or the level repacks the jar without wiping every install's impl cache.
@@ -268,12 +277,15 @@ abstract class OneJarTask : DefaultTask() {
         return out.toByteArray()
     }
 
-    /** The runtime unpacks the solid with aircompressor, whose zstd decoder accepts a narrower frame set than the zstd CLI (streaming level-20 frames, for one, use a window it rejects). One-shot through the pinned zstd-jni stays inside that set, and this check is the tripwire that keeps it there: a frame the client would fail to decode fails the build here instead. */
+    /**
+     * The client unpacks the solid with aircompressor's streaming decoder (ImplStore's restage reads the ZIP entry as a
+     * stream), not its one-shot twin: the two disagree on which frames they accept, so this decodes through the streaming
+     * one, from the same byte stream the client sees. A frame it would refuse fails the build here instead of on install.
+     */
     private fun verifyRuntimeDecodable(frame: ByteArray, solid: ByteArray) {
-        val decoded = ByteArray(solid.size)
-        val written = ZstdDecompressor().decompress(frame, 0, frame.size, decoded, 0, decoded.size)
-        if (written != solid.size || !decoded.contentEquals(solid)) {
-            throw GradleException("The packed solid is not decodable by the runtime's aircompressor decoder (got $written of ${solid.size} bytes)")
+        val decoded = ZstdInputStream(ByteArrayInputStream(frame)).use { it.readAllBytes() }
+        if (!decoded.contentEquals(solid)) {
+            throw GradleException("The packed solid is not decodable by the client's streaming aircompressor decoder (got ${decoded.size} of ${solid.size} bytes)")
         }
     }
 }
