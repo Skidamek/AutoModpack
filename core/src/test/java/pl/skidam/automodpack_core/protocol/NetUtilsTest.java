@@ -120,17 +120,20 @@ class NetUtilsTest {
 
 	@Test
 	void ensureSelfSignedTlsPairSignsACertificateWithAnExistingEcKey(@TempDir Path directory) throws Exception {
-		Path certFile = directory.resolve("certificate.crt");
-		Path keyFile = directory.resolve("private-key.pem");
-		KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
-		generator.initialize(new ECGenParameterSpec("secp256r1"));
-		KeyPair ecPair = generator.generateKeyPair();
-		NetUtils.savePrivateKey(ecPair.getPrivate(), keyFile);
-		NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
-		X509Certificate certificate = NetUtils.loadCertificate(certFile);
-		assertEquals(ecPair.getPublic(), certificate.getPublicKey());
-		assertEquals("SHA256withECDSA", certificate.getSigAlgName());
-		NetUtils.validateKeyMatchesCertificate(NetUtils.loadPrivateKey(keyFile), certificate);
+		for (String curve : new String[]{"secp256r1", "secp384r1", "secp521r1"}) {
+			Path subdir = Files.createDirectory(directory.resolve(curve));
+			Path certFile = subdir.resolve("certificate.crt");
+			Path keyFile = subdir.resolve("private-key.pem");
+			KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+			generator.initialize(new ECGenParameterSpec(curve));
+			KeyPair ecPair = generator.generateKeyPair();
+			NetUtils.savePrivateKey(ecPair.getPrivate(), keyFile);
+			NetUtils.ensureSelfSignedTlsPair(certFile, keyFile);
+			X509Certificate certificate = NetUtils.loadCertificate(certFile);
+			assertEquals(ecPair.getPublic(), certificate.getPublicKey(), curve);
+			assertEquals("SHA256withECDSA", certificate.getSigAlgName(), curve);
+			NetUtils.validateKeyMatchesCertificate(NetUtils.loadPrivateKey(keyFile), certificate);
+		}
 	}
 
 	@Test

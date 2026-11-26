@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509CRL;
@@ -11,15 +12,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
-
-import org.bouncycastle.asn1.ASN1Integer;
-import org.bouncycastle.asn1.x509.CRLDistPoint;
-import org.bouncycastle.asn1.x509.DistributionPoint;
-import org.bouncycastle.asn1.x509.DistributionPointName;
-import org.bouncycastle.asn1.x509.Extension;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.GeneralNames;
-import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 
 import pl.skidam.automodpack_core.utils.FetchCache;
 
@@ -103,17 +95,27 @@ final class LeafRevocation {
 		};
 	}
 
+	private static final String OID_CRL_DISTRIBUTION_POINTS = "2.5.29.31";
+	private static final String OID_CRL_NUMBER = "2.5.29.20";
+
 	/** The first http URI among the leaf's full-name CRL distribution points, scheme lowercased; null when it names none. */
 	static String httpCrlUrl(X509Certificate leaf) throws IOException {
-		byte[] extension = leaf.getExtensionValue(Extension.cRLDistributionPoints.getId());
+		byte[] extension = leaf.getExtensionValue(OID_CRL_DISTRIBUTION_POINTS);
 		if (extension == null) return null;
-		for (DistributionPoint point : CRLDistPoint.getInstance(JcaX509ExtensionUtils.parseExtensionValue(extension)).getDistributionPoints()) {
-			DistributionPointName name = point.getDistributionPoint();
-			if (name == null || name.getType() != DistributionPointName.FULL_NAME) continue;
-			for (GeneralName general : GeneralNames.getInstance(name.getName()).getNames()) {
-				if (general.getTagNo() != GeneralName.uniformResourceIdentifier) continue;
-				String uri = general.getName().toString();
-				if (uri.toLowerCase(Locale.ROOT).startsWith(HTTP)) return HTTP + uri.substring(HTTP.length());
+		Der.Element points = Der.unwrapExtension(extension);
+		if (points.tag() != Der.TAG_SEQUENCE) throw new IOException("Expected SEQUENCE for CRLDistributionPoints");
+		for (Der.Element point : points.children()) {
+			if (point.tag() != Der.TAG_SEQUENCE) continue;
+			for (Der.Element field : point.children()) {
+				if (field.tag() != Der.TAG_CONTEXT_CONSTRUCTED_0) continue;
+				for (Der.Element choice : field.children()) {
+					if (choice.tag() != Der.TAG_CONTEXT_CONSTRUCTED_0) continue;
+					for (Der.Element general : choice.children()) {
+						if (general.tag() != Der.TAG_CONTEXT_PRIMITIVE_6) continue;
+						String uri = new String(general.content(), StandardCharsets.US_ASCII);
+						if (uri.toLowerCase(Locale.ROOT).startsWith(HTTP)) return HTTP + uri.substring(HTTP.length());
+					}
+				}
 			}
 		}
 		return null;
@@ -137,10 +139,10 @@ final class LeafRevocation {
 	}
 
 	private static BigInteger crlNumber(X509CRL crl) {
-		byte[] extension = crl.getExtensionValue(Extension.cRLNumber.getId());
+		byte[] extension = crl.getExtensionValue(OID_CRL_NUMBER);
 		if (extension == null) return null;
 		try {
-			return ASN1Integer.getInstance(JcaX509ExtensionUtils.parseExtensionValue(extension)).getValue();
+			return Der.unwrapExtension(extension).asInteger();
 		} catch (IOException | RuntimeException unreadable) {
 			return null;
 		}

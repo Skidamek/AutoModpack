@@ -40,7 +40,6 @@ repositories {
 	}
 }
 
-val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val nettyVersion = versionProperty("versionNetty")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
 val tomlEditVersion = versionProperty("versionTomlEdit")
@@ -51,7 +50,6 @@ dependencies {
 	// zstd-only, Unsafe-free fork of io.airlift:aircompressor (its Apache-2.0 license and NOTICE ride along
 	// in META-INF/licenses/aircompressor/)
 	implementation("pl.skidam:aircompressor:$aircompressorVersion")
-	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	// Disable transitives so netty-buffer/common/transport aren't pulled in
 	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
 		isTransitive = false
@@ -104,7 +102,6 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("io.airlift.compress", "$reloc.io.airlift.compress")
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")
-	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
 	// Cleanup
@@ -114,9 +111,6 @@ tasks.named<ShadowJar>("shadowJar") {
 	exclude("META-INF/*.kotlin_module", "META-INF/DEPENDENCIES*", "META-INF/LICENSE*", "META-INF/NOTICE*")
 	exclude("META-INF/versions/**/OSGI-INF/**")
 	exclude("META-INF/services/java.security.Provider")
-	exclude("org/bouncycastle/pqc/legacy/picnic/*.properties")
-	exclude("org/bouncycastle/pkix/CertPathReviewerMessages*.properties")
-	exclude("org/bouncycastle/x509/CertPathReviewerMessages*.properties")
 
 	mergeServiceFiles()
 }

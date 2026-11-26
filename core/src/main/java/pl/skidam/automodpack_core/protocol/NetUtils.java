@@ -1,10 +1,8 @@
 package pl.skidam.automodpack_core.protocol;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,10 +21,10 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -36,13 +34,6 @@ import javax.security.auth.x500.X500Principal;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.bouncycastle.asn1.DERNull;
-import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
-import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.math.ec.ECCurve;
-import org.bouncycastle.operator.ContentSigner;
 
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.utils.DurableFiles;
@@ -199,62 +190,39 @@ public class NetUtils {
 		return keyPairGenerator.generateKeyPair();
 	}
 
+	private static final byte[] ALG_SHA256_WITH_RSA = Der.sequence(Der.tlv(Der.TAG_OID, new byte[]{0x2A, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xF7, 0x0D, 0x01, 0x01, 0x0B}), Der.NULL);
+	private static final byte[] ALG_SHA256_WITH_ECDSA = Der.sequence(Der.tlv(Der.TAG_OID, new byte[]{0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02}));
+	private static final byte[] X509_V3 = Der.tlv(Der.TAG_CONTEXT_CONSTRUCTED_0, Der.integer(BigInteger.TWO));
+	private static final BigInteger THREE = BigInteger.valueOf(3);
+
 	public static X509Certificate selfSign(KeyPair keyPair) throws Exception {
-		long now = System.currentTimeMillis();
-		Date startDate = new Date(now);
+		Instant start = Instant.now();
+		Instant end = start.atZone(ZoneOffset.UTC).plusYears(SELF_SIGNED_VALIDITY_YEARS).toInstant();
+		byte[] name = new X500Principal("CN=AutoModpack Self Signed Certificate").getEncoded();
+		BigInteger serial = new BigInteger(159, new SecureRandom());
+		if (serial.signum() <= 0) serial = BigInteger.ONE;
 
-		X500Principal distinguishedName = new X500Principal("CN=AutoModpack Self Signed Certificate");
-		BigInteger certSerialNumber = new BigInteger(159, new SecureRandom());
+		String algorithm = signatureAlgorithm(keyPair.getPrivate());
+		byte[] algorithmId = switch (algorithm) {
+			case "SHA256withRSA" -> ALG_SHA256_WITH_RSA;
+			case "SHA256withECDSA" -> ALG_SHA256_WITH_ECDSA;
+			default -> throw new GeneralSecurityException("Cannot self-sign with " + algorithm);
+		};
 
-		Calendar calendar = Calendar.getInstance();
-		calendar.setTime(startDate);
-		calendar.add(Calendar.YEAR, SELF_SIGNED_VALIDITY_YEARS);
-		Date endDate = calendar.getTime();
+		byte[] validity = Der.sequence(Der.time(start), Der.time(end));
+		byte[] tbs = Der.sequence(X509_V3, Der.integer(serial), algorithmId, name, validity, name, keyPair.getPublic().getEncoded());
 
-		ContentSigner contentSigner = createContentSigner(keyPair.getPrivate());
-		JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(distinguishedName, certSerialNumber, startDate, endDate, distinguishedName, keyPair.getPublic());
+		Signature signature = Signature.getInstance(algorithm);
+		signature.initSign(keyPair.getPrivate());
+		signature.update(tbs);
+		byte[] encodedCertificate = Der.sequence(tbs, algorithmId, Der.bitString(signature.sign()));
 
-		byte[] encodedCertificate = certBuilder.build(contentSigner).getEncoded();
 		X509Certificate certificate;
 		try (InputStream input = new ByteArrayInputStream(encodedCertificate)) {
 			certificate = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(input);
 		}
 		certificate.verify(keyPair.getPublic());
 		return certificate;
-	}
-
-	private static ContentSigner createContentSigner(PrivateKey privateKey) throws GeneralSecurityException {
-		String algorithm = signatureAlgorithm(privateKey);
-		AlgorithmIdentifier algorithmIdentifier = switch (algorithm) {
-			case "SHA256withRSA" -> new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
-			case "SHA256withECDSA" -> new AlgorithmIdentifier(X9ObjectIdentifiers.ecdsa_with_SHA256);
-			default -> throw new GeneralSecurityException("Cannot self-sign with " + algorithm);
-		};
-		Signature signature = Signature.getInstance(algorithm);
-		signature.initSign(privateKey);
-		ByteArrayOutputStream encodedCertificate = new ByteArrayOutputStream();
-
-		return new ContentSigner() {
-			@Override
-			public AlgorithmIdentifier getAlgorithmIdentifier() {
-				return algorithmIdentifier;
-			}
-
-			@Override
-			public OutputStream getOutputStream() {
-				return encodedCertificate;
-			}
-
-			@Override
-			public byte[] getSignature() {
-				try {
-					signature.update(encodedCertificate.toByteArray());
-					return signature.sign();
-				} catch (SignatureException e) {
-					throw new IllegalStateException("Failed to sign certificate", e);
-				}
-			}
-		};
 	}
 
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
@@ -350,13 +318,49 @@ public class NetUtils {
 			publicKey = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(rsa.getModulus(), rsa.getPublicExponent()));
 		} else if (key instanceof ECPrivateKey ec && ec.getParams().getCurve().getField() instanceof ECFieldFp field) {
 			ECParameterSpec params = ec.getParams();
-			ECCurve curve = new ECCurve.Fp(field.getP(), params.getCurve().getA(), params.getCurve().getB(), params.getOrder(), BigInteger.valueOf(params.getCofactor()));
-			var q = curve.createPoint(params.getGenerator().getAffineX(), params.getGenerator().getAffineY()).multiply(ec.getS()).normalize();
-			publicKey = KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(new ECPoint(q.getAffineXCoord().toBigInteger(), q.getAffineYCoord().toBigInteger()), params));
+			BigInteger scalar = ec.getS().mod(params.getOrder());
+			if (scalar.signum() == 0) throw new GeneralSecurityException("EC private key scalar is zero");
+			ECPoint q = ecMultiply(params.getGenerator(), scalar, params.getCurve().getA(), field.getP());
+			if (q.equals(ECPoint.POINT_INFINITY)) throw new GeneralSecurityException("EC public point is at infinity");
+			publicKey = KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(q, params));
 		} else {
 			throw new GeneralSecurityException("only an RSA or prime-curve EC private key can sign the self-signed certificate");
 		}
 		return new KeyPair(publicKey, key);
+	}
+
+	private static ECPoint ecMultiply(ECPoint generator, BigInteger scalar, BigInteger a, BigInteger p) {
+		ECPoint result = ECPoint.POINT_INFINITY;
+		ECPoint addend = generator;
+		for (int bit = 0; bit < scalar.bitLength(); bit++) {
+			if (scalar.testBit(bit)) result = ecAdd(result, addend, a, p);
+			addend = ecDouble(addend, a, p);
+		}
+		return result;
+	}
+
+	private static ECPoint ecAdd(ECPoint first, ECPoint second, BigInteger a, BigInteger p) {
+		if (first.equals(ECPoint.POINT_INFINITY)) return second;
+		if (second.equals(ECPoint.POINT_INFINITY)) return first;
+		BigInteger x1 = first.getAffineX();
+		BigInteger y1 = first.getAffineY();
+		BigInteger x2 = second.getAffineX();
+		BigInteger y2 = second.getAffineY();
+		if (x1.equals(x2)) return y1.equals(y2) ? ecDouble(first, a, p) : ECPoint.POINT_INFINITY;
+		BigInteger lambda = y2.subtract(y1).multiply(x2.subtract(x1).mod(p).modInverse(p)).mod(p);
+		BigInteger x3 = lambda.multiply(lambda).subtract(x1).subtract(x2).mod(p);
+		BigInteger y3 = lambda.multiply(x1.subtract(x3)).subtract(y1).mod(p);
+		return new ECPoint(x3, y3);
+	}
+
+	private static ECPoint ecDouble(ECPoint point, BigInteger a, BigInteger p) {
+		if (point.equals(ECPoint.POINT_INFINITY) || point.getAffineY().signum() == 0) return ECPoint.POINT_INFINITY;
+		BigInteger x = point.getAffineX();
+		BigInteger y = point.getAffineY();
+		BigInteger lambda = x.multiply(x).multiply(THREE).add(a).multiply(y.shiftLeft(1).modInverse(p)).mod(p);
+		BigInteger x3 = lambda.multiply(lambda).subtract(x.shiftLeft(1)).mod(p);
+		BigInteger y3 = lambda.multiply(x.subtract(x3)).subtract(y).mod(p);
+		return new ECPoint(x3, y3);
 	}
 
 	/** Proves the key pairs with the certificate by signing a fresh random challenge and verifying it with the certificate's public key. */

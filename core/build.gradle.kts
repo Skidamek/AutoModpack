@@ -37,7 +37,6 @@ val deps =
 		"io.netty:netty-all:$nettyVersion",
 		"org.apache.logging.log4j:log4j-core:$log4jVersion",
 		"com.google.code.gson:gson:$gsonVersion",
-		"org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion",
 		// zstd-only, Unsafe-free fork of io.airlift:aircompressor from Skidamek Maven
 		"pl.skidam:aircompressor:$aircompressorVersion",
 	)
@@ -52,6 +51,7 @@ dependencies {
 	deps.forEach { runtimeOnly(it) }
 	deps.forEach { testImplementation(it) }
 
+	testImplementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
 }

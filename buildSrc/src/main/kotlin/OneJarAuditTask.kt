@@ -131,7 +131,6 @@ abstract class OneJarAuditTask : DefaultTask() {
                 "META-INF/licenses/automodpack/LICENSE.txt",
                 "META-INF/licenses/aircompressor/LICENSE.txt",
                 "META-INF/licenses/aircompressor/NOTICE.txt",
-                "META-INF/licenses/bouncycastle/LICENSE.txt",
                 "META-INF/licenses/netty/LICENSE.txt",
             )
     }
