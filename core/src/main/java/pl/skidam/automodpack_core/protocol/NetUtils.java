@@ -199,8 +199,7 @@ public class NetUtils {
 		Instant start = Instant.now();
 		Instant end = start.atZone(ZoneOffset.UTC).plusYears(SELF_SIGNED_VALIDITY_YEARS).toInstant();
 		byte[] name = new X500Principal("CN=AutoModpack Self Signed Certificate").getEncoded();
-		BigInteger serial = new BigInteger(159, new SecureRandom());
-		if (serial.signum() <= 0) serial = BigInteger.ONE;
+		BigInteger serial = new BigInteger(159, new SecureRandom()).setBit(158);
 
 		String algorithm = signatureAlgorithm(keyPair.getPrivate());
 		byte[] algorithmId = switch (algorithm) {
@@ -321,7 +320,7 @@ public class NetUtils {
 			BigInteger scalar = ec.getS().mod(params.getOrder());
 			if (scalar.signum() == 0) throw new GeneralSecurityException("EC private key scalar is zero");
 			ECPoint q = ecMultiply(params.getGenerator(), scalar, params.getCurve().getA(), field.getP());
-			if (q.equals(ECPoint.POINT_INFINITY)) throw new GeneralSecurityException("EC public point is at infinity");
+			if (q == null) throw new GeneralSecurityException("EC public point is at infinity");
 			publicKey = KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(q, params));
 		} else {
 			throw new GeneralSecurityException("only an RSA or prime-curve EC private key can sign the self-signed certificate");
@@ -329,8 +328,13 @@ public class NetUtils {
 		return new KeyPair(publicKey, key);
 	}
 
+	/**
+	 * {@code scalar · generator} in affine coordinates; null for the point at infinity. Deliberately not constant time:
+	 * the scalar is this machine's own key read from disk, the self-signed certificate proves the result against it, and
+	 * the loop runs once when a key has no certificate. Do not reuse it on a secret a peer can time.
+	 */
 	private static ECPoint ecMultiply(ECPoint generator, BigInteger scalar, BigInteger a, BigInteger p) {
-		ECPoint result = ECPoint.POINT_INFINITY;
+		ECPoint result = null;
 		ECPoint addend = generator;
 		for (int bit = 0; bit < scalar.bitLength(); bit++) {
 			if (scalar.testBit(bit)) result = ecAdd(result, addend, a, p);
@@ -340,13 +344,13 @@ public class NetUtils {
 	}
 
 	private static ECPoint ecAdd(ECPoint first, ECPoint second, BigInteger a, BigInteger p) {
-		if (first.equals(ECPoint.POINT_INFINITY)) return second;
-		if (second.equals(ECPoint.POINT_INFINITY)) return first;
+		if (first == null) return second;
+		if (second == null) return first;
 		BigInteger x1 = first.getAffineX();
 		BigInteger y1 = first.getAffineY();
 		BigInteger x2 = second.getAffineX();
 		BigInteger y2 = second.getAffineY();
-		if (x1.equals(x2)) return y1.equals(y2) ? ecDouble(first, a, p) : ECPoint.POINT_INFINITY;
+		if (x1.equals(x2)) return y1.equals(y2) ? ecDouble(first, a, p) : null;
 		BigInteger lambda = y2.subtract(y1).multiply(x2.subtract(x1).mod(p).modInverse(p)).mod(p);
 		BigInteger x3 = lambda.multiply(lambda).subtract(x1).subtract(x2).mod(p);
 		BigInteger y3 = lambda.multiply(x1.subtract(x3)).subtract(y1).mod(p);
@@ -354,7 +358,7 @@ public class NetUtils {
 	}
 
 	private static ECPoint ecDouble(ECPoint point, BigInteger a, BigInteger p) {
-		if (point.equals(ECPoint.POINT_INFINITY) || point.getAffineY().signum() == 0) return ECPoint.POINT_INFINITY;
+		if (point == null || point.getAffineY().signum() == 0) return null;
 		BigInteger x = point.getAffineX();
 		BigInteger y = point.getAffineY();
 		BigInteger lambda = x.multiply(x).multiply(THREE).add(a).multiply(y.shiftLeft(1).modInverse(p)).mod(p);
