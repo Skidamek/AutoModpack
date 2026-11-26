@@ -91,6 +91,6 @@ public class Preload {
 		LoaderServices.installModpackLoader(modpackLoader);
 		Path thisModJar = JarUtils.getJarPath(this.getClass());
 		Environment.install(loaderManager.getEnvironmentType(), loaderManager.getPlatformType(), loaderManager.getPlatformType().toString().toLowerCase(Locale.ROOT), loaderManager.getModVersion("minecraft"),
-				loaderManager.getLoaderVersion(), FileInspection.getModVersion(thisModJar), loaderManager.isDevelopmentEnvironment(), thisModJar);
+				loaderManager.getLoaderVersion(), FileInspection.getModVersion(thisModJar), loaderManager.isDevelopmentEnvironment(), thisModJar, loaderManager.runsBeforeModsDiscovery());
 	}
 }

@@ -15,9 +15,13 @@ final class RestartDecision {
 	private RestartDecision() {}
 
 	/** The restart consequences of one applied plan. */
-	record ApplyResult(Set<UpdatePlan.RestartReason> restartReasons) {
+	record ApplyResult(Set<UpdatePlan.RestartReason> restartReasons, boolean touchedStandardEarlyServiceMod) {
 		ApplyResult {
 			restartReasons = restartReasons.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(restartReasons));
+		}
+
+		ApplyResult(Set<UpdatePlan.RestartReason> restartReasons) {
+			this(restartReasons, false);
 		}
 
 		List<String> reasonIds() {
@@ -30,7 +34,11 @@ final class RestartDecision {
 	}
 
 	static ApplyResult applyResult(UpdatePlan plan) {
-		return new ApplyResult(plan.restartReasons());
+		return applyResult(plan, false);
+	}
+
+	static ApplyResult applyResult(UpdatePlan plan, boolean touchedStandardEarlyServiceMod) {
+		return new ApplyResult(plan.restartReasons(), touchedStandardEarlyServiceMod);
 	}
 
 	/** Player-facing description of one restart reason, shown with the changelogs. */

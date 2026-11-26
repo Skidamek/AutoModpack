@@ -32,9 +32,11 @@ public final class Environment {
 	private final String modVersion;
 	private final boolean development;
 	private final Path thisModJar;
+	private final boolean runsBeforeModsDiscovery;
 	private final long preloadTime;
 
-	private Environment(EnvironmentType side, ModPlatform platform, String loader, String mcVersion, String loaderVersion, String modVersion, boolean development, Path thisModJar, long preloadTime) {
+	private Environment(EnvironmentType side, ModPlatform platform, String loader, String mcVersion, String loaderVersion, String modVersion, boolean development, Path thisModJar, boolean runsBeforeModsDiscovery,
+			long preloadTime) {
 		this.side = side;
 		this.platform = platform;
 		this.loader = loader;
@@ -43,6 +45,7 @@ public final class Environment {
 		this.modVersion = modVersion;
 		this.development = development;
 		this.thisModJar = thisModJar;
+		this.runsBeforeModsDiscovery = runsBeforeModsDiscovery;
 		this.preloadTime = preloadTime;
 	}
 
@@ -56,7 +59,11 @@ public final class Environment {
 	 * keep resolving data roots the way a loaderless process always has.
 	 */
 	static void install(EnvironmentType side, ModPlatform platform, String loader, String mcVersion, String loaderVersion, String modVersion, boolean development, Path thisModJar) {
-		current = new Environment(side, platform, loader, mcVersion, loaderVersion, modVersion, development, thisModJar, System.currentTimeMillis());
+		install(side, platform, loader, mcVersion, loaderVersion, modVersion, development, thisModJar, false);
+	}
+
+	static void install(EnvironmentType side, ModPlatform platform, String loader, String mcVersion, String loaderVersion, String modVersion, boolean development, Path thisModJar, boolean runsBeforeModsDiscovery) {
+		current = new Environment(side, platform, loader, mcVersion, loaderVersion, modVersion, development, thisModJar, runsBeforeModsDiscovery, System.currentTimeMillis());
 	}
 
 	/** Test-only sibling of {@link #install}: restores the environment a test captured before it installed its own. */
@@ -135,6 +142,10 @@ public final class Environment {
 
 	public Path thisModJar() {
 		return thisModJar;
+	}
+
+	public boolean runsBeforeModsDiscovery() {
+		return runsBeforeModsDiscovery;
 	}
 
 	public long preloadTime() {

@@ -16,8 +16,21 @@ public final class RestartPolicy {
 
 	/** Preload: only a change this boot cannot absorb (loader version, vanilla {@code mods/}) forces a relaunch. */
 	public static RestartDemand atPreload(Set<RestartReason> reasons) {
+		return atPreload(reasons, false);
+	}
+
+	/**
+	 * Preload: only a change this boot cannot absorb forces a relaunch. When {@code absorbStandardModsMutations} is
+	 * true (the loader runs preload before scanning {@code mods/} and no early-service jar in {@code mods/} was
+	 * touched), in-place standard {@code mods/} mutations are absorbed by the upcoming mod discovery in the same boot.
+	 */
+	public static RestartDemand atPreload(Set<RestartReason> reasons, boolean absorbStandardModsMutations) {
 		if (reasons == null) return RestartDemand.NONE;
-		for (RestartReason reason : reasons) if (reason.blocksHotLoad()) return RestartDemand.REQUIRED;
+		for (RestartReason reason : reasons) {
+			if (!reason.blocksHotLoad()) continue;
+			if (absorbStandardModsMutations && reason.isStandardModsMutation()) continue;
+			return RestartDemand.REQUIRED;
+		}
 		return RestartDemand.NONE;
 	}
 

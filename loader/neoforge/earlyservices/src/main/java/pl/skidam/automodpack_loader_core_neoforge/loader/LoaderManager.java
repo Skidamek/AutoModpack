@@ -73,4 +73,9 @@ public class LoaderManager implements LoaderManagerService {
 	public boolean isDevelopmentEnvironment() {
 		return !FMLLoader.getCurrent().isProduction();
 	}
+
+	@Override
+	public boolean runsBeforeModsDiscovery() {
+		return true;
+	}
 }

@@ -1,8 +1,10 @@
 package pl.skidam.automodpack_core.client;
 
 import java.io.IOException;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -16,6 +18,8 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.TomlConfigs;
+import pl.skidam.automodpack_core.loader.FileInspection;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ModFileCache;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -23,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -38,6 +43,7 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.WorkStatus;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -248,8 +254,10 @@ final class UpdateSession implements UpdateAttempt {
 				LOGGER.warn("Modpack generation committed, but the pack could not be attached again; it still reads as detached until the next sync", e);
 			}
 		}
-		return RestartDecision.applyResult(plan);
+		return RestartDecision.applyResult(plan, lastCommitTouchedStandardEarlyServiceMod);
 	}
+
+	private boolean lastCommitTouchedStandardEarlyServiceMod;
 
 	/** The plan the commit actually applied, after any replan; the flow applies its config snapshot at completion. */
 	UpdatePlan appliedPlan() {
@@ -276,9 +284,29 @@ final class UpdateSession implements UpdateAttempt {
 		// so where the plan's bytes are read from is the only thing this observation decides.
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget(), ClientProjectionView.observe(storage), cache);
+			lastCommitTouchedStandardEarlyServiceMod = touchesStandardEarlyServiceMod(prepared.plan());
 			UpdateTransaction transaction = UpdateTransaction.create(prepared.plan(), target, prepared.overlayDigest(), prepared.plannedAgainst());
 			transaction.stateKind = stateKind == null ? "" : stateKind.name();
 			return new UpdateCommit.Built(transaction, target);
+		}
+	}
+
+	/** Early-service jars in {@code mods/} are already loaded on the service layer before {@code Preload} runs, so mutating one still requires a restart. */
+	private boolean touchesStandardEarlyServiceMod(UpdatePlan plan) {
+		for (UpdatePlan.Operation op : plan.operations()) {
+			if (op.root() != UpdatePlan.Root.GAME_DIR || !ModpackPathPolicy.isModPath(op.relativePath())) continue;
+			if (op.operation() == UpdatePlan.OperationType.INSTALL_OBJECT && hasEarlyServiceOrUnreadable(storage.objectFile(op.expectedObjectHash()))) return true;
+			if (op.expectedExistingHash() != null && hasEarlyServiceOrUnreadable(storage.gamePath(op.relativePath()))) return true;
+		}
+		return false;
+	}
+
+	private static boolean hasEarlyServiceOrUnreadable(Path file) {
+		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return true;
+		try (FileSystem fs = JarUtils.openJar(file)) {
+			return !FileInspection.getServices(fs, LoaderServicePaths.ALL_SERVICES).isEmpty();
+		} catch (IOException | RuntimeException e) {
+			return true;
 		}
 	}
 

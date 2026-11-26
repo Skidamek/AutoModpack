@@ -20,4 +20,9 @@ public interface LoaderManagerService {
 	boolean isDevelopmentEnvironment();
 
 	String getModVersion(String modId);
+
+	/** True when this loader runs {@code Preload} before scanning {@code mods/} for regular mod candidates. */
+	default boolean runsBeforeModsDiscovery() {
+		return false;
+	}
 }

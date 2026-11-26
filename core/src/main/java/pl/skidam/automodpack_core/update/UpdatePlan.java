@@ -211,28 +211,30 @@ public final class UpdatePlan {
 	 * projection-only mod update with no reason here is still {@link RestartDemand#REQUIRED} in-game.
 	 */
 	public enum RestartReason {
-		REMOVED_LOCAL_MODS(true),
-		CORRECTED_FILE_LOCATIONS(true),
-		FIXED_NESTED_MODS(true),
-		REMOVED_DUPLICATE_MODS(true),
-		REMOVED_STANDARD_MODS(true),
-		CHANGED_LOADER_VERSION(true, LauncherVersionSwapper.Axis.LOADER_VERSION),
-		CHANGED_LOADER_TYPE(true, LauncherVersionSwapper.Axis.LOADER_TYPE),
-		CHANGED_GAME_VERSION(true, LauncherVersionSwapper.Axis.GAME_VERSION),
-		MANUAL_VERSION_SWITCH(true),
-		CHANGED_GROUP_SELECTION(false),
-		SELECTED_MODPACK(false);
+		REMOVED_LOCAL_MODS(true, true),
+		CORRECTED_FILE_LOCATIONS(true, true),
+		FIXED_NESTED_MODS(true, true),
+		REMOVED_DUPLICATE_MODS(true, true),
+		REMOVED_STANDARD_MODS(true, true),
+		CHANGED_LOADER_VERSION(true, false, LauncherVersionSwapper.Axis.LOADER_VERSION),
+		CHANGED_LOADER_TYPE(true, false, LauncherVersionSwapper.Axis.LOADER_TYPE),
+		CHANGED_GAME_VERSION(true, false, LauncherVersionSwapper.Axis.GAME_VERSION),
+		MANUAL_VERSION_SWITCH(true, false),
+		CHANGED_GROUP_SELECTION(false, false),
+		SELECTED_MODPACK(false, false);
 
 		private final boolean blocksHotLoad;
+		private final boolean standardModsMutation;
 		/** The launcher axis this reason switches, or null when it is no launcher switch. */
 		private final LauncherVersionSwapper.Axis axis;
 
-		RestartReason(boolean blocksHotLoad) {
-			this(blocksHotLoad, null);
+		RestartReason(boolean blocksHotLoad, boolean standardModsMutation) {
+			this(blocksHotLoad, standardModsMutation, null);
 		}
 
-		RestartReason(boolean blocksHotLoad, LauncherVersionSwapper.Axis axis) {
+		RestartReason(boolean blocksHotLoad, boolean standardModsMutation, LauncherVersionSwapper.Axis axis) {
 			this.blocksHotLoad = blocksHotLoad;
+			this.standardModsMutation = standardModsMutation;
 			this.axis = axis;
 		}
 
@@ -244,6 +246,11 @@ public final class UpdatePlan {
 		/** True when preload cannot absorb this change in the same boot. */
 		public boolean blocksHotLoad() {
 			return blocksHotLoad;
+		}
+
+		/** True when this reason only reflects a standard {@code mods/} file mutation that a pre-discovery loader can absorb in-place. */
+		public boolean isStandardModsMutation() {
+			return standardModsMutation;
 		}
 	}
 

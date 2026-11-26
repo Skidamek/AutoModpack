@@ -445,8 +445,13 @@ public class ModpackUpdater implements AutoCloseable {
 		ApplyResult applyResult = commitFlow(launch);
 		if (applyFirstInstall) rememberLaunchConsent();
 		rememberLaunchApplyReceipt();
-		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons()), System.currentTimeMillis() - start);
+		LOGGER.info("Launch apply completed; restart demand: {} Took: {}ms", RestartPolicy.atPreload(applyResult.restartReasons(), canAbsorbStandardModsMutations(applyResult)), System.currentTimeMillis() - start);
 		finishLaunchApply(applyResult);
+	}
+
+	private static boolean canAbsorbStandardModsMutations(ApplyResult applyResult) {
+		Environment environment = Environment.installed();
+		return Environment.isPrelaunching() && environment != null && environment.runsBeforeModsDiscovery() && !applyResult.touchedStandardEarlyServiceMod();
 	}
 
 	private boolean launchMayWriteUnverified(boolean applyFirstInstall) {
@@ -479,7 +484,7 @@ public class ModpackUpdater implements AutoCloseable {
 			restartAfterApply(applyResult);
 			return;
 		}
-		if (RestartPolicy.atPreload(applyResult.restartReasons()) != RestartDemand.REQUIRED) {
+		if (RestartPolicy.atPreload(applyResult.restartReasons(), canAbsorbStandardModsMutations(applyResult)) != RestartDemand.REQUIRED) {
 			LOGGER.info("Launch apply needs no restart at preload; hot-loading the fresh pack in this boot");
 			return;
 		}
