@@ -1,6 +1,8 @@
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.luben.zstd.Zstd
 import io.airlift.compress.zstd.ZstdDecompressor
+import lu.luz.jzopfli.ZopfliH
+import lu.luz.jzopfli.Zopfli_lib
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
@@ -14,6 +16,7 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -24,23 +27,25 @@ import java.util.TreeMap
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 /**
  * Packs the ONE published jar: the optimized universal outer plus every target's optimized impl
- * jar as a solid zstd blob. Each impl jar is STORE-normalized (re-zipped with method 0 so the
- * solid compresses) and its `assets/` entries are stripped - assets ship once on the outer, taken
- * from the impls while stripping (byte-identical across targets, which is checked, not assumed).
- * `impl/all.zst` is one-shot zstd level 20 over the whole solid, compressed by the pinned zstd-jni
- * natives (single-threaded by nature, one version everywhere, no CLI on PATH); the frame header
- * carries the uncompressed size the runtime's aircompressor decode relies on. `impl/manifest.json`
- * indexes the solid. Both entries are appended AFTER the optimizer ran, and appended as STORE -
- * that ordering is what keeps them uncompressed, because the optimizer never sees the impl entries.
+ * jar as a solid zstd blob. Each impl jar (and any nested jarjar inside it) is STORE-normalized
+ * (re-zipped with method 0 so the solid compresses) and its `assets/` entries are stripped - assets
+ * ship once on the outer, taken from the impls while stripping (byte-identical across targets, which
+ * is checked, not assumed). `impl/all.zst` is one-shot zstd level 20 over the whole solid,
+ * compressed by the pinned zstd-jni natives (single-threaded by nature, one version everywhere, no
+ * CLI on PATH); the frame header carries the uncompressed size the runtime's aircompressor decode
+ * relies on. `impl/manifest.json` indexes the solid. Outer deflated entries use pure-Java Zopfli
+ * and [TightZipWriter] (DOS-epoch timestamps, no 0x5455 extra fields, no bit-3 data descriptors).
  * `mc-protocols.json` mirrors the covers verbatim (one key per cover, a tilde key's number
  * answering the whole patch line) for the holepunch handshake.
  */
 /** One-shot level 20: the measured sweet spot on the shipped solid (-19 gave up 4.9 KB more, -21/-22 under 100 bytes each, --max 905 bytes for 12 s) and single-threaded by nature, so the bytes cannot drift with core count. */
 internal const val ZSTD_LEVEL = 20
+
+/** Zopfli iterations for outer deflated entries: deterministic per-entry, parallelized across entries. */
+internal const val ZOPFLI_ITERATIONS = 5
 
 /** The packed vanilla protocol table (covered Minecraft version to number), read by core's MinecraftProtocols for the holepunch handshake. */
 const val PROTOCOLS_ENTRY = "mc-protocols.json"
@@ -78,6 +83,20 @@ abstract class OneJarTask : DefaultTask() {
     @get:OutputFile
     abstract val oneJar: RegularFileProperty
 
+    private data class PendingEntry(
+        val name: String,
+        val raw: ByteArray,
+        val forceStore: Boolean,
+    )
+
+    private data class PreparedEntry(
+        val name: String,
+        val method: Int,
+        val crc: Long,
+        val uncompressedSize: Int,
+        val payload: ByteArray,
+    )
+
     @TaskAction
     fun pack() {
         val startTime = System.currentTimeMillis()
@@ -96,7 +115,7 @@ abstract class OneJarTask : DefaultTask() {
 
         for (id in implJarsById.keys.sorted()) {
             val normalized = ByteArrayOutputStream()
-            ZipOutputStream(normalized).use { output ->
+            TightZipWriter(normalized).use { output ->
                 ZipInputStream(FileInputStream(implJarsById.getValue(id))).use { input ->
                     val entries = generateSequence { input.nextEntry }.mapNotNull { entry ->
                         if (entry.isDirectory) return@mapNotNull null
@@ -110,13 +129,13 @@ abstract class OneJarTask : DefaultTask() {
                             outerAssets.putIfAbsent(entry.name, bytes)
                             return@mapNotNull null
                         }
-                        entry.name to bytes
+                        // STORE-normalize nested jars (e.g. Forge's mixinextras jarjar) so zstd sees uncompressed bytecode instead of deflate noise.
+                        val normalizedBytes = if (entry.name.endsWith(".jar")) storeNormalizeJar(bytes) else bytes
+                        entry.name to normalizedBytes
                     }.toMap()
-                    // Sorted names and zeroed timestamps: the producers stamp file mtimes and fs
-                    // order into their zips, and the packer normalizes both away so the solid - and
-                    // everything hashed from it - is a pure function of the impl contents.
+                    // Sorted names and DOS-epoch timestamps so the solid - and everything hashed from it - is a pure function of the impl contents.
                     for ((name, bytes) in entries.toSortedMap()) {
-                        putStored(output, ZipEntry(name).apply { time = 0L }, bytes)
+                        output.writeStored(name, bytes)
                     }
                 }
             }
@@ -169,18 +188,27 @@ abstract class OneJarTask : DefaultTask() {
         val digest = ImplManifestFormat.sha1Hex(solidBytes)
         val manifest = ImplManifestFormat.write(digest, manifestEntries)
 
+        val pending = mutableListOf<PendingEntry>()
+        collectOuter(pending)
+        for ((name, bytes) in outerAssets.entries.sortedBy { it.key }) {
+            pending.add(PendingEntry(name, bytes, forceStore = false))
+        }
+        pending.add(PendingEntry(ImplManifestFormat.MANIFEST_ENTRY, manifest, forceStore = true))
+        pending.add(PendingEntry(ImplManifestFormat.SOLID_ENTRY, zstdBinary, forceStore = true))
+        pending.add(PendingEntry(PROTOCOLS_ENTRY, ObjectMapper().writeValueAsString(TreeMap(protocols.get())).toByteArray(StandardCharsets.UTF_8), forceStore = true))
+
+        // Per-entry Zopfli is pure and independent, so parallelStream keeps byte-identical output in insertion order.
+        val prepared = pending.parallelStream().map(::prepareEntry).toList()
+
         val outputFile = oneJar.get().asFile
         // The one jar owns merged/: drop stale jars that are not this output, never the autotest
         // fixtures beside them (those live in a subdirectory listFiles never returns).
         outputFile.parentFile.listFiles()?.filter { it.isFile && it.name.endsWith(".jar") && it.name != outputFile.name }?.forEach { it.delete() }
         outputFile.parentFile.mkdirs()
-        ZipOutputStream(FileOutputStream(outputFile).buffered()).use { output ->
-            copyOuter(output)
-            // Assets deflate: they are the same lang/texture bytes that used to ship deflate-compressed inside every impl, and only the impl slices must stay STORE.
-            for ((name, bytes) in outerAssets.entries.sortedBy { it.key }) putDeflated(output, ZipEntry(name).apply { time = 0L }, bytes)
-            putStored(output, ZipEntry(ImplManifestFormat.MANIFEST_ENTRY).apply { time = 0L }, manifest)
-            putStored(output, ZipEntry(ImplManifestFormat.SOLID_ENTRY).apply { time = 0L }, zstdBinary)
-            putStored(output, ZipEntry(PROTOCOLS_ENTRY).apply { time = 0L }, ObjectMapper().writeValueAsString(TreeMap(protocols.get())).toByteArray(StandardCharsets.UTF_8))
+        TightZipWriter(FileOutputStream(outputFile).buffered()).use { output ->
+            for (entry in prepared) {
+                output.writePrecompressed(entry.name, entry.method, entry.crc, entry.uncompressedSize, entry.payload)
+            }
         }
         val percentSmaller = "%.1f%%".format(Locale.ROOT, (1 - zstdBinary.size.toDouble() / solidBytes.size) * 100)
         println(
@@ -189,8 +217,7 @@ abstract class OneJarTask : DefaultTask() {
         )
     }
 
-    /** Copies the optimized outer's entries, preserving each entry's own compression method. Directory entries are dropped: zip readers synthesize them and they are 583 dead zero-byte entries otherwise. */
-    private fun copyOuter(output: ZipOutputStream) {
+    private fun collectOuter(pending: MutableList<PendingEntry>) {
         val seen = mutableSetOf<String>()
         ZipInputStream(FileInputStream(outerJar.get().asFile)).use { input ->
             generateSequence { input.nextEntry }.forEach { entry ->
@@ -198,38 +225,47 @@ abstract class OneJarTask : DefaultTask() {
                 if (!seen.add(entry.name)) throw GradleException("Duplicate entry ${entry.name} in the outer jar")
                 val rawBytes = input.readBytes()
                 val bytes = if (entry.name.endsWith(".class")) ClassLocalVarStripper.strip(rawBytes) else rawBytes
-                val copy = ZipEntry(entry.name).apply {
-                    time = 0L
-                }
-                if (entry.method == ZipEntry.STORED || entry.name.endsWith(".zst")) {
-                    // Zstd entries are already compressed; a second ZIP deflate pass only hides that from the audit.
-                    putStored(output, copy, bytes)
-                } else {
-                    // Everything else re-enters as DEFLATE: the optimized outer is STORE/DEFLATE only (method 93 is unreadable on Java 17).
-                    copy.method = ZipEntry.DEFLATED
-                    output.putNextEntry(copy)
-                    output.write(bytes)
-                    output.closeEntry()
-                }
+                val forceStore = entry.method == ZipEntry.STORED || entry.name.endsWith(".zst")
+                pending.add(PendingEntry(entry.name, bytes, forceStore))
             }
         }
     }
 
-    private fun putStored(output: ZipOutputStream, entry: ZipEntry, bytes: ByteArray) {
-        entry.method = ZipEntry.STORED
-        entry.size = bytes.size.toLong()
-        entry.compressedSize = bytes.size.toLong()
-        entry.crc = CRC32().apply { update(bytes) }.value
-        output.putNextEntry(entry)
-        output.write(bytes)
-        output.closeEntry()
+    private fun prepareEntry(entry: PendingEntry): PreparedEntry {
+        val crc = CRC32().apply { update(entry.raw) }.value
+        if (entry.forceStore || entry.raw.isEmpty()) {
+            return PreparedEntry(entry.name, ZipEntry.STORED, crc, entry.raw.size, entry.raw)
+        }
+        val deflated = zopfliDeflate(entry.raw)
+        return if (deflated.size < entry.raw.size) {
+            PreparedEntry(entry.name, ZipEntry.DEFLATED, crc, entry.raw.size, deflated)
+        } else {
+            PreparedEntry(entry.name, ZipEntry.STORED, crc, entry.raw.size, entry.raw)
+        }
     }
 
-    private fun putDeflated(output: ZipOutputStream, entry: ZipEntry, bytes: ByteArray) {
-        entry.method = ZipEntry.DEFLATED
-        output.putNextEntry(entry)
-        output.write(bytes)
-        output.closeEntry()
+    private fun zopfliDeflate(raw: ByteArray): ByteArray {
+        val options = ZopfliH.ZopfliOptions().apply {
+            numiterations = ZOPFLI_ITERATIONS
+        }
+        val out = arrayOf<ByteArray?>(null)
+        val outSize = intArrayOf(0)
+        Zopfli_lib.ZopfliCompress(options, ZopfliH.ZopfliFormat.ZOPFLI_FORMAT_DEFLATE, raw, raw.size, out, outSize)
+        return out[0]!!.copyOf(outSize[0])
+    }
+
+    private fun storeNormalizeJar(jarBytes: ByteArray): ByteArray {
+        val entries = TreeMap<String, ByteArray>()
+        ZipInputStream(ByteArrayInputStream(jarBytes)).use { input ->
+            generateSequence { input.nextEntry }.forEach { entry ->
+                if (!entry.isDirectory) entries[entry.name] = input.readBytes()
+            }
+        }
+        val out = ByteArrayOutputStream(jarBytes.size * 2)
+        TightZipWriter(out).use { writer ->
+            for ((name, bytes) in entries) writer.writeStored(name, bytes)
+        }
+        return out.toByteArray()
     }
 
     /** The runtime unpacks the solid with aircompressor, whose zstd decoder accepts a narrower frame set than the zstd CLI (streaming level-20 frames, for one, use a window it rejects). One-shot through the pinned zstd-jni stays inside that set, and this check is the tripwire that keeps it there: a frame the client would fail to decode fails the build here instead. */
@@ -240,5 +276,4 @@ abstract class OneJarTask : DefaultTask() {
             throw GradleException("The packed solid is not decodable by the runtime's aircompressor decoder (got $written of ${solid.size} bytes)")
         }
     }
-
 }

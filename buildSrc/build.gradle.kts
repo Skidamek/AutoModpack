@@ -21,6 +21,8 @@ dependencies {
 	implementation("com.fasterxml.jackson.core:jackson-databind:${version("versionJackson")}") // For JSON parsing e.g. in build.forge.gradle.kts
 	// Precompiled zstd natives for packing the impl solid; the version pins the compressed bytes
 	implementation("com.github.luben:zstd-jni:${version("versionZstdJni")}")
+	// Pure-Java Zopfli for optimal standard DEFLATE on the outer jar
+	implementation("com.github.luccappellaro:jzopfli:${version("versionJzopfli")}")
 	// The same decoder the runtime uses, so the build proves the solid is decodable by the client
 	implementation("pl.skidam:aircompressor:${version("versionAircompressor")}")
 	implementation(
