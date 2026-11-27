@@ -39,7 +39,6 @@ import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
-import pl.skidam.tomledit.Comments;
 import pl.skidam.tomledit.ConfigPath;
 import pl.skidam.tomledit.Document;
 import pl.skidam.tomledit.ParseError;
@@ -47,8 +46,8 @@ import pl.skidam.tomledit.ParseResult;
 import pl.skidam.tomledit.ReconcilePolicy;
 import pl.skidam.tomledit.TableReader;
 import pl.skidam.tomledit.TomlEdit;
+import pl.skidam.tomledit.TomlException;
 import pl.skidam.tomledit.TomlSchema;
-import pl.skidam.tomledit.TomlValidationException;
 import pl.skidam.tomledit.TomlValue;
 
 /**
@@ -96,6 +95,9 @@ public final class TomlConfigs {
 					"DISABLED ships every jar. METADATA and PLATFORMS drop dedicated-server jars on a best-effort basis.")
 			.field(ConfigPath.of("modpack", "exclude"), stringArray(ServerConfigJsons.FACTORY_EXCLUDE))
 			.field(ConfigPath.of("modpack", "editable"), stringArray(ServerConfigJsons.FACTORY_EDITABLE))
+			.dynamicTable(ConfigPath.of("categories"))
+			.comment(ConfigPath.of("groups"), "Each group maps 1:1 to host-modpack/<id>/. selection: REQUIRED, RECOMMENDED, OPTIONAL, AUTOMATIC.")
+			.dynamicTable(ConfigPath.of("groups"))
 			.build();
 
 	private static final TomlSchema CLIENT_SCHEMA = TomlSchema.builder()
@@ -140,28 +142,35 @@ public final class TomlConfigs {
 	 * comments, and the result is written atomically. A corrupt existing file fails loudly.
 	 */
 	public static <T> void save(Path path, T model, Class<T> type, Supplier<T> defaults) throws IOException {
-		Document document = prepareSaveDocument(path, model, type);
+		byte[] bytes = prepareSaveBytes(path, model, type);
 		OsPaths.requirePublishableConfig(path);
-		DurableFiles.writeAtomic(path, document.text());
+		DurableFiles.writeAtomic(path, bytes);
 	}
 
 	/** Inserts newly imported {@code [groups.<id>]} tables losslessly without altering existing entries or comments. */
 	public static void insertImportedGroups(Path path, Map<String, GroupDeclaration> imported) throws IOException {
 		if (imported == null || imported.isEmpty()) return;
-		Document document;
+		byte[] bytes;
 		if (Files.isRegularFile(path)) {
-			document = parseExistingForEdit(path);
-			for (var entry : imported.entrySet()) {
-				if (entry.getValue() == null) continue;
-				document.ensure(ConfigPath.of("groups", entry.getKey()), groupToTable(entry.getValue(), null), null);
+			Document document = parseExistingForEdit(path);
+			try {
+				document.atomic(d -> {
+					for (var entry : imported.entrySet()) {
+						if (entry.getValue() == null) continue;
+						d.ensure(ConfigPath.of("groups", entry.getKey()), groupToTable(entry.getValue(), null), null);
+					}
+				});
+			} catch (TomlException e) {
+				throw new ConfigTools.ConfigParseException("Cannot update " + path.getFileName() + ": " + e.getMessage(), e);
 			}
+			bytes = document.text();
 		} else {
 			ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
 			config.modpack.groups.putAll(imported);
-			document = freshDocument(config, ServerConfigFieldsV3.class);
+			bytes = canonicalBytes(config, ServerConfigFieldsV3.class);
 		}
 		OsPaths.requirePublishableConfig(path);
-		DurableFiles.writeAtomic(path, document.text());
+		DurableFiles.writeAtomic(path, bytes);
 	}
 
 	private static Document parseExistingForEdit(Path path) throws IOException {
@@ -175,24 +184,25 @@ public final class TomlConfigs {
 		return result.document();
 	}
 
-	private static <T> Document prepareSaveDocument(Path path, T model, Class<T> type) throws IOException {
+	private static <T> byte[] prepareSaveBytes(Path path, T model, Class<T> type) throws IOException {
 		if (!Files.isRegularFile(path)) {
-			return freshDocument(model, type);
+			return canonicalBytes(model, type);
 		}
 		Document document = parseExistingForEdit(path);
-		if (type == ServerConfigFieldsV3.class) {
-			ServerConfigFieldsV3 server = (ServerConfigFieldsV3) model;
-			TomlValue.Table target = serverToTable(server, document.tree());
-			SERVER_SCHEMA.apply(document, target, ReconcilePolicy.SYNC);
-			ensureDynamicTables(document, target, "categories");
-			ensureDynamicTables(document, target, "groups");
-		} else if (type == ClientConfigFieldsV3.class) {
-			ClientConfigFieldsV3 client = (ClientConfigFieldsV3) model;
-			CLIENT_SCHEMA.apply(document, clientToTable(client), ReconcilePolicy.SYNC);
-		} else {
-			throw new ConfigTools.ConfigException("Unsupported TOML config type: " + type.getSimpleName());
+		try {
+			if (type == ServerConfigFieldsV3.class) {
+				ServerConfigFieldsV3 server = (ServerConfigFieldsV3) model;
+				SERVER_SCHEMA.apply(document, serverToTable(server, document.tree()), ReconcilePolicy.SYNC);
+			} else if (type == ClientConfigFieldsV3.class) {
+				ClientConfigFieldsV3 client = (ClientConfigFieldsV3) model;
+				CLIENT_SCHEMA.apply(document, clientToTable(client), ReconcilePolicy.SYNC);
+			} else {
+				throw new ConfigTools.ConfigException("Unsupported TOML config type: " + type.getSimpleName());
+			}
+		} catch (TomlException e) {
+			throw new ConfigTools.ConfigParseException("Cannot save " + path.getFileName() + ": " + e.getMessage(), e);
 		}
-		return document;
+		return document.text();
 	}
 
 	// ------------------------------------------------------------------ TOML read / write
@@ -207,17 +217,16 @@ public final class TomlConfigs {
 		}
 		Document document = parseDocument(path, bytes);
 		try {
-			if (type == ServerConfigFieldsV3.class) return (T) readServerTable(document.tree(), path);
-			if (type == ClientConfigFieldsV3.class) return (T) readClientTable(document.tree(), path);
+			if (type == ServerConfigFieldsV3.class) return (T) readServerTable(document.reader(), path);
+			if (type == ClientConfigFieldsV3.class) return (T) readClientTable(document.reader(), path);
 			throw new ConfigTools.ConfigException("Unsupported TOML config type: " + type.getSimpleName());
-		} catch (TomlValidationException e) {
+		} catch (TomlException e) {
 			throw new ConfigTools.ConfigParseException("Invalid configuration " + path.getFileName() + ": " + e.getMessage(), e);
 		}
 	}
 
-	private static ServerConfigFieldsV3 readServerTable(TomlValue.Table tree, Path path) {
+	private static ServerConfigFieldsV3 readServerTable(TableReader root, Path path) {
 		ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
-		TableReader root = TableReader.of(tree);
 
 		config.modpackHost = root.bool("modpack-host", config.modpackHost);
 		config.generateModpackOnStart = root.bool("generate-modpack-on-start", config.generateModpackOnStart);
@@ -251,8 +260,8 @@ public final class TomlConfigs {
 		config.exportHttpIncludeAll = exportHttp.bool("include-all", config.exportHttpIncludeAll);
 
 		Optional<TableReader> modpackOpt = root.table("modpack");
-		Optional<TableReader> categoriesOpt = root.table("categories");
-		Optional<TableReader> groupsOpt = root.table("groups");
+		Optional<Map<String, TableReader>> categoriesOpt = root.tableMap("categories");
+		Optional<Map<String, TableReader>> groupsOpt = root.tableMap("groups");
 		if (modpackOpt.isPresent() || categoriesOpt.isPresent() || groupsOpt.isPresent()) {
 			ModpackFields fields = new ModpackFields();
 			if (modpackOpt.isPresent()) {
@@ -262,20 +271,8 @@ public final class TomlConfigs {
 				fields.exclude = modpack.stringSet("exclude", fields.exclude);
 				fields.editable = modpack.stringSet("editable", fields.editable);
 			}
-			if (categoriesOpt.isPresent()) {
-				TableReader categoriesTable = categoriesOpt.get();
-				for (String categoryId : categoriesTable.keys()) {
-					TableReader catReader = categoriesTable.table(categoryId).orElseThrow(() -> new ConfigTools.ConfigParseException("Category '" + categoryId + "' must be a table"));
-					fields.categories.put(categoryId, readCategory(catReader));
-				}
-			}
-			if (groupsOpt.isPresent()) {
-				TableReader groupsTable = groupsOpt.get();
-				for (String groupId : groupsTable.keys()) {
-					TableReader groupReader = groupsTable.table(groupId).orElseThrow(() -> new ConfigTools.ConfigParseException("Group '" + groupId + "' must be a table"));
-					fields.groups.put(groupId, readGroup(groupReader));
-				}
-			}
+			categoriesOpt.ifPresent(map -> map.forEach((categoryId, catReader) -> fields.categories.put(categoryId, readCategory(catReader))));
+			groupsOpt.ifPresent(map -> map.forEach((groupId, groupReader) -> fields.groups.put(groupId, readGroup(groupReader))));
 			config.modpack = fields;
 		}
 
@@ -306,9 +303,8 @@ public final class TomlConfigs {
 		return g;
 	}
 
-	private static ClientConfigFieldsV3 readClientTable(TomlValue.Table tree, Path path) {
+	private static ClientConfigFieldsV3 readClientTable(TableReader root, Path path) {
 		ClientConfigFieldsV3 config = new ClientConfigFieldsV3();
-		TableReader root = TableReader.of(tree);
 
 		config.updateSelectedModpackOnLaunch = root.bool("update-selected-modpack-on-launch", config.updateSelectedModpackOnLaunch);
 		config.selfUpdater = root.bool("self-updater", config.selfUpdater);
@@ -424,18 +420,6 @@ public final class TomlConfigs {
 		return parent.get(key) instanceof TomlValue.Table child ? child : null;
 	}
 
-	private static void ensureDynamicTables(Document document, TomlValue.Table target, String section) {
-		TomlValue.Table sectionTable = childTable(target, section);
-		if (sectionTable == null) return;
-		for (var entry : sectionTable.members().entrySet()) {
-			if (!(entry.getValue() instanceof TomlValue.Table sub)) continue;
-			document.ensure(ConfigPath.of(section, entry.getKey()), sub, null);
-			for (var field : sub.members().entrySet()) {
-				document.ensure(ConfigPath.of(section, entry.getKey(), field.getKey()), field.getValue(), null);
-			}
-		}
-	}
-
 	private static boolean hasKey(TomlValue.Table table, String key) {
 		return table != null && table.get(key) != null;
 	}
@@ -469,28 +453,16 @@ public final class TomlConfigs {
 		return s == null ? "" : s;
 	}
 
-	private static <T> Document freshDocument(T model, Class<T> type) {
-		byte[] bytes;
-		if (type == ServerConfigFieldsV3.class) {
-			ServerConfigFieldsV3 server = (ServerConfigFieldsV3) model;
-			Comments.Builder comments = Comments.builder().banner(BANNER);
-			SERVER_SCHEMA.addCommentsTo(comments, ConfigPath.root());
-			if (server.modpack != null && server.modpack.groups != null && !server.modpack.groups.isEmpty()) {
-				comments.put(ConfigPath.of("groups"), "Each group maps 1:1 to host-modpack/<id>/. selection: REQUIRED, RECOMMENDED, OPTIONAL, AUTOMATIC.");
-			}
-			bytes = TomlEdit.canonical(serverToTable(server, null), comments.build());
-		} else if (type == ClientConfigFieldsV3.class) {
-			bytes = CLIENT_SCHEMA.canonical(clientToTable((ClientConfigFieldsV3) model));
-		} else {
-			throw new ConfigTools.ConfigException("Unsupported TOML config type: " + type.getSimpleName());
-		}
-		return TomlEdit.parse(bytes).document();
+	private static <T> byte[] canonicalBytes(T model, Class<T> type) {
+		if (type == ServerConfigFieldsV3.class) return SERVER_SCHEMA.canonical(serverToTable((ServerConfigFieldsV3) model, null));
+		if (type == ClientConfigFieldsV3.class) return CLIENT_SCHEMA.canonical(clientToTable((ClientConfigFieldsV3) model));
+		throw new ConfigTools.ConfigException("Unsupported TOML config type: " + type.getSimpleName());
 	}
 
 	private static <T> void writeFresh(Path path, T model, Class<T> type) {
 		try {
 			OsPaths.requirePublishableConfig(path);
-			DurableFiles.writeAtomic(path, freshDocument(model, type).text());
+			DurableFiles.writeAtomic(path, canonicalBytes(model, type));
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to create configuration " + path.toAbsolutePath().normalize(), e);
 		}

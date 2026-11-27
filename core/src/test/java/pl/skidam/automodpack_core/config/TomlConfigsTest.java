@@ -255,4 +255,54 @@ class TomlConfigsTest {
 		assertEquals(GroupSelectionMode.REQUIRED, reread.modpack.groups.get("main").selection, "existing main must not be overwritten");
 		assertEquals(GroupSelectionMode.OPTIONAL, reread.modpack.groups.get("extras").selection);
 	}
+
+	@Test
+	void saveSynchronizesAddedUpdatedAndRemovedCategoriesAndGroupsWhileKeepingComments() throws IOException {
+		String initial = """
+				# keep banner
+				modpack-host = true
+
+				[categories.shaders]
+				name = "Shaders" # keep category note
+				pick = "AT_MOST_ONE"
+
+				[categories.obsolete]
+				name = "Obsolete"
+
+				[groups.main]
+				selection = "REQUIRED" # keep group note
+
+				[groups.legacy]
+				selection = "OPTIONAL"
+				""";
+		Files.writeString(serverConfig(), initial, StandardCharsets.UTF_8);
+		ServerConfigFieldsV3 config = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		config.modpack.categories.remove("obsolete");
+		config.modpack.groups.remove("legacy");
+		ServerConfigJsons.CategoryDeclaration lighting = new ServerConfigJsons.CategoryDeclaration();
+		lighting.name = "Lighting";
+		lighting.pick = CategoryPickMode.EXACTLY_ONE;
+		config.modpack.categories.put("lighting", lighting);
+		ServerConfigJsons.GroupDeclaration iris = new ServerConfigJsons.GroupDeclaration();
+		iris.name = "Iris";
+		iris.category = "shaders";
+		iris.selection = GroupSelectionMode.RECOMMENDED;
+		config.modpack.groups.put("iris", iris);
+
+		TomlConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String after = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(after.contains("# keep banner"), after);
+		assertTrue(after.contains("name = \"Shaders\" # keep category note"), after);
+		assertTrue(after.contains("selection = \"REQUIRED\" # keep group note"), after);
+		assertTrue(after.contains("[categories.lighting]"), after);
+		assertTrue(after.contains("[groups.iris]"), after);
+		assertFalse(after.contains("[categories.obsolete]"), after);
+		assertFalse(after.contains("[groups.legacy]"), after);
+
+		ServerConfigFieldsV3 reread = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(CategoryPickMode.EXACTLY_ONE, reread.modpack.categories.get("lighting").pick);
+		assertEquals(GroupSelectionMode.RECOMMENDED, reread.modpack.groups.get("iris").selection);
+		assertFalse(reread.modpack.categories.containsKey("obsolete"));
+		assertFalse(reread.modpack.groups.containsKey("legacy"));
+	}
 }
