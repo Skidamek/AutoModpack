@@ -47,9 +47,9 @@ class ChangeBrowserProjectionTest {
 	@Test
 	void catalogueChangesUseTheSameProjectionAsDiffChanges() {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(5, false, HASH, null);
-		GroupManifest.Group group = new GroupManifest.Group("Main", "", "General", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
+		GroupManifest.Group group = new GroupManifest.Group("Main", "", "", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
 
-		ChangeSet catalogue = ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", new TreeMap<>(Map.of("main", group))));
+		ChangeSet catalogue = ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", Map.of(), new TreeMap<>(Map.of("main", group))));
 
 		ChangeBrowserProjection.FileRow row = ChangeBrowserProjection.project(catalogue, ChangeBrowserProjection.Mode.LIST).files().get(0);
 		assertEquals(ChangeSet.Kind.PRESERVED, row.kind());

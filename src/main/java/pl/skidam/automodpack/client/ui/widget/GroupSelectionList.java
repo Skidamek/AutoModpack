@@ -5,19 +5,28 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
+/*? if >=1.21.10 {*/
+import net.minecraft.client.input.InputWithModifiers;
+/*?}*/
 /*? if >=26.1 {*/
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 /*?} elif >=1.20 {*/
@@ -26,15 +35,28 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /*import com.mojang.blaze3d.vertex.PoseStack;
 *//*?}*/
 
-/** Scrolling group rows: every togglable row is a vanilla checkbox, so the bridge and screen readers see the whole list. */
+/** Scrolling group selection cards and section headers. */
 public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> implements RowViewport {
-	private static final int ROW_HEIGHT = 24;
+	private static final int ROW_HEIGHT = 34;
+	private static final int CARD_HEIGHT = 32;
+	private static final int CHILD_INDENT = 8;
+	private static final int RADIO_SIZE = 13;
+	private static final int CARD_FILL_SELECTED = 0x26000000;
+	private static final int CARD_FILL_UNSELECTED = 0x14000000;
+	private static final int CARD_BORDER = 0x28FFFFFF;
+	private static final int HEADER_DIVIDER = 0x30FFFFFF;
+	private static final int RADIO_BORDER = 0xFF909090;
+	private static final int RADIO_BORDER_ACTIVE = 0xFFFFFFFF;
+	private static final int RADIO_BORDER_DISABLED = 0xFF606060;
+	private static final int RADIO_INNER_BG = 0xFF141414;
+
+	/** Marks the primary card control inside a row so AutoTestBridge avoids emitting duplicate elements alongside RowView. */
+	public interface RowPrimaryControl {}
 
 	private static Component filesLabel() {
 		return VersionedText.text("automodpack.selection.groupFiles");
 	}
 
-	/** Group rows span the whole list like the shared UniformList lists do; vanilla caps the row width, which squashed every row into the center. */
 	@Override
 	public int getRowWidth() {
 		return this.contentWidth;
@@ -47,7 +69,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 	*//*?}*/
 
-	/** Width of a group row's square Files icon button; the screen uses the same value so row labels stop short of the button. */
 	public static int filesButtonWidth() {
 		return ActionAreaLayout.BUTTON_HEIGHT;
 	}
@@ -63,9 +84,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		// This list cannot sit on the UniformList base - it needs ContainerObjectSelectionList for its interactive
-		// rows - so it strips vanilla chrome and draws the ListChrome look itself. Every number the shared lists pin
-		// reads from ListChrome, which is what keeps the two in step.
 		/*? if <1.21.1 {*/
 		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
@@ -138,7 +156,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
 		VersionedMatrices chrome = new VersionedMatrices();
 		ListChrome.drawBackdrop(chrome, x0, y0, x1, y1);
-		// Separators precede super.render so the scrollbar paints over them, like vanilla's bands before its scrollbar.
 		ListChrome.drawSeparators(chrome, x0, y0, x1, y1);
 		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
 		super.render(matrices, mouseX, mouseY, delta);
@@ -149,7 +166,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		VersionedMatrices chrome = new VersionedMatrices(graphics);
 		ListChrome.drawBackdrop(chrome, x0, y0, x1, y1);
-		// Separators precede super.render so the scrollbar paints over them, like vanilla's bands before its scrollbar.
 		ListChrome.drawSeparators(chrome, x0, y0, x1, y1);
 		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
 		super.render(graphics, mouseX, mouseY, delta);
@@ -171,8 +187,10 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	@Override
 	public RowView rowView(int index) {
 		Item item = this.children().get(index).item();
-		String text = item.counter().isBlank() ? item.label().getString() : item.label().getString() + " " + item.counter();
-		return new RowView(text, item.canToggle(), item.selected(), item.partial());
+		String badge = item.badge().getString();
+		String text = badge.isBlank() ? item.title().getString() : item.title().getString() + " " + badge;
+		if (item.kind() == Kind.HEADER) return new RowView(text, !item.actionLabel().isBlank(), null, false);
+		return new RowView(text, item.canToggle(), item.selected(), false);
 	}
 
 	public int rowCount() {
@@ -195,57 +213,80 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return ROW_HEIGHT;
 	}
 
-	public record Item(Kind kind, String id, Component label, Component tooltip, boolean selected, boolean canToggle, boolean partial, String counter) {
+	public record Item(
+			Kind kind,
+			String id,
+			String categoryId,
+			Component title,
+			Component subtitle,
+			Component badge,
+			Component tooltip,
+			boolean selected,
+			boolean canToggle,
+			boolean showFilesButton,
+			String actionLabel,
+			int accentColor) {
 		public Item {
 			Objects.requireNonNull(kind, "kind");
 			id = id == null ? "" : id;
-			label = Objects.requireNonNull(label, "label");
-			counter = counter == null ? "" : counter;
+			categoryId = categoryId == null ? "" : categoryId;
+			title = Objects.requireNonNull(title, "title");
+			subtitle = subtitle == null ? VersionedText.literal("") : subtitle;
+			badge = badge == null ? VersionedText.literal("") : badge;
+			actionLabel = actionLabel == null ? "" : actionLabel;
 		}
 	}
 
 	public enum Kind {
 		HEADER,
-		GROUP
-	}
-
-	/** Group rows step right of their category header; the same step the change browser uses for nested rows. */
-	private static final int CHILD_INDENT = 12;
-
-	private static CheckboxWidget.State state(Item item) {
-		return item.partial() ? CheckboxWidget.State.PARTIAL : item.selected() ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED;
+		CHECKBOX_GROUP,
+		RADIO_GROUP
 	}
 
 	public final class Entry extends ContainerObjectSelectionList.Entry<Entry> {
 		private final Item item;
-		private final AbstractWidget row;
+		private final AbstractWidget primaryControl;
+		private final AbstractWidget actionButton;
 		private final AbstractWidget filesButton;
 		private final List<AbstractWidget> children;
 
 		private Entry(Item item, Consumer<Item> onToggle, Consumer<Item> onInspect) {
 			this.item = item;
 			int rowWidth = GroupSelectionList.this.getRowWidth();
-			int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
-			int filesWidth = item.kind() == Kind.GROUP ? filesButtonWidth() : 0;
-			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - filesWidth - ActionAreaLayout.SEAM) : rowWidth;
-			AbstractWidget checkbox = item.kind() == Kind.HEADER
-					? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
-					: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
-						if (value != item.selected()) onToggle.accept(item);
-					});
-			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
-			checkbox.active = item.canToggle();
-			if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
-			this.row = checkbox;
-			if (item.kind() == Kind.GROUP) {
-				// The narration keeps the "Files" label so screen readers and the tooling bridge still name the action.
+			if (item.kind() == Kind.HEADER) {
+				this.primaryControl = null;
+				this.filesButton = null;
+				if (!item.actionLabel().isBlank()) {
+					int buttonWidth = Math.max(44, minecraft.font.width(item.actionLabel()) + 14);
+					Button action = VersionedScreen.buttonWidget(0, 0, buttonWidth, 16, VersionedText.literal(item.actionLabel()), button -> onToggle.accept(item));
+					if (item.tooltip() != null) VersionedScreen.setTooltip(action, item.tooltip());
+					this.actionButton = action;
+					this.children = List.of(action);
+				} else {
+					this.actionButton = null;
+					this.children = List.of();
+				}
+				return;
+			}
+
+			int filesWidth = item.showFilesButton() ? filesButtonWidth() : 0;
+			int cardWidth = item.showFilesButton()
+					? Math.max(1, rowWidth - CHILD_INDENT - filesWidth - ActionAreaLayout.SEAM)
+					: Math.max(1, rowWidth - CHILD_INDENT);
+			GroupCardButton card = new GroupCardButton(minecraft.font, 0, 0, cardWidth, CARD_HEIGHT, item, () -> onToggle.accept(item));
+			card.active = item.canToggle();
+			if (item.tooltip() != null) VersionedScreen.setTooltip(card, item.tooltip());
+			this.primaryControl = card;
+			this.actionButton = null;
+			if (item.showFilesButton()) {
 				Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
 				if (item.tooltip() != null) VersionedScreen.setTooltip(files, item.tooltip());
 				this.filesButton = files;
+				this.children = List.of(card, files);
 			} else {
 				this.filesButton = null;
+				this.children = List.of(card);
 			}
-			this.children = this.filesButton == null ? List.of(this.row) : List.of(this.row, this.filesButton);
 		}
 
 		public Item item() {
@@ -289,12 +330,37 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, float tickDelta) {
+			if (item.kind() == Kind.HEADER) {
+				renderHeader(matrices, x, y, entryWidth);
+				if (actionButton != null) renderWidget(actionButton, matrices, mouseX, mouseY, tickDelta);
+				return;
+			}
+			if (primaryControl != null) renderWidget(primaryControl, matrices, mouseX, mouseY, tickDelta);
+			if (filesButton != null) renderWidget(filesButton, matrices, mouseX, mouseY, tickDelta);
+		}
+
+		private void renderHeader(VersionedMatrices matrices, int x, int y, int entryWidth) {
+			int rightReserve = actionButton == null ? 0 : actionButton.getWidth() + ActionAreaLayout.SEAM;
+			int maxTextWidth = Math.max(1, entryWidth - rightReserve - 4);
+			Font font = minecraft.font;
+			boolean hasSubtitle = !item.subtitle().getString().isBlank();
+			int titleY = hasSubtitle ? y + 6 : y + ROW_HEIGHT - font.lineHeight - 7;
+			MutableComponent title = item.title() instanceof MutableComponent mutable
+					? VersionedText.literal(VersionedScreen.truncateToWidth(font, mutable.getString(), maxTextWidth)).withStyle(mutable.getStyle())
+					: VersionedText.literal(VersionedScreen.truncateToWidth(font, item.title().getString(), maxTextWidth));
+			VersionedScreen.drawTextWithShadow(matrices, font, title, x + 2, titleY, TextColors.WHITE);
+			if (hasSubtitle) {
+				String sub = VersionedScreen.truncateToWidth(font, item.subtitle().getString(), maxTextWidth);
+				VersionedScreen.drawTextWithShadow(matrices, font, VersionedText.literal(sub), x + 2, y + 18, TextColors.LIGHT_GRAY);
+			}
+			matrices.fill(x, y + ROW_HEIGHT - 2, x + entryWidth, y + ROW_HEIGHT - 1, HEADER_DIVIDER);
+		}
+
+		private void renderWidget(AbstractWidget widget, VersionedMatrices matrices, int mouseX, int mouseY, float tickDelta) {
 			/*? if >=26.1 {*/
-			row.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
-			if (filesButton != null) filesButton.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
+			widget.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
 			/*?} else {*/
-			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
-			if (filesButton != null) filesButton.render(matrices.getContext(), mouseX, mouseY, tickDelta);
+			/*widget.render(matrices.getContext(), mouseX, mouseY, tickDelta);
 			*//*?}*/
 		}
 
@@ -306,8 +372,10 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			this.setWidth(entryWidth);
 			this.setHeight(ROW_HEIGHT);
 			/*?}*/
-			positionWidget(row, x + (item.kind() == Kind.GROUP ? CHILD_INDENT : 0), y);
-			if (filesButton != null) positionWidget(filesButton, x + GroupSelectionList.this.getRowWidth() - filesButton.getWidth(), y);
+			int rowWidth = GroupSelectionList.this.getRowWidth();
+			if (actionButton != null) positionWidget(actionButton, x + rowWidth - actionButton.getWidth(), y + (ROW_HEIGHT - actionButton.getHeight()) / 2);
+			if (primaryControl != null) positionWidget(primaryControl, x + CHILD_INDENT, y);
+			if (filesButton != null) positionWidget(filesButton, x + rowWidth - filesButton.getWidth(), y + (CARD_HEIGHT - filesButton.getHeight()) / 2);
 		}
 
 		private static void positionWidget(AbstractWidget widget, int x, int y) {
@@ -317,6 +385,145 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			/*?} else {*/
 			/*widget.x = x;
 			widget.y = y;
+			*//*?}*/
+		}
+	}
+
+	private static final class GroupCardButton extends AbstractButton implements RowPrimaryControl {
+		private final Font font;
+		private final Item item;
+		private final Runnable onPressAction;
+
+		private GroupCardButton(Font font, int x, int y, int width, int height, Item item, Runnable onPressAction) {
+			super(x, y, Math.max(1, width), Math.max(1, height), item.title());
+			this.font = font;
+			this.item = item;
+			this.onPressAction = onPressAction;
+		}
+
+		/*? if >=1.21.10 {*/
+		@Override
+		public void onPress(InputWithModifiers input) {
+			onPressAction.run();
+		}
+		/*?} else {*/
+		/*@Override
+		public void onPress() {
+			onPressAction.run();
+		}
+		*//*?}*/
+
+		/*? if <1.19.4 {*/
+		/*@Override
+		public void updateNarration(NarrationElementOutput output) {
+			output.add(NarratedElementType.TITLE, getMessage());
+		}
+		*//*?} else {*/
+		@Override
+		public void updateWidgetNarration(NarrationElementOutput output) {
+			output.add(NarratedElementType.TITLE, getMessage());
+		}
+		/*?}*/
+
+		/*? if >=26.1 {*/
+		@Override
+		protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+			renderCard(new VersionedMatrices(graphics), mouseX, mouseY);
+		}
+		/*?} elif >=1.21.11 {*/
+		/*@Override
+		public void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+			renderCard(new VersionedMatrices(graphics), mouseX, mouseY);
+		}
+		*//*?} elif >=1.20 {*/
+		/*@Override
+		protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+			renderCard(new VersionedMatrices(graphics), mouseX, mouseY);
+		}
+		*//*?} else {*/
+		/*@Override
+		public void renderButton(PoseStack matrices, int mouseX, int mouseY, float delta) {
+			renderCard(new VersionedMatrices(), mouseX, mouseY);
+		}
+		*//*?}*/
+
+		private void renderCard(VersionedMatrices matrices, int mouseX, int mouseY) {
+			int left = cardLeft();
+			int top = cardTop();
+			int width = getWidth();
+			int height = getHeight();
+			boolean hovered = mouseX >= left && mouseX < left + width && mouseY >= top && mouseY < top + height;
+
+			matrices.fill(left, top, left + width, top + height, item.selected() ? CARD_FILL_SELECTED : CARD_FILL_UNSELECTED);
+			if (hovered && this.active) ListChrome.drawHover(matrices, left, top, width, height);
+			matrices.fill(left, top + height - 1, left + width, top + height, CARD_BORDER);
+			if (item.accentColor() != 0) matrices.fill(left, top, left + 2, top + height, item.accentColor());
+
+			if (item.kind() == Kind.RADIO_GROUP) {
+				drawRadioCircle(matrices, left + 6, top + (height - RADIO_SIZE) / 2, item.selected(), this.active, hovered);
+			} else {
+				CheckboxWidget.drawBox(matrices, left + 4, top + (height - CheckboxWidget.BOX_SIZE) / 2,
+						item.selected() ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED);
+			}
+
+			int textLeft = left + 26;
+			int textRight = left + width - 6;
+			String badgeText = item.badge().getString();
+			int badgeWidth = badgeText.isBlank() ? 0 : font.width(badgeText);
+			int titleMaxWidth = Math.max(1, textRight - textLeft - (badgeWidth > 0 ? badgeWidth + 6 : 0));
+			String subtitleText = item.subtitle().getString();
+			boolean hasSubtitle = !subtitleText.isBlank();
+
+			int titleY = hasSubtitle ? top + 5 : top + (height - font.lineHeight) / 2;
+			MutableComponent styledTitle = styledCopy(item.title(), VersionedScreen.truncateToWidth(font, item.title().getString(), titleMaxWidth));
+			VersionedScreen.drawTextWithShadow(matrices, font, styledTitle, textLeft, titleY, TextColors.WHITE);
+			if (badgeWidth > 0) {
+				MutableComponent styledBadge = styledCopy(item.badge(), badgeText);
+				VersionedScreen.drawTextWithShadow(matrices, font, styledBadge, textRight - badgeWidth, titleY, TextColors.LIGHT_GRAY);
+			}
+			if (hasSubtitle) {
+				MutableComponent styledSub = styledCopy(item.subtitle(), VersionedScreen.truncateToWidth(font, subtitleText, Math.max(1, textRight - textLeft)));
+				VersionedScreen.drawTextWithShadow(matrices, font, styledSub, textLeft, top + 17, TextColors.LIGHT_GRAY);
+			}
+		}
+
+		private static MutableComponent styledCopy(Component original, String truncatedText) {
+			MutableComponent copy = VersionedText.literal(truncatedText);
+			return original instanceof MutableComponent mutable ? copy.withStyle(mutable.getStyle()) : copy;
+		}
+
+		private static void drawRadioCircle(VersionedMatrices matrices, int x, int y, boolean selected, boolean active, boolean hovered) {
+			int border = !active ? RADIO_BORDER_DISABLED : selected || hovered ? RADIO_BORDER_ACTIVE : RADIO_BORDER;
+			// 13x13 crisp circular outline via row spans
+			int[] insets = { 4, 2, 1, 1, 0, 0, 0, 0, 0, 1, 1, 2, 4 };
+			for (int row = 0; row < RADIO_SIZE; row++) {
+				int inset = insets[row];
+				matrices.fill(x + inset, y + row, x + RADIO_SIZE - inset, y + row + 1, border);
+				int innerInset = row == 0 || row == RADIO_SIZE - 1 ? RADIO_SIZE : insets[row] + 1;
+				if (innerInset < RADIO_SIZE - innerInset) {
+					matrices.fill(x + innerInset, y + row, x + RADIO_SIZE - innerInset, y + row + 1, RADIO_INNER_BG);
+				}
+			}
+			if (selected) {
+				int dotColor = active ? RADIO_BORDER_ACTIVE : RADIO_BORDER;
+				matrices.fill(x + 4, y + 3, x + 9, y + 10, dotColor);
+				matrices.fill(x + 3, y + 4, x + 10, y + 9, dotColor);
+			}
+		}
+
+		private int cardLeft() {
+			/*? if >=1.19.4 {*/
+			return getX();
+			/*?} else {*/
+			/*return x;
+			*//*?}*/
+		}
+
+		private int cardTop() {
+			/*? if >=1.19.4 {*/
+			return getY();
+			/*?} else {*/
+			/*return y;
 			*//*?}*/
 		}
 	}

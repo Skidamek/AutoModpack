@@ -155,7 +155,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		}
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
 		if (!groups.staleGroups().isEmpty()) lines.add(VersionedText.text("automodpack.update.staleSelection").withStyle(ChatFormatting.RED));
-		else lines.add(UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").withStyle(ChatFormatting.GREEN));
+		else if (target == null || target.manifest().hasChoosableGroups()) lines.add(UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").withStyle(ChatFormatting.GREEN));
 		if (!preview.conflicts().isEmpty())
 			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").withStyle(ChatFormatting.RED));
 		if (unverifiedPlanJarCount > 0) lines.addAll(wrapParagraph(this.font, UiFormat.plural(unverifiedPlanJarCount, "automodpack.update.unverifiedTrusted").getString(), wrapWidth, ChatFormatting.YELLOW));

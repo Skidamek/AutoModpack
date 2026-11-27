@@ -18,7 +18,8 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -93,8 +94,8 @@ class ConnectionStoreTest {
 		TestPacks.stageGeneration(storage, TestPacks.document(manifestFor("xyz9876", "stale", "config/b.txt", "b")));
 		TestPacks.stageGeneration(storage, TestPacks.document(manifestFor("pqr5432", "other origin", "config/c.txt", "c")));
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-		selections.put("xyz9876", GroupSelectionResolver.defaultIntent(manifestFor("xyz9876", "stale", "config/b.txt", "b")));
-		selections.put("pqr5432", GroupSelectionResolver.defaultIntent(manifestFor("pqr5432", "other origin", "config/c.txt", "c")));
+		selections.put("xyz9876", SelectionIntent.DEFAULTS);
+		selections.put("pqr5432", SelectionIntent.DEFAULTS);
 
 		assertEquals(List.of("xyz9876"), ConnectionStore.staleSameOriginPackIds(storage, "abc1234"));
 		// A mirror fetch without consent is cache, and the active pack is never its own leftover.
@@ -106,12 +107,11 @@ class ConnectionStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = description;
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		group.files = new TreeMap<>(Map.of(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, sha1, null)));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 }

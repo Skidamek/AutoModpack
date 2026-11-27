@@ -18,9 +18,9 @@ class SelectedTreeComposerTest {
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 
 		var both = SelectedTreeComposer.compose(manifest,
-				new ResolvedSelection(new SelectionIntent(Set.of("main", "visuals")), new TreeSet<>(Set.of("main", "visuals")), new TreeSet<>()));
+				GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("main", "visuals")), ClientPlatform.LINUX));
 		var one = SelectedTreeComposer.compose(manifest,
-				new ResolvedSelection(new SelectionIntent(Set.of("visuals")), new TreeSet<>(Set.of("visuals")), new TreeSet<>()));
+				GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("visuals")), ClientPlatform.LINUX));
 
 		assertEquals(1, both.list.size());
 		assertEquals(1, one.list.size());
@@ -34,8 +34,8 @@ class SelectedTreeComposerTest {
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 		PackDocument document = TestPacks.document(manifest);
 
-		SelectedModpackTarget main = SelectedModpackTarget.prepare(TestPacks.head(manifest), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-		SelectedModpackTarget visuals = SelectedModpackTarget.prepare(TestPacks.head(manifest), null, new SelectionIntent(Set.of("visuals")), ClientPlatform.LINUX);
+		SelectedModpackTarget main = SelectedModpackTarget.prepare(TestPacks.head(manifest), null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget visuals = SelectedModpackTarget.prepare(TestPacks.head(manifest), null, SelectionIntent.ofEnabled(Set.of("visuals")), ClientPlatform.LINUX);
 
 		assertEquals(document.contentToken(), main.flatTarget().contentToken);
 		assertEquals(main.flatTarget().contentToken, visuals.flatTarget().contentToken);
@@ -52,7 +52,7 @@ class SelectedTreeComposerTest {
 		GroupManifest manifest = manifest(Map.of("first", group(first), "second", group(second)));
 
 		var target = SelectedTreeComposer.compose(manifest,
-				new ResolvedSelection(new SelectionIntent(Set.of("second")), new TreeSet<>(Set.of("second")), new TreeSet<>()));
+				GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("second")), ClientPlatform.LINUX));
 
 		assertEquals(second.sha1(), target.list.iterator().next().sha1);
 	}
@@ -64,8 +64,8 @@ class SelectedTreeComposerTest {
 		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, false,
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest manifest = manifest(
-				Map.of("main", new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
-						new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				Map.of("main", new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
+						new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(),
 								new TreeMap<>(Map.of("config/second.txt", second)))));
 		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(TestPacks.head(manifest), ClientPlatform.LINUX);
 
@@ -89,8 +89,8 @@ class SelectedTreeComposerTest {
 		GroupManifest.GroupFile shared = new GroupManifest.GroupFile(7, false, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest.GroupFile own = new GroupManifest.GroupFile(11, false, "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest manifest = manifest(Map.of("main",
-				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/shared.jar", shared))), "visuals",
-				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/shared.jar", shared))), "visuals",
+				new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(),
 						new TreeMap<>(Map.of("mods/own.jar", own, "mods/shared.jar", shared)))));
 
 		assertEquals(new GroupSelectionSummary(18), GroupSelectionSummary.of(manifest, Set.of("main", "visuals")));
@@ -101,18 +101,18 @@ class SelectedTreeComposerTest {
 		GroupManifest.GroupFile first = new GroupManifest.GroupFile(9, false, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest.GroupFile second = new GroupManifest.GroupFile(9, false, "86F7E437FAA5A7FCE15D1DDCB9EAEAEA377667B8", null);
 		GroupManifest manifest = manifest(Map.of("main",
-				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/first.jar", first))), "visuals",
-				new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/second.jar", second)))));
+				new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/first.jar", first))), "visuals",
+				new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/second.jar", second)))));
 
 		assertEquals(new GroupSelectionSummary(9), GroupSelectionSummary.of(manifest, Set.of("main", "visuals")));
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
+		return new GroupManifest("abc1234", "", "", "", "", "", Map.of(), new TreeMap<>(groups));
 	}
 
 	private static GroupManifest.Group group(GroupManifest.GroupFile file) {
-		return new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		return new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/example.jar", file)));
 	}
 }

@@ -13,10 +13,9 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 import pl.skidam.automodpack_core.utils.PathFold;
 
 public final class GroupManifestValidator {
-	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
+	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9_-]{0,63}");
 	private static final Pattern ILLEGAL_WINDOWS_COMPONENT = Pattern.compile(".*[<>:\"|?*\\\\\\p{Cntrl}].*");
 	private static final Pattern CONTROL_CHARACTER = Pattern.compile("\\p{Cntrl}");
-	// Deliberately matches the group ID cap: both name things a player browses in the same UI rows.
 	private static final int CATEGORY_NAME_MAX = 64;
 
 	private GroupManifestValidator() {}
@@ -37,40 +36,80 @@ public final class GroupManifestValidator {
 		List<String> errors = new ArrayList<>();
 		if (fields == null) throw new GroupValidationException(List.of("Complete modpack catalogue is missing"));
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
-		if (fields.categories == null || fields.categories.isEmpty()) errors.add("Group catalogue is empty");
-		Map<String, GroupManifest.Group> groups = new LinkedHashMap<>();
-		Map<String, String> seenCategoryNames = new LinkedHashMap<>();
-		if (fields.categories != null) for (var categoryEntry : fields.categories.entrySet()) {
-			String category = validateCategoryName(categoryEntry.getKey(), seenCategoryNames, errors);
-			if (categoryEntry.getValue() == null || categoryEntry.getValue().isEmpty()) {
-				errors.add("Category '" + value(categoryEntry.getKey()) + "' is empty");
-				continue;
+
+		Map<String, GroupManifest.Category> categories = new LinkedHashMap<>();
+		Map<String, String> seenCategoryLabels = new LinkedHashMap<>();
+		if (fields.categories != null) {
+			for (var categoryEntry : fields.categories.entrySet()) {
+				String catId = categoryEntry.getKey();
+				if (!isValidIdentifier(catId)) {
+					errors.add("Invalid category ID: " + catId);
+					continue;
+				}
+				ModpackJsons.CompleteModpackContentFields.CategoryFields category = categoryEntry.getValue();
+				if (category == null) {
+					errors.add("Category '" + catId + "' is missing its declaration");
+					continue;
+				}
+				String name = validateCategoryDisplayName(catId, category.name, seenCategoryLabels, errors);
+				String description = value(category.description);
+				if (CONTROL_CHARACTER.matcher(description).find()) errors.add("Category '" + catId + "' description contains control characters");
+				if (category.pick == null) {
+					errors.add("Category '" + catId + "' is missing its pick mode");
+					continue;
+				}
+				categories.put(catId, new GroupManifest.Category(name, description, category.pick));
 			}
-			for (var entry : categoryEntry.getValue().entrySet()) {
+		}
+
+		if (fields.groups == null || fields.groups.isEmpty()) errors.add("Group catalogue is empty");
+		Map<String, GroupManifest.Group> groups = new LinkedHashMap<>();
+		Set<String> populatedCategories = new HashSet<>();
+		if (fields.groups != null) {
+			for (var entry : fields.groups.entrySet()) {
 				String id = entry.getKey();
+				if (!isValidIdentifier(id)) {
+					errors.add("Invalid group ID: " + id);
+					continue;
+				}
 				if (groups.containsKey(id)) {
 					errors.add("Group '" + id + "' is declared more than once");
 					continue;
 				}
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = entry.getValue();
-				if (!isValidIdentifier(id)) {
-					errors.add("Invalid group ID: " + id);
-					continue;
-				}
 				if (group == null) {
 					errors.add("Group '" + id + "' is missing its declaration");
 					continue;
 				}
-				Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
+				if (group.selection == null) {
+					errors.add("Group '" + id + "' is missing its selection mode");
+					continue;
+				}
+				String name = value(group.name);
+				if (CONTROL_CHARACTER.matcher(name).find()) errors.add("Group '" + id + "' name contains control characters");
+				String description = value(group.description);
+				if (CONTROL_CHARACTER.matcher(description).find()) errors.add("Group '" + id + "' description contains control characters");
+
+				String category = value(group.category);
+				if (!category.isEmpty()) {
+					if (!categories.containsKey(category)) {
+						errors.add("Group '" + id + "' references unknown category '" + category + "'");
+					} else {
+						populatedCategories.add(category);
+						if (categories.get(category).pick().isExclusive() && !group.selection.choosable())
+							errors.add("Group '" + id + "' cannot use selection " + group.selection + " in exclusive category '" + category + "'");
+					}
+				}
+
 				Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
 				Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 				Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-				if (group.required == null || group.defaultSelected == null) {
-					errors.add("Group '" + id + "' is missing its selection flags");
-					continue;
-				}
-				groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, GroupSelectionMode.of(group.required, group.defaultSelected), breaksWith, requires, platforms, files));
+				groups.put(id, new GroupManifest.Group(name, description, category, group.selection, requires, platforms, files));
 			}
+		}
+
+		for (String catId : categories.keySet()) {
+			if (!populatedCategories.contains(catId)) errors.add("Category '" + catId + "' has no groups");
 		}
 
 		validateReferences(groups, errors);
@@ -78,7 +117,7 @@ public final class GroupManifestValidator {
 
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
-				value(fields.loaderVersion), value(fields.mcVersion), groups);
+				value(fields.loaderVersion), value(fields.mcVersion), categories, groups);
 		PairMemo pairs = new PairMemo(manifest);
 		if (publishing)
 			for (var group : manifest.groups().entrySet())
@@ -151,9 +190,9 @@ public final class GroupManifestValidator {
 								.add(new PathOwner(groupId, path));
 				}
 			}
-			validateAliasOwners(platform, manifest, aliases, false, errors, pairs);
-			validateAncestorOwners(platform, manifest, aliases, errors, pairs);
-			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors, pairs);
+			validateAliasOwners(platform, aliases, false, errors, pairs);
+			validateAncestorOwners(platform, aliases, errors, pairs);
+			validateAliasOwners(platform, modBasenameAliases, true, errors, pairs);
 		}
 	}
 
@@ -162,7 +201,7 @@ public final class GroupManifestValidator {
 	 * map, so the conflicts come out of strict '/'-boundary prefix lookups instead of a pairwise scan over every
 	 * file owner. Equal keys are aliases, never ancestor pairs.
 	 */
-	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors, PairMemo pairs) {
+	private static void validateAncestorOwners(ClientPlatform platform, Map<String, List<PathOwner>> aliases, List<String> errors, PairMemo pairs) {
 		for (var entry : aliases.entrySet()) for (PathOwner descendant : entry.getValue()) for (String ancestorKey : ancestorKeys(entry.getKey())) {
 			List<PathOwner> ancestors = aliases.get(ancestorKey);
 			if (ancestors == null) continue;
@@ -185,7 +224,7 @@ public final class GroupManifestValidator {
 		errors.add(platform.id() + ": file path '" + ancestor.path() + "' cannot be an ancestor of '" + descendant.path() + "' in " + ownerDescription);
 	}
 
-	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
+	private static void validateAliasOwners(ClientPlatform platform, Map<String, List<PathOwner>> aliases, boolean modBasenames,
 			List<String> errors, PairMemo pairs) {
 		String prefix = modBasenames ? "mod files" : "paths";
 		String suffix = modBasenames ? " share a basename in the live mods directory" : " differ only in letter case or Unicode form, so case-insensitive filesystems would make them one file";
@@ -223,9 +262,7 @@ public final class GroupManifestValidator {
 			String id = entry.getKey();
 			GroupManifest.Group group = entry.getValue();
 			if (group.requires().contains(id)) errors.add("Group '" + id + "' cannot require itself");
-			if (group.breaksWith().contains(id)) errors.add("Group '" + id + "' cannot conflict with itself");
 			for (String dependency : group.requires()) if (!groups.containsKey(dependency)) errors.add("Group '" + id + "' requires missing group '" + dependency + "'");
-			for (String conflict : group.breaksWith()) if (!groups.containsKey(conflict)) errors.add("Group '" + id + "' conflicts with missing group '" + conflict + "'");
 		}
 	}
 
@@ -255,9 +292,10 @@ public final class GroupManifestValidator {
 				for (String error : e.errors()) errors.add(platform.id() + ": " + error);
 			}
 			for (var entry : manifest.groups().entrySet()) {
-				if (!entry.getValue().supports(platform)) continue;
+				GroupManifest.Group group = entry.getValue();
+				if (!group.supports(platform) || !group.selection().choosable()) continue;
 				try {
-					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(entry.getKey())), platform);
+					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, intentActivating(manifest, Set.of(entry.getKey())), platform);
 					if (!selection.selectedGroups().contains(entry.getKey()) && !isOptionalUnavailable(manifest, entry.getKey(), selection))
 						errors.add(platform.id() + ": Group '" + entry.getKey() + "' cannot be selected on this platform");
 				} catch (SelectionResolutionException e) {
@@ -266,6 +304,27 @@ public final class GroupManifestValidator {
 			}
 		}
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
+	}
+
+	private static SelectionIntent intentActivating(GroupManifest manifest, Set<String> targets) {
+		Set<String> enabled = new LinkedHashSet<>(targets);
+		ArrayDeque<String> queue = new ArrayDeque<>(targets);
+		Set<String> seen = new HashSet<>(targets);
+		while (!queue.isEmpty()) {
+			String id = queue.removeFirst();
+			GroupManifest.Group group = manifest.groups().get(id);
+			if (group == null) continue;
+			for (String depId : group.requires()) {
+				if (!seen.add(depId)) continue;
+				GroupManifest.Category depCat = manifest.categoryOf(depId);
+				if (depCat != null && depCat.pick().isExclusive()) {
+					GroupManifest.Group depGroup = manifest.groups().get(depId);
+					if (depGroup != null && depGroup.selection().choosable()) enabled.add(depId);
+				}
+				queue.addLast(depId);
+			}
+		}
+		return SelectionIntent.ofEnabled(enabled);
 	}
 
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {
@@ -311,10 +370,12 @@ public final class GroupManifestValidator {
 	 */
 	private static final class PairMemo {
 		private final GroupManifest manifest;
+		private final Map<String, Set<String>> activatorsByGroup;
 		private final Map<String, Boolean> cache = new HashMap<>();
 
 		PairMemo(GroupManifest manifest) {
 			this.manifest = manifest;
+			this.activatorsByGroup = computeActivators(manifest);
 		}
 
 		boolean coSelectable(String first, String second) {
@@ -323,17 +384,48 @@ public final class GroupManifestValidator {
 		}
 
 		private boolean computeCoSelectable(String first, String second) {
+			Set<String> firstTriggers = activatorsByGroup.getOrDefault(first, Set.of());
+			Set<String> secondTriggers = activatorsByGroup.getOrDefault(second, Set.of());
+			if (firstTriggers.isEmpty() || secondTriggers.isEmpty()) return false;
 			for (ClientPlatform platform : coveredPlatforms(manifest)) {
 				GroupManifest.Group firstGroup = manifest.groups().get(first);
 				GroupManifest.Group secondGroup = manifest.groups().get(second);
 				if (!firstGroup.supports(platform) || !secondGroup.supports(platform)) continue;
-				try {
-					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(first, second)), platform);
-					if (selection.selectedGroups().contains(first) && selection.selectedGroups().contains(second)) return true;
-				} catch (SelectionResolutionException ignored) {
+				for (String t1 : firstTriggers) {
+					if (!manifest.groups().get(t1).supports(platform)) continue;
+					for (String t2 : secondTriggers) {
+						if (!manifest.groups().get(t2).supports(platform)) continue;
+						try {
+							Set<String> requested = t1.equals(t2) ? Set.of(t1) : Set.of(t1, t2);
+							ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, intentActivating(manifest, requested), platform);
+							if (selection.selectedGroups().contains(first) && selection.selectedGroups().contains(second)) return true;
+						} catch (SelectionResolutionException ignored) {
+						}
+					}
 				}
 			}
 			return false;
+		}
+
+		private static Map<String, Set<String>> computeActivators(GroupManifest manifest) {
+			Map<String, Set<String>> activators = new LinkedHashMap<>();
+			for (String id : manifest.groups().keySet()) activators.put(id, new LinkedHashSet<>());
+			for (var entry : manifest.groups().entrySet()) {
+				String root = entry.getKey();
+				if (entry.getValue().selection().automatic()) continue;
+				activators.get(root).add(root);
+				ArrayDeque<String> queue = new ArrayDeque<>(entry.getValue().requires());
+				Set<String> seen = new HashSet<>();
+				while (!queue.isEmpty()) {
+					String dep = queue.removeFirst();
+					if (!seen.add(dep)) continue;
+					GroupManifest.Group depGroup = manifest.groups().get(dep);
+					if (depGroup == null) continue;
+					if (depGroup.selection().automatic()) activators.get(dep).add(root);
+					queue.addAll(depGroup.requires());
+				}
+			}
+			return activators;
 		}
 	}
 
@@ -371,12 +463,12 @@ public final class GroupManifestValidator {
 	}
 
 	public static String requireIdentifier(String id) {
-		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid group ID: " + id);
+		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid identifier: " + id);
 		return id;
 	}
 
-	private static boolean isValidIdentifier(String id) {
-		return id != null && ID.matcher(id).matches();
+	public static boolean isValidIdentifier(String id) {
+		return id != null && ID.matcher(id).matches() && !OsPaths.isReservedWindowsDeviceName(id);
 	}
 
 	private static void validateId(String description, String id, List<String> errors) {
@@ -387,22 +479,18 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	/**
-	 * Category names are player-facing display strings, not ids. Guards run on the raw key: it must carry no leading/trailing
-	 * whitespace, be non-blank, hold no control characters, fit the length cap, and be case-insensitively unique.
-	 */
-	private static String validateCategoryName(String raw, Map<String, String> seenNames, List<String> errors) {
-		if (raw == null) {
-			errors.add("Category name is missing");
-			return "";
+	private static String validateCategoryDisplayName(String catId, String rawName, Map<String, String> seenLabels, List<String> errors) {
+		String name = value(rawName);
+		if (CONTROL_CHARACTER.matcher(name).find()) errors.add("Category '" + catId + "' name contains control characters");
+		if (!name.isEmpty()) {
+			if (!name.equals(name.strip())) errors.add("Category '" + catId + "' name has leading or trailing whitespace");
+			if (name.strip().isEmpty()) errors.add("Category '" + catId + "' name is blank");
+			if (name.length() > CATEGORY_NAME_MAX) errors.add("Category '" + catId + "' name is longer than " + CATEGORY_NAME_MAX + " characters");
 		}
-		if (!raw.equals(raw.strip())) errors.add("Category '" + raw + "' has leading or trailing whitespace");
-		if (raw.strip().isEmpty()) errors.add("Category '" + raw + "' is blank");
-		if (CONTROL_CHARACTER.matcher(raw).find()) errors.add("Category '" + raw + "' contains control characters");
-		if (raw.length() > CATEGORY_NAME_MAX) errors.add("Category '" + raw + "' is longer than " + CATEGORY_NAME_MAX + " characters");
-		String first = seenNames.putIfAbsent(raw.toLowerCase(Locale.ROOT), raw);
-		if (first != null) errors.add("Category '" + raw + "' duplicates category '" + first + "'");
-		return raw;
+		String effectiveLabel = name.isEmpty() ? catId : name;
+		String first = seenLabels.putIfAbsent(effectiveLabel.toLowerCase(Locale.ROOT), catId);
+		if (first != null) errors.add("Category '" + catId + "' label '" + effectiveLabel + "' duplicates category '" + first + "'");
+		return name;
 	}
 
 	private static String value(String value) {

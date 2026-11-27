@@ -84,7 +84,7 @@ class InstalledPacksTest {
 		PackDocument document = TestPacks.document(manifest);
 		TestPacks.stageGeneration(storage, document);
 		storage.writeActiveState(document);
-		new ClientSelectionStore(storage.selectionFile()).put(manifest.modpackId(), new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(manifest.modpackId(), SelectionIntent.ofEnabled(Set.of("main")));
 		return manifest;
 	}
 

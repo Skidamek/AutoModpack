@@ -8,47 +8,49 @@ import org.junit.jupiter.api.Test;
 
 class GroupSelectionResolverTest {
 	@Test
-	void defaultSelectedGroupsEnterOnlyTheNewDefaultIntent() {
-		GroupManifest manifest = manifest(Map.of("default", group(GroupSelectionMode.RECOMMENDED, Set.of()), "optional", group(GroupSelectionMode.OPTIONAL, Set.of())));
+	void recommendedArrivesSelectedUnderDefaultsAndRespectsExplicitOptOut() {
+		GroupManifest manifest = manifest(Map.of(),
+				Map.of("main", group(GroupSelectionMode.REQUIRED, Set.of()), "default", group(GroupSelectionMode.RECOMMENDED, Set.of()),
+						"optional", group(GroupSelectionMode.OPTIONAL, Set.of())));
 
-		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
+		assertEquals(Set.of("main", "default"), defaults.selectedGroups());
+		assertEquals(Set.of("main", "default"), GroupSelectionResolver.resolve(manifest, SelectionIntent.DEFAULTS, ClientPlatform.LINUX).selectedGroups());
 
-		assertEquals(Set.of("default"), defaults.requestedGroups());
-		assertEquals(Set.of(), GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of()), ClientPlatform.LINUX).selectedGroups());
-		assertEquals(Set.of("default"), GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX).selectedGroups());
-	}
+		GroupSelectionResolver.SelectionUpdate optedOut = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "default", ClientPlatform.LINUX);
+		assertEquals("", optedOut.error());
+		assertEquals(Set.of("default"), optedOut.intent().disabled());
+		assertEquals(Set.of("main"), optedOut.resolution().selectedGroups());
 
-	@Test
-	void requiredGroupsRemainDistinctFromDefaultSelectedIntent() {
-		GroupManifest manifest = manifest(Map.of("required", group(GroupSelectionMode.REQUIRED, Set.of()), "default", group(GroupSelectionMode.RECOMMENDED, Set.of())));
-
-		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
-
-		assertEquals(Set.of("default"), defaults.requestedGroups());
-		assertEquals(Set.of("default", "required"), GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX).selectedGroups());
+		// A new RECOMMENDED group added later still arrives selected automatically without wiping prior opt-out.
+		GroupManifest evolved = manifest(Map.of(),
+				Map.of("main", group(GroupSelectionMode.REQUIRED, Set.of()), "default", group(GroupSelectionMode.RECOMMENDED, Set.of()),
+						"new-rec", group(GroupSelectionMode.RECOMMENDED, Set.of())));
+		ResolvedSelection resolvedEvolved = GroupSelectionResolver.resolve(evolved, optedOut.intent(), ClientPlatform.LINUX);
+		assertEquals(Set.of("main", "new-rec"), resolvedEvolved.selectedGroups());
 	}
 
 	@Test
 	void explicitlyRequestedUnavailableOptionalGroupInvalidatesResolution() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(),
-				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
+		GroupManifest manifest = manifest(Map.of(),
+				Map.of("windows", new GroupManifest.Group("Windows", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
-				() -> GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("windows")), ClientPlatform.LINUX));
+				() -> GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("windows")), ClientPlatform.LINUX));
 
 		assertEquals(Set.of("windows"), failure.resolution().requestedUnavailableGroups());
 		assertEquals(Set.of("windows"), failure.resolution().unavailableGroups());
-		assertTrue(failure.errors().get(0).contains("explicitly requested"));
+		assertTrue(failure.errors().get(0).contains("windows"));
 	}
 
 	@Test
 	void explicitlyRequestedOptionalGroupBlockedByUnavailableDependencyIsHonest() {
-		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
-		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
-		GroupManifest manifest = manifest(Map.of("dependency", dependency, "feature", feature));
+		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
+		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of(), Map.of("dependency", dependency, "feature", feature));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
-				() -> GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("feature")), ClientPlatform.LINUX));
+				() -> GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("feature")), ClientPlatform.LINUX));
 
 		assertEquals(Set.of("feature"), failure.resolution().requestedUnavailableGroups());
 		assertEquals(GroupResolution.Status.BLOCKED, failure.resolution().resolution("feature").status());
@@ -57,116 +59,124 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void unsupportedGroupsNeverRequestedRemainOutsideRequestedUnavailableSubset() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(),
-				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
+		GroupManifest manifest = manifest(Map.of(),
+				Map.of("windows", new GroupManifest.Group("Windows", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
-		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of()), ClientPlatform.LINUX);
+		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, SelectionIntent.DEFAULTS, ClientPlatform.LINUX);
 
 		assertEquals(Set.of("windows"), resolved.unavailableGroups());
 		assertTrue(resolved.requestedUnavailableGroups().isEmpty());
 	}
 
 	@Test
-	void dependencyExplanationNamesTheSelectedGroupThatRequiresIt() {
-		GroupManifest manifest = manifest(Map.of("dependency", group(GroupSelectionMode.OPTIONAL, Set.of()), "feature", group(GroupSelectionMode.OPTIONAL, Set.of("dependency"))));
+	void dependencyExplanationAndAutomaticActivationFollowDependents() {
+		GroupManifest manifest = manifest(Map.of(),
+				Map.of("shader-base", group(GroupSelectionMode.AUTOMATIC, Set.of()), "iris", group(GroupSelectionMode.OPTIONAL, Set.of("shader-base"))));
 
-		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("feature")), ClientPlatform.LINUX);
+		assertEquals(Set.of(), GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX).selectedGroups());
 
-		assertEquals(Set.of("feature"), resolved.resolution("dependency").relatedGroups());
+		GroupSelectionResolver.SelectionUpdate enabled = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "iris", ClientPlatform.LINUX);
+		assertEquals(Set.of("iris", "shader-base"), enabled.resolution().selectedGroups());
+		assertEquals(Set.of("shader-base"), enabled.resolution().dependencyGroups());
+		assertEquals(Set.of("iris"), enabled.resolution().resolution("shader-base").relatedGroups());
+
+		GroupSelectionResolver.SelectionUpdate disabled = GroupSelectionResolver.toggleGroup(manifest, enabled.intent(), "iris", ClientPlatform.LINUX);
+		assertEquals(Set.of(), disabled.resolution().selectedGroups());
 	}
 
 	@Test
-	void categoryTogglePersistsCategoryWithoutPretendingItsGroupsWereClicked() {
-		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX), "two", categorized("two", ClientPlatform.LINUX)));
+	void uncheckingDependencyCascadesToDependentsAndRequiredGroupRefusesUncheck() {
+		GroupManifest manifest = manifest(Map.of(),
+				Map.of("main", group(GroupSelectionMode.REQUIRED, Set.of()), "base", group(GroupSelectionMode.OPTIONAL, Set.of()),
+						"addon", group(GroupSelectionMode.OPTIONAL, Set.of("base"))));
 
-		SelectionIntent selected = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
+		SelectionIntent both = SelectionIntent.ofEnabled(Set.of("base", "addon"));
+		GroupSelectionResolver.SelectionUpdate turnedOffBase = GroupSelectionResolver.toggleGroup(manifest, both, "base", ClientPlatform.LINUX);
+		assertEquals("", turnedOffBase.error());
+		assertEquals(Set.of("main"), turnedOffBase.resolution().selectedGroups());
+		assertEquals(Set.of("addon"), turnedOffBase.turnedOff());
 
-		assertEquals(Set.of(), selected.requestedGroups());
-		assertEquals(Set.of("visuals"), selected.requestedCategories());
-		assertEquals(Set.of("one", "two"), GroupSelectionResolver.resolve(manifest, selected, ClientPlatform.LINUX).selectedGroups());
-		assertEquals(Set.of(), selected.excludedGroups());
+		GroupSelectionResolver.SelectionUpdate tryMain = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "main", ClientPlatform.LINUX);
+		assertFalse(tryMain.error().isEmpty());
+		assertEquals(SelectionIntent.DEFAULTS, tryMain.intent());
 	}
 
 	@Test
-	void individualGroupDoesNotSelectItsSingleGroupCategory() {
-		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX)));
+	void exclusiveCategoriesEnforceAtMostOneAndExactlyOne() {
+		GroupManifest manifest = manifest(
+				Map.of("shaders", new GroupManifest.Category("Shaders", "", CategoryPickMode.AT_MOST_ONE),
+						"minimap", new GroupManifest.Category("Minimap", "", CategoryPickMode.EXACTLY_ONE)),
+				Map.of("bsl", categorized(GroupSelectionMode.RECOMMENDED, "shaders"),
+						"complementary", categorized(GroupSelectionMode.OPTIONAL, "shaders"),
+						"xaero", categorized(GroupSelectionMode.RECOMMENDED, "minimap"),
+						"journeymap", categorized(GroupSelectionMode.OPTIONAL, "minimap")));
 
-		SelectionIntent selected = GroupSelectionResolver.prefer(manifest, new SelectionIntent(Set.of()), "one", ClientPlatform.LINUX);
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
+		assertEquals(Set.of("bsl", "xaero"), defaults.selectedGroups());
 
-		assertEquals(Set.of("one"), selected.requestedGroups());
-		assertTrue(selected.requestedCategories().isEmpty());
+		GroupSelectionResolver.SelectionUpdate switchShader = GroupSelectionResolver.pickInCategory(manifest, SelectionIntent.DEFAULTS, "shaders", "complementary", ClientPlatform.LINUX);
+		assertEquals("", switchShader.error());
+		assertEquals(Set.of("complementary", "xaero"), switchShader.resolution().selectedGroups());
+
+		GroupSelectionResolver.SelectionUpdate clearShader = GroupSelectionResolver.pickInCategory(manifest, switchShader.intent(), "shaders", "", ClientPlatform.LINUX);
+		assertEquals("", clearShader.error());
+		assertEquals(Set.of("xaero"), clearShader.resolution().selectedGroups());
+
+		GroupSelectionResolver.SelectionUpdate tryClearMinimap = GroupSelectionResolver.pickInCategory(manifest, clearShader.intent(), "minimap", "", ClientPlatform.LINUX);
+		assertFalse(tryClearMinimap.error().isEmpty());
+		assertEquals(Set.of("xaero"), tryClearMinimap.resolution().selectedGroups());
 	}
 
 	@Test
-	void changingAChildConvertsTheRestOfItsSelectedCategoryToIndividualChoices() {
-		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX), "two", categorized("two", ClientPlatform.LINUX)));
-		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
+	void setCategoryAllSelectsOrClearsOnlyCompatibleMembersInAnyCategory() {
+		GroupManifest manifest = manifest(Map.of("visuals", new GroupManifest.Category("Visuals", "", CategoryPickMode.ANY)),
+				Map.of("one", new GroupManifest.Group("One", "", "visuals", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(ClientPlatform.LINUX), Map.of()),
+						"two", new GroupManifest.Group("Two", "", "visuals", GroupSelectionMode.RECOMMENDED, Set.of(), Set.of(ClientPlatform.LINUX), Map.of()),
+						"win", new GroupManifest.Group("Win", "", "visuals", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(ClientPlatform.WINDOWS), Map.of())));
 
-		SelectionIntent changed = GroupSelectionResolver.prefer(manifest, category, "one", ClientPlatform.LINUX);
+		GroupSelectionResolver.SelectionUpdate selectedAll = GroupSelectionResolver.setCategoryAll(manifest, SelectionIntent.DEFAULTS, "visuals", true, ClientPlatform.LINUX);
+		assertEquals(Set.of("one", "two"), selectedAll.resolution().selectedGroups());
 
-		assertEquals(Set.of("two"), changed.requestedGroups());
-		assertTrue(changed.requestedCategories().isEmpty());
-	}
-
-	@Test
-	void conflictReplacementKeepsSafeMembersOfASelectedCategory() {
-		GroupManifest.Group dependency = group(GroupSelectionMode.OPTIONAL, Set.of());
-		GroupManifest.Group oldFeature = new GroupManifest.Group("Old feature", "", "visuals", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(ClientPlatform.LINUX),
-				new TreeMap<>());
-		GroupManifest.Group safeFeature = categorized("Safe feature", ClientPlatform.LINUX);
-		GroupManifest.Group preferred = new GroupManifest.Group("Preferred", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(Set.of("dependency")), new TreeSet<>(), Set.of(), new TreeMap<>());
-		GroupManifest manifest = manifest(Map.of("dependency", dependency, "old", oldFeature, "safe", safeFeature, "preferred", preferred));
-		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
-		SelectionIntent candidate = GroupSelectionResolver.prefer(manifest, category, "preferred", ClientPlatform.LINUX);
-		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class, () -> GroupSelectionResolver.resolve(manifest, candidate, ClientPlatform.LINUX));
-
-		GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, candidate, Set.of("preferred"), ClientPlatform.LINUX, failure.resolution()).orElseThrow();
-
-		assertTrue(replacement.intent().requestedCategories().isEmpty());
-		assertEquals(Set.of("preferred", "safe"), replacement.intent().requestedGroups());
-		assertEquals(Set.of("dependency"), replacement.conflictingGroups());
-		assertEquals(Set.of("preferred", "safe"), GroupSelectionResolver.resolve(manifest, replacement.intent(), ClientPlatform.LINUX).selectedGroups());
+		GroupSelectionResolver.SelectionUpdate clearedAll = GroupSelectionResolver.setCategoryAll(manifest, selectedAll.intent(), "visuals", false, ClientPlatform.LINUX);
+		assertEquals(Set.of(), clearedAll.resolution().selectedGroups());
 	}
 
 	@Test
 	void declaredOnlyPlatformGroupIsNotAutoMatchedButIsSelectable() {
 		ClientPlatform android = ClientPlatform.parse("android");
-		GroupManifest.Group mobile = new GroupManifest.Group("Mobile", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(android), new TreeMap<>());
-		GroupManifest.Group desktop = new GroupManifest.Group("Desktop", "", "General", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.LINUX), new TreeMap<>());
-		GroupManifest manifest = manifest(Map.of("mobile", mobile, "desktop", desktop));
+		GroupManifest.Group mobile = new GroupManifest.Group("Mobile", "", "", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(android), new TreeMap<>());
+		GroupManifest.Group desktop = new GroupManifest.Group("Desktop", "", "", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), Set.of(ClientPlatform.LINUX), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of(), Map.of("mobile", mobile, "desktop", desktop));
 
-		// Auto-detection never yields android, so the group stays out of the default resolution...
 		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
 		assertFalse(defaults.selectedGroups().contains("mobile"));
 		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("mobile").status());
 		assertEquals(Set.of("desktop"), defaults.selectedGroups());
 
-		// ...but an explicit choice of that platform selects it.
-		SelectionIntent intent = new SelectionIntent(List.of("mobile"), List.of(), List.of(), android);
+		SelectionIntent intent = new SelectionIntent(Set.of("mobile"), Set.of(), android);
 		assertTrue(GroupSelectionResolver.resolve(manifest, intent, android).selectedGroups().contains("mobile"));
 	}
 
 	@Test
 	void noPlatformKeepsOnlyThePlatformAgnosticGroups() {
 		GroupManifest.Group any = group(GroupSelectionMode.RECOMMENDED, Set.of());
-		GroupManifest.Group windows = new GroupManifest.Group("Windows", "", "General", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
-		GroupManifest manifest = manifest(Map.of("any", any, "windows", windows));
+		GroupManifest.Group windows = new GroupManifest.Group("Windows", "", "", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of(), Map.of("any", any, "windows", windows));
 
-		// Without a detected or chosen platform nothing is known, so platform-specific groups fall away and agnostic ones stay.
 		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, null);
 		assertEquals(Set.of("any"), defaults.selectedGroups());
 		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("windows").status());
 	}
 
-	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
+	private static GroupManifest manifest(Map<String, GroupManifest.Category> categories, Map<String, GroupManifest.Group> groups) {
+		return new GroupManifest("abc1234", "", "", "", "", "", new LinkedHashMap<>(categories), new LinkedHashMap<>(groups));
 	}
 
 	private static GroupManifest.Group group(GroupSelectionMode selection, Set<String> requires) {
-		return new GroupManifest.Group("", "", "General", selection, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
+		return new GroupManifest.Group("", "", "", selection, new TreeSet<>(requires), Set.of(), new TreeMap<>());
 	}
 
-	private static GroupManifest.Group categorized(String name, ClientPlatform platform) {
-		return new GroupManifest.Group(name, "", "visuals", GroupSelectionMode.OPTIONAL, new TreeSet<>(), new TreeSet<>(), Set.of(platform), new TreeMap<>());
+	private static GroupManifest.Group categorized(GroupSelectionMode selection, String category) {
+		return new GroupManifest.Group("", "", category, selection, new TreeSet<>(), Set.of(), new TreeMap<>());
 	}
 }

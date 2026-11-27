@@ -274,9 +274,8 @@ public final class InstanceTree {
 		fields.contentToken = identity.contentToken();
 		fields.detached = identity.detached();
 		SelectionIntent selection = identity.selection();
-		fields.requestedGroups = selection == null ? List.of() : List.copyOf(selection.requestedGroups());
-		fields.requestedCategories = selection == null ? List.of() : List.copyOf(selection.requestedCategories());
-		fields.excludedGroups = selection == null ? List.of() : List.copyOf(selection.excludedGroups());
+		fields.enabledGroups = selection == null ? List.of() : List.copyOf(selection.enabled());
+		fields.disabledGroups = selection == null ? List.of() : List.copyOf(selection.disabled());
 		List<ClientStorageJsons.InstanceTreeFields.TombstoneFields> tombstones = new ArrayList<>();
 		for (Tombstone tombstone : identity.tombstones()) {
 			ClientStorageJsons.InstanceTreeFields.TombstoneFields row = new ClientStorageJsons.InstanceTreeFields.TombstoneFields();
@@ -309,7 +308,7 @@ public final class InstanceTree {
 			tombstones.add(new Tombstone(row.modpackId, row.deletedPaths == null ? List.of() : row.deletedPaths));
 		SelectionIntent selection = fields.activeModpackId == null || fields.activeModpackId.isBlank()
 				? null
-				: new SelectionIntent(set(fields.requestedGroups), set(fields.requestedCategories), set(fields.excludedGroups));
+				: new SelectionIntent(set(fields.enabledGroups), set(fields.disabledGroups));
 		return of(new LiveIdentity(fields.activeModpackId, fields.contentToken, fields.detached, selection, tombstones), files);
 	}
 

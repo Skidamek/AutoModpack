@@ -22,8 +22,8 @@ final class GroupSelectionMigration {
 	static GroupSelectionMode fromLegacyPair(JsonObject declaration, String context) {
 		boolean required = ConfigTools.strictBoolean(declaration, "required", context);
 		boolean defaultSelected = strictBoolean(declaration, LEGACY_DEFAULT_SELECTED, context);
-		GroupSelectionMode mode = GroupSelectionMode.of(required, defaultSelected);
-		if (GroupSelectionMode.collapsed(required, defaultSelected)) LOGGER.info("{} wrote required with default-selected false, which the selection modes cannot express; it became {}", context, mode);
+		GroupSelectionMode mode = required ? GroupSelectionMode.REQUIRED : defaultSelected ? GroupSelectionMode.RECOMMENDED : GroupSelectionMode.OPTIONAL;
+		if (required && !defaultSelected) LOGGER.info("{} wrote required with default-selected false, which the selection modes cannot express; it became {}", context, mode);
 		return mode;
 	}
 

@@ -117,7 +117,7 @@ final class RemovalAttempt implements UpdateAttempt {
 		SelectionIntent intent = preparation.expectedPriorIntent();
 		if (intent == null) return null;
 		Set<String> selected = preparation.installed().selectedGroups == null ? Set.of() : preparation.installed().selectedGroups;
-		Set<String> stale = new TreeSet<>(intent.requestedGroups());
+		Set<String> stale = new TreeSet<>(intent.enabled());
 		stale.removeAll(selected);
 		return new ResolvedSelection(intent, new TreeSet<>(selected), new TreeSet<>(stale));
 	}

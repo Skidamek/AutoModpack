@@ -291,14 +291,11 @@ final class UpdateTransactionValidator {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedCategories == null
-				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedCategories == null || transaction.excludedGroups == null)
+		if (transaction.expectedPriorEnabledGroups == null || transaction.expectedPriorDisabledGroups == null
+				|| transaction.enabledGroups == null || transaction.disabledGroups == null)
 			throw new IOException("Selection metadata is incomplete");
-		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
-				|| !isCanonicalIntentList(transaction.expectedPriorRequestedCategories)
-				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
-				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.requestedCategories)
-				|| !isCanonicalIntentList(transaction.excludedGroups))
+		if (!isCanonicalIntentList(transaction.expectedPriorEnabledGroups) || !isCanonicalIntentList(transaction.expectedPriorDisabledGroups)
+				|| !isCanonicalIntentList(transaction.enabledGroups) || !isCanonicalIntentList(transaction.disabledGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
 			if (!transaction.selectionDigest().equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE

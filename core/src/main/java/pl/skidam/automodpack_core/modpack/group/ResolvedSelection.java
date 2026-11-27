@@ -5,24 +5,22 @@ import java.util.*;
 public record ResolvedSelection(
 		SelectionIntent intent,
 		NavigableSet<String> selectedGroups,
-		NavigableSet<String> staleRequestedGroups,
+		NavigableSet<String> staleGroups,
 		NavigableSet<String> requiredGroups,
-		NavigableSet<String> forcedGroups,
 		NavigableSet<String> dependencyGroups,
 		NavigableSet<String> unavailableGroups,
 		NavigableSet<String> requestedUnavailableGroups,
 		NavigableMap<String, GroupResolution> groupResolutions) {
-	public ResolvedSelection(SelectionIntent intent, Collection<String> selectedGroups, Collection<String> staleRequestedGroups) {
-		this(intent, immutableSet(selectedGroups), immutableSet(staleRequestedGroups), immutableSet(Set.of()), immutableSet(Set.of()), immutableSet(Set.of()), immutableSet(Set.of()),
+	public ResolvedSelection(SelectionIntent intent, Collection<String> selectedGroups, Collection<String> staleGroups) {
+		this(intent, immutableSet(selectedGroups), immutableSet(staleGroups), immutableSet(Set.of()), immutableSet(Set.of()), immutableSet(Set.of()),
 				immutableSet(Set.of()), immutableMap(Map.of()));
 	}
 
 	public ResolvedSelection {
 		intent = Objects.requireNonNull(intent);
 		selectedGroups = immutableSet(selectedGroups);
-		staleRequestedGroups = immutableSet(staleRequestedGroups);
+		staleGroups = immutableSet(staleGroups);
 		requiredGroups = immutableSet(requiredGroups);
-		forcedGroups = immutableSet(forcedGroups);
 		dependencyGroups = immutableSet(dependencyGroups);
 		unavailableGroups = immutableSet(unavailableGroups);
 		requestedUnavailableGroups = immutableSet(requestedUnavailableGroups);

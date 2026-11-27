@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 public record GenerationDiff(
 		List<FileChange> files,
 		MetadataSummary packMetadata,
+		MetadataSummary categoryMetadata,
 		MetadataSummary groupMetadata) {
 	public GenerationDiff {
 		files = files == null
@@ -19,6 +20,7 @@ public record GenerationDiff(
 						.thenComparingInt(change -> change.classification().ordinal()).thenComparing(change -> Objects.toString(change.before(), ""))
 						.thenComparing(change -> Objects.toString(change.after(), ""))).toList();
 		packMetadata = Objects.requireNonNull(packMetadata);
+		categoryMetadata = Objects.requireNonNull(categoryMetadata);
 		groupMetadata = Objects.requireNonNull(groupMetadata);
 	}
 
@@ -41,7 +43,7 @@ public record GenerationDiff(
 			else continue;
 			changes.add(new FileChange(key.groupId(), key.logicalPath(), classification, oldFile, newFile));
 		}
-		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child));
+		return new GenerationDiff(changes, packSummary(parent, child), categorySummary(parent, child), groupSummary(parent, child));
 	}
 
 	public boolean isEmpty() {
@@ -67,6 +69,7 @@ public record GenerationDiff(
 		}
 		List<ChangeSet.Effect> effects = new ArrayList<>();
 		appendMetadataEffects(effects, "pack", packMetadata);
+		appendMetadataEffects(effects, "category", categoryMetadata);
 		appendMetadataEffects(effects, "group", groupMetadata);
 		return ChangeSet.of(changes, effects);
 	}
@@ -75,6 +78,7 @@ public record GenerationDiff(
 	public List<String> humanReadableChanges() {
 		List<String> changes = new ArrayList<>();
 		appendMetadataChanges(changes, "pack metadata", packMetadata);
+		appendMetadataChanges(changes, "category", categoryMetadata);
 		appendMetadataChanges(changes, "group", groupMetadata);
 		for (FileChange change : files) {
 			changes.add(change.classification().action() + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
@@ -168,6 +172,11 @@ public record GenerationDiff(
 		if (!Objects.equals(parent.loaderVersion(), child.loaderVersion())) modified.add("loaderVersion");
 		if (!Objects.equals(parent.mcVersion(), child.mcVersion())) modified.add("mcVersion");
 		return new MetadataSummary(List.of(), modified, List.of());
+	}
+
+	private static MetadataSummary categorySummary(GroupManifest parent, GroupManifest child) {
+		Map<String, GroupManifest.Category> before = parent == null ? Map.of() : parent.categories();
+		return compareKeys(before, child.categories(), GroupManifest.Category::hasSameMetadata);
 	}
 
 	private static MetadataSummary groupSummary(GroupManifest parent, GroupManifest child) {

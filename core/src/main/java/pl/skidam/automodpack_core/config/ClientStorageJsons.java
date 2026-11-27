@@ -49,9 +49,8 @@ public class ClientStorageJsons {
 		 * mean a pointer written before the selection was recorded; readers fall back to the selection store, which
 		 * was the applied record before the store became the player's desired state.
 		 */
-		public List<String> selectedGroups = null;
-		public List<String> selectedCategories = null;
-		public List<String> excludedGroups = null;
+		public List<String> enabledGroups = null;
+		public List<String> disabledGroups = null;
 		public String selectedPlatform = null;
 		/**
 		 * Local sovereignty of the active pack. Exactly two transition kinds exist, both explicit: declared true by
@@ -78,9 +77,8 @@ public class ClientStorageJsons {
 		public String activeModpackId = "";
 		public String contentToken = "";
 		public boolean detached;
-		public List<String> requestedGroups = List.of();
-		public List<String> requestedCategories = List.of();
-		public List<String> excludedGroups = List.of();
+		public List<String> enabledGroups = List.of();
+		public List<String> disabledGroups = List.of();
 		public List<TombstoneFields> tombstones = List.of();
 		public List<FileFields> files = List.of();
 

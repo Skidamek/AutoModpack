@@ -17,7 +17,7 @@ class ConfigUtilsTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.fromServer = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.editable = new LinkedHashSet<>(List.of("third", "first", "second"));
-		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -28,14 +28,18 @@ class ConfigUtilsTest {
 	@Test
 	void normalizesRulePathsAndKeepsSetLocalNegations() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		config.modpack.exclude = new LinkedHashSet<>(List.of("/logs/*.log", "!/logs/keep.log"));
+		config.modpack.editable = new LinkedHashSet<>(List.of("//options.txt", "!/config/locked.json"));
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.fromServer = new LinkedHashSet<>(List.of("/mods/*.jar", "/automodpack/host-modpack/main/extra", "!kubejs/server_scripts/**", "!/kubejs/assets/**"));
 		group.exclude = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin", "!/automodpack/host-modpack/main/keep.bin"));
 		group.editable = new LinkedHashSet<>(List.of("//config/**"));
-		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
+		assertEquals(List.of("logs/*.log", "!logs/keep.log"), List.copyOf(config.modpack.exclude));
+		assertEquals(List.of("options.txt", "!config/locked.json"), List.copyOf(config.modpack.editable));
 		assertEquals(List.of("mods/*.jar", "!kubejs/server_scripts/**", "!kubejs/assets/**"), List.copyOf(group.fromServer));
 		assertEquals(List.of("secret.bin", "!keep.bin"), List.copyOf(group.exclude));
 		assertEquals(List.of("config/**"), List.copyOf(group.editable));
@@ -48,7 +52,7 @@ class ConfigUtilsTest {
 		group.fromServer = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
 		group.exclude = new LinkedHashSet<>(
 				List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main", "automodpack/host-modpack/main/**/**", "automodpack/host-modpack/main/**/*"));
-		config.modpack.categories = Map.of("General", new LinkedHashMap<>(Map.of("main", group)));
+		config.modpack.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
@@ -62,14 +66,14 @@ class ConfigUtilsTest {
 	@Test
 	void nullGroupAndCategoryDeclarationsAreInvalid() {
 		ServerConfigJsons.ServerConfigFieldsV3 nullCategory = new ServerConfigJsons.ServerConfigFieldsV3();
-		nullCategory.modpack.categories = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", new ServerConfigJsons.GroupDeclaration()))));
-		nullCategory.modpack.categories.put("Broken", null);
+		nullCategory.modpack.categories = new LinkedHashMap<>();
+		nullCategory.modpack.categories.put("broken", null);
 		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullCategory));
 
 		ServerConfigJsons.ServerConfigFieldsV3 nullGroup = new ServerConfigJsons.ServerConfigFieldsV3();
 		Map<String, ServerConfigJsons.GroupDeclaration> groups = new LinkedHashMap<>();
 		groups.put("main", null);
-		nullGroup.modpack.categories = new LinkedHashMap<>(Map.of("General", groups));
+		nullGroup.modpack.groups = groups;
 		assertThrows(ConfigTools.ConfigParseException.class, () -> ConfigUtils.normalizeServerConfig(nullGroup));
 	}
 }

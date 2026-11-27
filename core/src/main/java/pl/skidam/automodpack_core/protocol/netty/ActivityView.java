@@ -28,7 +28,7 @@ public final class ActivityView {
 		Map<String, String> names = new HashMap<>();
 		routePaths.apply(GenerationHosting.HEAD_DOCUMENT_KEY).ifPresent(head -> {
 			GenerationJsons.HeadDocumentFields document = ModpackContentTools.readHeadDocument(head);
-			if (document != null) document.policy.categories.forEach((category, groups) -> groups.forEach((group, fields) -> fields.files.forEach((path, file) -> names.put(file.sha1, path))));
+			if (document != null && document.policy.groups != null) document.policy.groups.forEach((group, fields) -> fields.files.forEach((path, file) -> names.put(file.sha1, path)));
 		});
 		long throughput = lastWriteThroughput.getAsLong();
 		if (throughput >= 0) tracker.writeThroughput(throughput);

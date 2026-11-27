@@ -1,9 +1,11 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -19,19 +21,31 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.utils.OsPaths;
 
-/** One-shot JSON → current human model. Used only when the canonical {@code .conf} is missing. */
+/** One-shot JSON / legacy `.conf` -> current human model. Used only when the canonical {@code .toml} is missing. */
 public final class HumanConfigMigration {
 	private static final Logger LOGGER = LogManager.getLogger(HumanConfigMigration.class);
+	private static final String DEFAULT_LEGACY_CATEGORY = "General";
 
 	private HumanConfigMigration() {}
 
 	private static final List<String> DROPPED_SERVER = List.of("forceCopyFilesToStandardLocation", "nonModpackFilesToDelete", "updateIpsOnEveryStart", "autoExcludeUnnecessaryFiles");
 	private static final List<String> DROPPED_CLIENT = List.of("selectedModpack", "installedModpacks", "allowRemoteNonModpackDeletions");
+
 	public static ServerConfigJsons.ServerConfigFieldsV3 mapServer(JsonObject json) {
 		ServerConfigJsons.ServerConfigFieldsV3 config = isV4Server(json) ? mapV4Server(json) : mapV5Server(json);
-		ServerSideExclusionMigration.applyToMapped(config, json);
+		applyTopLevelExclusion(config, json);
 		return config;
+	}
+
+	private static void applyTopLevelExclusion(ServerConfigJsons.ServerConfigFieldsV3 config, JsonObject json) {
+		JsonElement element = first(json, "auto-exclude-server-side-mods", "autoExcludeServerSideMods");
+		if (element == null) return;
+		if (!element.isJsonPrimitive()) throw new ConfigTools.ConfigParseException("auto-exclude-server-side-mods must be a boolean or mode name, got " + element);
+		JsonPrimitive primitive = element.getAsJsonPrimitive();
+		if (primitive.isBoolean()) config.modpack.autoExcludeServerSideMods = primitive.getAsBoolean() ? ServerSideModExclusion.METADATA : ServerSideModExclusion.DISABLED;
+		else config.modpack.autoExcludeServerSideMods = ConfigTools.enumConstant(ServerSideModExclusion.class, primitive.getAsString());
 	}
 
 	public static MappedClient mapClient(JsonObject json) {
@@ -67,13 +81,16 @@ public final class HumanConfigMigration {
 		if (address != null) config.advertisedEndpointHost = address;
 		if (json.has("portToSend") && json.get("portToSend").isJsonPrimitive()) config.advertisedEndpointPort = json.get("portToSend").getAsInt();
 		config.connectionMode = mapV4ConnectionMode(json, config.bindPort);
-		ServerConfigJsons.GroupDeclaration main = mainGroup(config);
+		ServerConfigJsons.GroupDeclaration main = config.modpack.groups.computeIfAbsent("main", ignored -> new ServerConfigJsons.GroupDeclaration());
+		main.name = "Core";
+		main.description = "Core modpack files";
+		main.selection = GroupSelectionMode.REQUIRED;
 		List<String> synced = stringList(json.get("syncedFiles"));
 		if (synced != null) main.fromServer = stripLeadingSlashes(synced);
 		List<String> editable = stringList(json.get("allowEditsInFiles"));
-		if (editable != null) main.editable = stripLeadingSlashes(editable);
+		if (editable != null) config.modpack.editable = stripLeadingSlashes(editable);
 		boolean skipJunk = json.has("autoExcludeUnnecessaryFiles") && !json.get("autoExcludeUnnecessaryFiles").getAsBoolean();
-		main.exclude = skipJunk ? new LinkedHashSet<>() : new LinkedHashSet<>(ServerConfigJsons.FACTORY_JUNK_EXCLUDE);
+		config.modpack.exclude = skipJunk ? new LinkedHashSet<>() : new LinkedHashSet<>(ServerConfigJsons.FACTORY_JUNK_EXCLUDE);
 		logDropped(json, DROPPED_SERVER);
 		return config;
 	}
@@ -98,7 +115,13 @@ public final class HumanConfigMigration {
 			if (leftover != null) config.modpack.name = leftover;
 		}
 		JsonElement modpack = json.get("modpack");
-		if (modpack != null && modpack.isJsonObject()) config.modpack = mapModpack(modpack.getAsJsonObject(), config.modpack.name);
+		if (modpack != null && modpack.isJsonObject()) {
+			config.modpack = mapModpack(modpack.getAsJsonObject(), config.modpack.name);
+		} else {
+			// v5-rc groups declared their own exclude/editable lists rather than inheriting pack-wide defaults.
+			config.modpack.exclude = Set.of();
+			config.modpack.editable = Set.of();
+		}
 		ModpackConnectionMode mode = connectionMode(json);
 		if (mode != null) config.connectionMode = mode;
 		logDropped(json, DROPPED_SERVER);
@@ -138,31 +161,69 @@ public final class HumanConfigMigration {
 
 	private static ServerConfigJsons.ModpackFields mapModpack(JsonObject json, String existingName) {
 		ServerConfigJsons.ModpackFields fields = new ServerConfigJsons.ModpackFields();
+		fields.exclude = Set.of();
+		fields.editable = Set.of();
 		String name = string(json.get("name"));
 		fields.name = name != null ? name : existingName;
-		Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> categories = new LinkedHashMap<>();
-		Map<String, ServerConfigJsons.GroupDeclaration> flat = new LinkedHashMap<>();
+
+		Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> legacyCategories = new LinkedHashMap<>();
+		Map<String, ServerConfigJsons.GroupDeclaration> uncategorized = new LinkedHashMap<>();
 		for (var entry : json.entrySet()) {
 			if (entry.getKey().equals("name") || !entry.getValue().isJsonObject()) continue;
 			JsonObject object = entry.getValue().getAsJsonObject();
-			if (looksLikeGroup(object)) flat.put(entry.getKey(), mapGroup(object, entry.getKey()));
-			else {
+			if (looksLikeGroup(object)) {
+				uncategorized.put(entry.getKey(), mapGroup(object, entry.getKey()));
+			} else {
 				Map<String, ServerConfigJsons.GroupDeclaration> groups = new LinkedHashMap<>();
-				for (var group : object.entrySet()) if (group.getValue().isJsonObject()) groups.put(group.getKey(), mapGroup(group.getValue().getAsJsonObject(), group.getKey()));
-				if (!groups.isEmpty()) categories.put(entry.getKey(), groups);
+				for (var group : object.entrySet()) {
+					if (group.getValue().isJsonObject()) groups.put(group.getKey(), mapGroup(group.getValue().getAsJsonObject(), group.getKey()));
+				}
+				if (!groups.isEmpty()) legacyCategories.put(entry.getKey(), groups);
 			}
 		}
-		if (!flat.isEmpty()) categories.put("General", merge(categories.get("General"), flat));
-		if (categories.isEmpty()) categories.put("General", new LinkedHashMap<>(Map.of("main", new ServerConfigJsons.GroupDeclaration())));
-		fields.categories = categories;
+
+		boolean hasCustomCategory = legacyCategories.keySet().stream().anyMatch(cat -> !cat.equals(DEFAULT_LEGACY_CATEGORY));
+		Set<String> usedCategoryIds = new HashSet<>();
+		for (var catEntry : legacyCategories.entrySet()) {
+			String rawCategory = catEntry.getKey();
+			Map<String, ServerConfigJsons.GroupDeclaration> groups = catEntry.getValue();
+			boolean flatten = (rawCategory.equals(DEFAULT_LEGACY_CATEGORY) && !hasCustomCategory)
+					|| groups.values().stream().noneMatch(g -> g.selection != GroupSelectionMode.REQUIRED);
+			String categoryId = "";
+			if (!flatten) {
+				categoryId = slugifyCategoryId(rawCategory, usedCategoryIds);
+				ServerConfigJsons.CategoryDeclaration cat = new ServerConfigJsons.CategoryDeclaration();
+				cat.name = rawCategory;
+				fields.categories.put(categoryId, cat);
+			}
+			for (var grpEntry : groups.entrySet()) {
+				ServerConfigJsons.GroupDeclaration g = grpEntry.getValue();
+				if (!categoryId.isEmpty() && g.selection != GroupSelectionMode.REQUIRED) g.category = categoryId;
+				fields.groups.put(grpEntry.getKey(), g);
+			}
+		}
+		fields.groups.putAll(uncategorized);
+
+		if (fields.groups.isEmpty()) {
+			fields.groups.put("main", new ServerConfigJsons.GroupDeclaration());
+		}
 		return fields;
 	}
 
-	private static Map<String, ServerConfigJsons.GroupDeclaration> merge(Map<String, ServerConfigJsons.GroupDeclaration> first, Map<String, ServerConfigJsons.GroupDeclaration> second) {
-		LinkedHashMap<String, ServerConfigJsons.GroupDeclaration> out = new LinkedHashMap<>();
-		if (first != null) out.putAll(first);
-		out.putAll(second);
-		return out;
+	private static String slugifyCategoryId(String rawName, Set<String> usedIds) {
+		String lower = rawName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-").replaceAll("^[-_]+|[-_]+$", "");
+		String base = lower.isEmpty() ? "category" : lower;
+		if (!Character.isLetterOrDigit(base.charAt(0))) base = "c-" + base;
+		if (OsPaths.isReservedWindowsDeviceName(base)) base = "c-" + base;
+		if (base.length() > 64) base = base.substring(0, 64);
+		String candidate = base;
+		for (int suffix = 2; usedIds.contains(candidate) || OsPaths.isReservedWindowsDeviceName(candidate); suffix++) {
+			String tag = "-" + suffix;
+			int maxBase = Math.max(1, 64 - tag.length());
+			candidate = (base.length() > maxBase ? base.substring(0, maxBase) : base) + tag;
+		}
+		usedIds.add(candidate);
+		return candidate;
 	}
 
 	private static boolean looksLikeGroup(JsonObject object) {
@@ -175,17 +236,17 @@ public final class HumanConfigMigration {
 
 	private static ServerConfigJsons.GroupDeclaration mapGroup(JsonObject json, String groupId) {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
-		String displayName = string(first(json, "displayName", "display-name"));
-		if (displayName != null) group.displayName = displayName;
+		String displayName = string(first(json, "displayName", "display-name", "name"));
+		if (displayName != null) group.name = displayName;
 		String description = string(json.get("description"));
 		if (description != null) group.description = description;
-		// The selection key wins; the flag pair it replaced is read by the same rule the reconf repair applies.
 		if (json.has("selection")) group.selection = selectionEnum(json.get("selection"));
 		else if (json.has("required") || json.has("defaultSelected") || json.has("default-selected")) group.selection = GroupSelectionMigration.fromLegacyPair(json, "Group '" + groupId + "'");
 		JsonElement exclusion = first(json, "auto-exclude-server-side-mods", "autoExcludeServerSideMods");
 		if (exclusion != null) group.autoExcludeServerSideMods = exclusionEnum(exclusion);
 		List<String> breaksWith = stringList(first(json, "breaksWith", "breaks-with"));
-		if (breaksWith != null) group.breaksWith = new LinkedHashSet<>(breaksWith);
+		if (breaksWith != null && !breaksWith.isEmpty())
+			LOGGER.info("Dropping obsolete 'breaks-with' on group '{}' ({}); use an exclusive category ([categories.<id>] pick = \"AT_MOST_ONE\" or \"EXACTLY_ONE\") for mutual exclusion", groupId, breaksWith);
 		List<String> requires = stringList(json.get("requires"));
 		if (requires != null) group.requires = new LinkedHashSet<>(requires);
 		List<String> platforms = stringList(first(json, "compatiblePlatforms", "compatible-platforms"));
@@ -208,15 +269,6 @@ public final class HumanConfigMigration {
 	private static ServerSideModExclusion exclusionEnum(JsonElement element) {
 		if (!element.isJsonPrimitive()) throw new ConfigTools.ConfigParseException("auto-exclude-server-side-mods must be a string value, got " + element);
 		return ConfigTools.enumConstant(ServerSideModExclusion.class, element.getAsString());
-	}
-
-	private static ServerConfigJsons.GroupDeclaration mainGroup(ServerConfigJsons.ServerConfigFieldsV3 config) {
-		ServerConfigJsons.GroupDeclaration main = config.modpack.categories.computeIfAbsent("General", ignored -> new LinkedHashMap<>()).computeIfAbsent("main", ignored -> new ServerConfigJsons.GroupDeclaration());
-		// v4 had no groups, so the migrated core group takes the factory declaration's required flags: a
-		// deselectable main group would let players join a migrated server with none of its content.
-		main.description = "Core modpack files";
-		main.selection = GroupSelectionMode.REQUIRED;
-		return main;
 	}
 
 	private static Set<String> stripLeadingSlashes(List<String> rules) {

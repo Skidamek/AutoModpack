@@ -48,7 +48,7 @@ class UnownedLocalModsTest {
 		storeContent(storage, "installed");
 		TestPacks.stageGeneration(storage, installed);
 		storage.writeActiveState(installed);
-		new ClientSelectionStore(storage.selectionFile()).put(installed.manifest().modpackId(), new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(installed.manifest().modpackId(), SelectionIntent.ofEnabled(Set.of("main")));
 
 		GroupManifest replacementManifest = pack("def5678", "config/replacement.txt", "replacement");
 		PackDocument replacement = PackDocument.create(replacementManifest, TestPacks.policySha1(replacementManifest), TestPacks.CREATED, null);
@@ -57,12 +57,12 @@ class UnownedLocalModsTest {
 
 		ClientUpdatePlanBuilder builder = builder(storage);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			SelectedModpackTarget target = SelectedModpackTarget.prepare(replacement, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+			SelectedModpackTarget target = SelectedModpackTarget.prepare(replacement, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 			ClientUpdatePlanBuilder.PreparedPlan switchPlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, new ClientConfigJsons.ClientConfigFieldsV3()),
 					ClientProjectionView.observe(storage), cache, modCache);
 			assertEquals(List.of("mods/local.jar"), List.copyOf(switchPlan.unownedLocalMods().keySet()));
 
-			SelectedModpackTarget samePack = SelectedModpackTarget.prepare(installed, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+			SelectedModpackTarget samePack = SelectedModpackTarget.prepare(installed, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 			ClientUpdatePlanBuilder.PreparedPlan updatePlan = builder.buildPlan(new ClientUpdatePlanBuilder.Input(samePack, null, new ClientConfigJsons.ClientConfigFieldsV3()),
 					ClientProjectionView.observe(storage), cache, modCache);
 			assertTrue(updatePlan.unownedLocalMods().isEmpty());
@@ -83,8 +83,8 @@ class UnownedLocalModsTest {
 	private static GroupManifest pack(String modpackId, String path, String content) {
 		byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(bytes.length, false, HashUtils.sha1(bytes), null);
-		GroupManifest.Group group = new GroupManifest.Group("", modpackId, "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of(path, file));
-		return new GroupManifest(modpackId, modpackId, "", "", "", "", Map.of("main", group));
+		GroupManifest.Group group = new GroupManifest.Group("", modpackId, "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(path, file));
+		return new GroupManifest(modpackId, modpackId, "", "", "", "", Map.of(), Map.of("main", group));
 	}
 
 	private static ClientUpdatePlanBuilder builder(ClientStorage storage) {

@@ -24,7 +24,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * execution phase is not part of it: {@link UpdateJournal} owns that, one file, one carrier.
  */
 public final class UpdateTransaction {
-	public static final int CURRENT_SCHEMA_VERSION = 2;
+	public static final int CURRENT_SCHEMA_VERSION = 3;
 
 	public int schemaVersion;
 	public String transactionId;
@@ -33,12 +33,10 @@ public final class UpdateTransaction {
 	public UpdatePlan plan;
 	public String targetPlatform;
 	public boolean expectedPriorSelectionPresent;
-	public List<String> expectedPriorRequestedGroups;
-	public List<String> expectedPriorRequestedCategories;
-	public List<String> expectedPriorExcludedGroups;
-	public List<String> requestedGroups;
-	public List<String> requestedCategories;
-	public List<String> excludedGroups;
+	public List<String> expectedPriorEnabledGroups;
+	public List<String> expectedPriorDisabledGroups;
+	public List<String> enabledGroups;
+	public List<String> disabledGroups;
 	public String overlayDigest;
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public String expectedSelectedModpackId;
@@ -77,12 +75,10 @@ public final class UpdateTransaction {
 		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
 		transaction.targetPlatform = target.platform() == null ? null : target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
-		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
-		transaction.expectedPriorRequestedCategories = intentValues(target.expectedPriorIntent(), IntentPart.CATEGORIES);
-		transaction.expectedPriorExcludedGroups = intentValues(target.expectedPriorIntent(), IntentPart.EXCLUDED);
-		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
-		transaction.requestedCategories = new ArrayList<>(target.selection().intent().requestedCategories());
-		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
+		transaction.expectedPriorEnabledGroups = intentValues(target.expectedPriorIntent(), IntentPart.ENABLED);
+		transaction.expectedPriorDisabledGroups = intentValues(target.expectedPriorIntent(), IntentPart.DISABLED);
+		transaction.enabledGroups = new ArrayList<>(target.selection().intent().enabled());
+		transaction.disabledGroups = new ArrayList<>(target.selection().intent().disabled());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -108,12 +104,10 @@ public final class UpdateTransaction {
 		fillGeneration(transaction, plan.packTarget(), ledger);
 		transaction.targetPlatform = platform == null ? null : platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
-		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
-		transaction.expectedPriorRequestedCategories = intentValues(expectedPriorIntent, IntentPart.CATEGORIES);
-		transaction.expectedPriorExcludedGroups = intentValues(expectedPriorIntent, IntentPart.EXCLUDED);
-		transaction.requestedGroups = List.of();
-		transaction.requestedCategories = List.of();
-		transaction.excludedGroups = List.of();
+		transaction.expectedPriorEnabledGroups = intentValues(expectedPriorIntent, IntentPart.ENABLED);
+		transaction.expectedPriorDisabledGroups = intentValues(expectedPriorIntent, IntentPart.DISABLED);
+		transaction.enabledGroups = List.of();
+		transaction.disabledGroups = List.of();
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -138,15 +132,14 @@ public final class UpdateTransaction {
 	}
 
 	private enum IntentPart {
-		GROUPS, CATEGORIES, EXCLUDED
+		ENABLED, DISABLED
 	}
 
 	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
 		if (intent == null) return List.of();
 		return switch (part) {
-			case GROUPS -> new ArrayList<>(intent.requestedGroups());
-			case CATEGORIES -> new ArrayList<>(intent.requestedCategories());
-			case EXCLUDED -> new ArrayList<>(intent.excludedGroups());
+			case ENABLED -> new ArrayList<>(intent.enabled());
+			case DISABLED -> new ArrayList<>(intent.disabled());
 		};
 	}
 
@@ -172,12 +165,12 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedCategories, expectedPriorExcludedGroups) : null;
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorEnabledGroups, expectedPriorDisabledGroups) : null;
 	}
 
 	/** The target selection carrying the platform this transaction resolved under, so the commit pins the exact resolution. */
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups, platform());
+		return new SelectionIntent(enabledGroups, disabledGroups, platform());
 	}
 
 	/** The selection the transaction plans for; generated-copy state is keyed by it. */
@@ -188,10 +181,9 @@ public final class UpdateTransaction {
 	public static String digest(SelectionIntent intent) {
 		if (intent == null) return "";
 		MessageDigest digest = HashUtils.newSha1Digest();
-		digest.update("automodpack-selection-v2\n".getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.requestedCategories().stream().sorted().toList()) digest.update(("category=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		digest.update("automodpack-selection-v3\n".getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.enabled().stream().sorted().toList()) digest.update(("enabled=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.disabled().stream().sorted().toList()) digest.update(("disabled=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
 	}
 

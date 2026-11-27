@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -73,7 +74,7 @@ final class UpdateTestFixtures {
 	static SelectedModpackTarget target(ClientStorage storage, String path, String type, boolean editable, String hash, long size) throws IOException {
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields(path, type, editable, hash, size)));
 		TestPacks.stageGeneration(storage, document);
-		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		return SelectedModpackTarget.prepare(document, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 	}
 
 	static ModpackJsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {
@@ -81,15 +82,14 @@ final class UpdateTestFixtures {
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(size);
 		file.editable = editable;
 		file.sha1 = hash;
 		file.murmur = "0";
 		group.files = Map.of(path, file);
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return fields;
 	}
 

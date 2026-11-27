@@ -16,23 +16,20 @@ class SelectedModpackTargetTest {
 
 	@Test
 	void invalidPersistedIntentIsReportedWithStructuredResolution() throws Exception {
-		GroupManifest.Group first = group(Set.of());
-		GroupManifest.Group second = new GroupManifest.Group("", "", "General", GroupSelectionMode.RECOMMENDED, new TreeSet<>(Set.of("first")), new TreeSet<>(), Set.of(), new TreeMap<>());
-		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("first", first, "second", second)));
+		GroupManifest.Category exclusive = new GroupManifest.Category("Shaders", "", CategoryPickMode.AT_MOST_ONE);
+		GroupManifest.Group first = new GroupManifest.Group("", "", "shaders", GroupSelectionMode.OPTIONAL, new TreeSet<>(), Set.of(), new TreeMap<>());
+		GroupManifest.Group second = new GroupManifest.Group("", "", "shaders", GroupSelectionMode.RECOMMENDED, new TreeSet<>(), Set.of(), new TreeMap<>());
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", Map.of("shaders", exclusive), new TreeMap<>(Map.of("first", first, "second", second)));
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
-		SelectionIntent persisted = new SelectionIntent(Set.of("first", "second"));
+		SelectionIntent persisted = SelectionIntent.ofEnabled(Set.of("first", "second"));
 		store.put(manifest.modpackId(), persisted);
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
 				() -> SelectedModpackTarget.prepare(TestPacks.head(manifest), store, ClientPlatform.LINUX));
 
 		assertEquals(persisted, failure.resolution().intent());
-		assertEquals(Set.of("first", "second"), failure.resolution().selectedGroups());
+		assertTrue(failure.resolution().selectedGroups().isEmpty());
 		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().resolution("first").status());
 		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().resolution("second").status());
-	}
-
-	private static GroupManifest.Group group(Set<String> breaksWith) {
-		return new GroupManifest.Group("", "", "General", GroupSelectionMode.OPTIONAL, new TreeSet<>(breaksWith), new TreeSet<>(), Set.of(), new TreeMap<>());
 	}
 }

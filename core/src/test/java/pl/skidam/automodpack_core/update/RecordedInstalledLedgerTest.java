@@ -114,7 +114,7 @@ class RecordedInstalledLedgerTest {
 		targetFields.modpackId = "def5678";
 		PackDocument targetDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
 		TestPacks.stageGeneration(storage, targetDocument);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetDocument, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetDocument, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		ModpackJsons.ModpackContentFields installed = ClientProjectionView.observe(storage).target();
 		UpdatePlan replacement = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target.flatTarget(),
 				Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, preservedPath), new UpdatePlan.FileState(stagedHash, stagedBytes.length, true)),

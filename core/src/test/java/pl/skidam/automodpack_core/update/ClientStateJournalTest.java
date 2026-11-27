@@ -99,7 +99,7 @@ class ClientStateJournalTest {
 		assertThrows(Exception.class, () -> StateHistory.restoreFile(storage, 1, Root.PROJECTION, "mods/player.jar"));
 		PackDocument document = TestPacks.document(TestPacks.manifest("pack", "config/pack.txt", "pack-file"));
 		TestPacks.stageGeneration(storage, document);
-		storage.writeActiveState(document, new SelectionIntent(Set.of("main")));
+		storage.writeActiveState(document, SelectionIntent.ofEnabled(Set.of("main")));
 		storage.writeSelectedModpackId(document.manifest().modpackId());
 		Path restored = StateHistory.restoreFile(storage, 1, Root.GAME_DIR, "oldmods/player.jar");
 		assertEquals("player-mod", Files.readString(restored, StandardCharsets.UTF_8));
@@ -163,7 +163,7 @@ class ClientStateJournalTest {
 		ClientObjectStore.storeObject(storage, hash, bytes);
 		PackDocument document = TestPacks.document(TestPacks.manifest("pack", "config/pack.txt", "restored pack file"));
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		SelectionIntent selection = SelectionIntent.ofEnabled(Set.of("main"));
 		storage.writeActiveState(document, selection);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), selection);
 		InstanceTree installed = InstanceTree.of(new LiveIdentity(document.manifest().modpackId(), document.contentToken(), false, selection, List.of()),
@@ -214,11 +214,11 @@ class ClientStateJournalTest {
 		String hash = HashUtils.sha1(bytes);
 		ClientObjectStore.storeObject(storage, hash, bytes);
 		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
-		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of(), Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		SelectionIntent selection = SelectionIntent.ofEnabled(Set.of("main"));
 		InstanceTree target = InstanceTree.of(new LiveIdentity("abc1234", document.contentToken(), false, selection, List.of()),
 				List.of(new TrackedFile(Root.PROJECTION, "", "mods/test.jar", hash, bytes.length)));
 		target.write(storage);
@@ -241,11 +241,11 @@ class ClientStateJournalTest {
 		String currentHash = HashUtils.sha1(currentBytes);
 		ClientObjectStore.storeObject(storage, currentHash, currentBytes);
 		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(currentBytes.length, false, currentHash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
-		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of(), Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		SelectionIntent selection = SelectionIntent.ofEnabled(Set.of("main"));
 		storage.writeActiveState(document, selection);
 		storage.writeSelectedModpackId("abc1234");
 		new ClientSelectionStore(storage.selectionFile()).put("abc1234", selection);
@@ -281,11 +281,11 @@ class ClientStateJournalTest {
 		ClientObjectStore.storeObject(storage, hash, bytes);
 		Path object = storage.objectFile(hash);
 		GroupManifest.GroupFile mod = new GroupManifest.GroupFile(bytes.length, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", mod));
-		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of("main", group));
+		GroupManifest.Group group = new GroupManifest.Group("", "test pack", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of("mods/test.jar", mod));
+		GroupManifest manifest = new GroupManifest("abc1234", "test pack", "", "", "", "", Map.of(), Map.of("main", group));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		SelectionIntent selection = SelectionIntent.ofEnabled(Set.of("main"));
 		storage.writeActiveState(document, selection);
 		storage.writeSelectedModpackId("abc1234");
 		Path projected = storage.activePath("mods/test.jar");
@@ -319,12 +319,12 @@ class ClientStateJournalTest {
 		PackDocument aDocument = TestPacks.document(aManifest);
 		TestPacks.stageGeneration(storage, aDocument);
 		GroupManifest.GroupFile bMod = new GroupManifest.GroupFile(bBytes.length, false, bHash, null);
-		GroupManifest.Group bGroup = new GroupManifest.Group("", "pack b", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/b.jar", bMod));
-		GroupManifest bManifest = new GroupManifest("def5678", "pack b", "", "", "", "", Map.of("main", bGroup));
+		GroupManifest.Group bGroup = new GroupManifest.Group("", "pack b", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of("mods/b.jar", bMod));
+		GroupManifest bManifest = new GroupManifest("def5678", "pack b", "", "", "", "", Map.of(), Map.of("main", bGroup));
 		PackDocument bDocument = TestPacks.document(bManifest);
 		TestPacks.stageGeneration(storage, bDocument);
-		SelectionIntent aSelection = new SelectionIntent(Set.of("main"));
-		SelectionIntent bSelection = new SelectionIntent(Set.of("main"));
+		SelectionIntent aSelection = SelectionIntent.ofEnabled(Set.of("main"));
+		SelectionIntent bSelection = SelectionIntent.ofEnabled(Set.of("main"));
 		new ClientSelectionStore(storage.selectionFile()).put("abc1234", aSelection);
 		new ClientSelectionStore(storage.selectionFile()).put("def5678", bSelection);
 		storage.writeActiveState(bDocument, bSelection);
@@ -363,12 +363,12 @@ class ClientStateJournalTest {
 		GroupManifest v1Manifest = TestPacks.manifest("generation one", "mods/test.jar", "one");
 		PackDocument v1 = TestPacks.document(v1Manifest);
 		GroupManifest.GroupFile v2Mod = new GroupManifest.GroupFile(two.length, false, twoHash, null);
-		GroupManifest.Group v2Group = new GroupManifest.Group("", "generation two", "General", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Set.of(), Map.of("mods/test.jar", v2Mod));
-		GroupManifest v2Manifest = new GroupManifest("abc1234", "generation two", "", "", "", "", Map.of("main", v2Group));
+		GroupManifest.Group v2Group = new GroupManifest.Group("", "generation two", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of("mods/test.jar", v2Mod));
+		GroupManifest v2Manifest = new GroupManifest("abc1234", "generation two", "", "", "", "", Map.of(), Map.of("main", v2Group));
 		PackDocument v2 = TestPacks.document(v2Manifest);
 		TestPacks.stageGeneration(storage, v1);
 		TestPacks.stageGeneration(storage, v2);
-		SelectionIntent selection = new SelectionIntent(Set.of("main"));
+		SelectionIntent selection = SelectionIntent.ofEnabled(Set.of("main"));
 		new ClientSelectionStore(storage.selectionFile()).put("abc1234", selection);
 		storage.writeActiveState(v2, selection);
 		storage.writeSelectedModpackId("abc1234");

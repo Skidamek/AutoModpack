@@ -5,9 +5,8 @@ import java.util.*;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 
 /**
- * The flat group model of one generation. {@link Group#category()} holds the category NAME (never empty); category order is
- * the first-occurrence order of {@code category} while iterating {@code groups}, since every category's groups are contiguous
- * in it. Insertion order carries the declared category and group order, so every map here preserves it.
+ * The flat group model of one generation: optional categories plus flat groups referencing them by id.
+ * Insertion order carries the declared category and group order.
  */
 public record GroupManifest(
 		String modpackId,
@@ -16,8 +15,10 @@ public record GroupManifest(
 		String loader,
 		String loaderVersion,
 		String mcVersion,
+		Map<String, Category> categories,
 		Map<String, Group> groups) {
 	public GroupManifest {
+		categories = immutableMap(categories);
 		groups = immutableMap(groups);
 	}
 
@@ -26,6 +27,30 @@ public record GroupManifest(
 		Set<ClientPlatform> platforms = new TreeSet<>();
 		for (Group group : groups.values()) platforms.addAll(group.compatiblePlatforms());
 		return platforms;
+	}
+
+	public boolean hasDeclaredPlatforms() {
+		return groups.values().stream().anyMatch(group -> !group.compatiblePlatforms().isEmpty());
+	}
+
+	public boolean hasChoosableGroups() {
+		return groups.values().stream().anyMatch(group -> group.selection().choosable());
+	}
+
+	public Category categoryOf(String groupId) {
+		Group group = groups.get(groupId);
+		if (group == null || group.category().isEmpty()) return null;
+		return categories.get(group.category());
+	}
+
+	public String displayName(String groupId) {
+		Group group = groups.get(groupId);
+		return group == null || group.name().isBlank() ? groupId : group.name();
+	}
+
+	public String categoryDisplayName(String categoryId) {
+		Category category = categories.get(categoryId);
+		return category == null || category.name().isBlank() ? categoryId : category.name();
 	}
 
 	public ModpackJsons.CompleteModpackContentFields toFields() {
@@ -37,27 +62,34 @@ public record GroupManifest(
 		fields.loaderVersion = loaderVersion;
 		fields.mcVersion = mcVersion;
 
-		Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> serializedCategories = new LinkedHashMap<>();
+		Map<String, ModpackJsons.CompleteModpackContentFields.CategoryFields> serializedCategories = new LinkedHashMap<>();
+		for (var entry : categories.entrySet()) {
+			Category category = entry.getValue();
+			ModpackJsons.CompleteModpackContentFields.CategoryFields serialized = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+			serialized.name = category.name();
+			serialized.description = category.description();
+			serialized.pick = category.pick();
+			serializedCategories.put(entry.getKey(), serialized);
+		}
+		fields.categories = serializedCategories;
+
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> serializedGroups = new LinkedHashMap<>();
 		for (var entry : groups.entrySet()) {
 			Group group = entry.getValue();
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields serialized = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			serialized.displayName = group.displayName();
+			serialized.name = group.name();
 			serialized.description = group.description();
-			serialized.required = group.selection().alwaysInstalled();
-			serialized.defaultSelected = group.selection().arrivesSelected();
-			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
+			serialized.category = group.category();
+			serialized.selection = group.selection();
 			serialized.requires = new LinkedHashSet<>(group.requires());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
 					.collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
-			for (var fileEntry : group.files().entrySet()) {
-				GroupFile file = fileEntry.getValue();
-				files.put(fileEntry.getKey(), publishedFile(fileEntry.getKey(), file));
-			}
+			for (var fileEntry : group.files().entrySet()) files.put(fileEntry.getKey(), publishedFile(fileEntry.getKey(), fileEntry.getValue()));
 			serialized.files = files;
-			serializedCategories.computeIfAbsent(group.category(), ignored -> new LinkedHashMap<>()).put(entry.getKey(), serialized);
+			serializedGroups.put(entry.getKey(), serialized);
 		}
-		fields.categories = serializedCategories;
+		fields.groups = serializedGroups;
 
 		return fields;
 	}
@@ -85,21 +117,31 @@ public record GroupManifest(
 		return Collections.unmodifiableSet(platforms);
 	}
 
+	public record Category(String name, String description, CategoryPickMode pick) {
+		public Category {
+			name = name == null ? "" : name;
+			description = description == null ? "" : description;
+			pick = Objects.requireNonNull(pick, "pick");
+		}
+
+		public boolean hasSameMetadata(Category other) {
+			return other != null && Objects.equals(name, other.name) && Objects.equals(description, other.description) && pick == other.pick;
+		}
+	}
+
 	public record Group(
-			String displayName,
+			String name,
 			String description,
 			String category,
 			GroupSelectionMode selection,
-			Set<String> breaksWith,
 			Set<String> requires,
 			Set<ClientPlatform> compatiblePlatforms,
 			Map<String, GroupFile> files) {
 		public Group {
-			displayName = displayName == null ? "" : displayName;
+			name = name == null ? "" : name;
 			description = description == null ? "" : description;
 			category = category == null ? "" : category;
 			selection = Objects.requireNonNull(selection, "selection");
-			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
@@ -119,11 +161,12 @@ public record GroupManifest(
 		}
 
 		public boolean hasSameMetadata(Group other) {
-			return other != null && Objects.equals(displayName, other.displayName) && Objects.equals(description, other.description)
-					&& Objects.equals(category, other.category) && selection == other.selection && Objects.equals(breaksWith, other.breaksWith)
+			return other != null && Objects.equals(name, other.name) && Objects.equals(description, other.description)
+					&& Objects.equals(category, other.category) && selection == other.selection
 					&& Objects.equals(requires, other.requires) && Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}
 	}
+
 	public record GroupFile(long size, boolean editable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {
 			return other != null && size == other.size && editable == other.editable && sha1.equalsIgnoreCase(other.sha1);

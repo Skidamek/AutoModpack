@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -44,7 +45,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * removals happened in between.
  */
 class InstalledPackOwnershipTest {
-	private static final SelectionIntent MAIN = new SelectionIntent(Set.of("main"));
+	private static final SelectionIntent MAIN = SelectionIntent.ofEnabled(Set.of("main"));
 	private static final String SHARED = "config/shared.toml";
 	private static final String EDITABLE = "config/editable.toml";
 	private static final String OTHER = "config/other.toml";
@@ -263,10 +264,9 @@ class InstalledPackOwnershipTest {
 		fields.loaderVersion = "";
 		fields.mcVersion = "";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = files;
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		var manifest = GroupManifestValidator.validate(fields);
 		PackDocument document = parent == null ? TestPacks.document(manifest) : TestPacks.document(manifest, parent.document().ownershipLedger(), TestPacks.CREATED.plusSeconds(version));
 		TestPacks.stageGeneration(storage, document);

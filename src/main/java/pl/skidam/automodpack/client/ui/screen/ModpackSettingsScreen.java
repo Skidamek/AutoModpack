@@ -82,7 +82,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 			actions.add(pack.detached()
 					? new Action("automodpack.management.resumeSyncing", this::resumeSyncing, VersionedText.text("automodpack.management.resumeSyncingTooltip"))
 					: new Action("automodpack.management.stopSyncing", this::stopSyncing, VersionedText.text("automodpack.management.stopSyncingTooltip")));
-		actions.add(new Action("automodpack.management.groups", this::openGroups));
+		if (pack.record().manifest().hasChoosableGroups()) actions.add(new Action("automodpack.management.groups", this::openGroups));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
 		boolean shared = controller.relayed(pack);
@@ -285,8 +285,11 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		GroupManifest manifest = pack.record().manifest();
 		versionLine = VersionedText.str("automodpack.packDetails.identity", manifest.loader(), manifest.loaderVersion(), manifest.mcVersion());
 		idLine = VersionedText.str("automodpack.packDetails.id", pack.modpackId());
-		contentsLine = VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
-				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
+		contentsLine = manifest.hasChoosableGroups()
+				? VersionedText.str("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
+						UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()))
+				: VersionedText.str("automodpack.packDetails.contentsNoGroups",
+						UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes()));
 		connectionLine = pack.connectionDetail() == null ? null : VersionedText.str("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail());
 		String contentToken = pack.record().contentToken();
 		Instant createdAt = pack.record().createdAt();

@@ -39,25 +39,30 @@ public final class ModpackCandidateScanner {
 
 	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
-		if (request.modpack() == null || request.modpack().isEmpty()) throw new CandidateBuildException("No groups are configured");
-		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new LinkedHashMap<>();
-		Map<String, String> categoryByGroup = new LinkedHashMap<>();
-		Map<String, GroupRules> rulesByGroup = new LinkedHashMap<>();
-		for (var categoryEntry : request.modpack().entrySet()) {
-			var category = categoryEntry.getValue();
-			if (category == null) throw new CandidateBuildException("Category '" + categoryEntry.getKey() + "' has no declaration");
-			for (var entry : category.entrySet()) {
-				try {
-					GroupManifestValidator.requireIdentifier(entry.getKey());
-				} catch (IllegalArgumentException e) {
-					throw new CandidateBuildException(e.getMessage(), e);
-				}
-				if (declarations.containsKey(entry.getKey())) throw new CandidateBuildException("Group '" + entry.getKey() + "' is declared more than once");
-				if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
-				declarations.put(entry.getKey(), entry.getValue());
-				categoryByGroup.put(entry.getKey(), categoryEntry.getKey());
-				rulesByGroup.put(entry.getKey(), compileRules(entry.getKey(), entry.getValue()));
+		ServerConfigJsons.ModpackFields modpack = request.modpack();
+		if (modpack == null || modpack.groups == null || modpack.groups.isEmpty()) throw new CandidateBuildException("No groups are configured");
+		Map<String, ServerConfigJsons.CategoryDeclaration> categories = modpack.categories == null ? Map.of() : modpack.categories;
+		for (var catEntry : categories.entrySet()) {
+			try {
+				GroupManifestValidator.requireIdentifier(catEntry.getKey());
+			} catch (IllegalArgumentException e) {
+				throw new CandidateBuildException("Invalid category ID: " + catEntry.getKey(), e);
 			}
+			if (catEntry.getValue() == null) throw new CandidateBuildException("Category '" + catEntry.getKey() + "' has no declaration");
+		}
+		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new LinkedHashMap<>();
+		Map<String, GroupRules> rulesByGroup = new LinkedHashMap<>();
+		ServerSideModExclusion packExclusion = ServerSideModExclusion.orDefault(modpack.autoExcludeServerSideMods);
+		for (var entry : modpack.groups.entrySet()) {
+			try {
+				GroupManifestValidator.requireIdentifier(entry.getKey());
+			} catch (IllegalArgumentException e) {
+				throw new CandidateBuildException("Invalid group ID: " + entry.getKey(), e);
+			}
+			if (declarations.containsKey(entry.getKey())) throw new CandidateBuildException("Group '" + entry.getKey() + "' is declared more than once");
+			if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
+			declarations.put(entry.getKey(), entry.getValue());
+			rulesByGroup.put(entry.getKey(), compileRules(entry.getKey(), modpack, entry.getValue()));
 		}
 
 		List<ExcludedCandidate> ruleExclusions = new ArrayList<>();
@@ -116,7 +121,7 @@ public final class ModpackCandidateScanner {
 		try {
 			for (SourcePair pair : sources.values()) futures.add(CompletableFuture.supplyAsync(() -> {
 				try {
-					return process(pair, rulesByGroup.get(pair.groupId()), exclusionMode(declarations.get(pair.groupId())), request);
+					return process(pair, rulesByGroup.get(pair.groupId()), exclusionMode(declarations.get(pair.groupId()), packExclusion), request);
 				} catch (CandidateBuildException e) {
 					throw new CompletionException(e);
 				}
@@ -164,22 +169,31 @@ public final class ModpackCandidateScanner {
 			fields.loader = request.loader();
 			fields.loaderVersion = request.loaderVersion();
 			fields.mcVersion = request.mcVersion();
-			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> categories = new LinkedHashMap<>();
+			Map<String, ModpackJsons.CompleteModpackContentFields.CategoryFields> categoryFields = new LinkedHashMap<>();
+			for (var catEntry : categories.entrySet()) {
+				ServerConfigJsons.CategoryDeclaration cat = catEntry.getValue();
+				ModpackJsons.CompleteModpackContentFields.CategoryFields cf = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+				cf.name = cat.name;
+				cf.description = cat.description;
+				cf.pick = cat.pick;
+				categoryFields.put(catEntry.getKey(), cf);
+			}
+			fields.categories = categoryFields;
+			Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groupFields = new LinkedHashMap<>();
 			for (var entry : declarations.entrySet()) {
 				ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-				group.displayName = declaration.displayName;
+				group.name = declaration.name;
 				group.description = declaration.description;
-				group.required = declaration.selection.alwaysInstalled();
-				group.defaultSelected = declaration.selection.arrivesSelected();
-				group.breaksWith = sortedSet(declaration.breaksWith);
+				group.category = declaration.category;
+				group.selection = declaration.selection;
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
 				group.files = filesByGroup.get(entry.getKey());
-				categories.computeIfAbsent(categoryByGroup.get(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), group);
+				groupFields.put(entry.getKey(), group);
 			}
-			fields.categories = categories;
-			auditEditableRules(declarations, filesByGroup);
+			fields.groups = groupFields;
+			auditEditableRules(modpack, declarations, filesByGroup);
 			GroupManifest manifest = GroupManifestValidator.validateForPublish(fields);
 			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
@@ -275,18 +289,46 @@ public final class ModpackCandidateScanner {
 		}
 	}
 
-	private static ServerSideModExclusion exclusionMode(ServerConfigJsons.GroupDeclaration declaration) {
-		return ServerSideModExclusion.orDefault(declaration == null ? null : declaration.autoExcludeServerSideMods);
+	private static ServerSideModExclusion exclusionMode(ServerConfigJsons.GroupDeclaration declaration, ServerSideModExclusion packDefault) {
+		return declaration != null && declaration.autoExcludeServerSideMods != null ? declaration.autoExcludeServerSideMods : packDefault;
 	}
 
-	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
-		return new GroupRules(compileRuleSet(declaration.fromServer, groupId, "from-server"), compileRuleSet(declaration.exclude, groupId, "exclude"),
-				compileRuleSet(declaration.editable, groupId, "editable"));
+	private static GroupRules compileRules(String groupId, ServerConfigJsons.ModpackFields modpack, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
+		return new GroupRules(compileRuleSet(declaration.fromServer, groupId, "from-server"),
+				compileRuleSet(mergeRules(modpack.exclude, declaration.exclude), groupId, "exclude"),
+				compileRuleSet(mergeRules(modpack.editable, declaration.editable), groupId, "editable"));
+	}
+
+	private static List<String> mergeRules(Set<String> packRules, Set<String> groupRules) {
+		List<String> merged = new ArrayList<>();
+		if (packRules != null) merged.addAll(packRules);
+		if (groupRules != null) merged.addAll(groupRules);
+		return merged;
 	}
 
 	/** Warns about editable rules that match no pack files, and about rules matching active mods, which load from the standard mods folder instead of the projection. */
-	private static void auditEditableRules(Map<String, ServerConfigJsons.GroupDeclaration> declarations,
+	private static void auditEditableRules(ServerConfigJsons.ModpackFields modpack, Map<String, ServerConfigJsons.GroupDeclaration> declarations,
 			Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup) {
+		if (modpack.editable != null && !modpack.editable.isEmpty()) {
+			Set<String> allPackPaths = new LinkedHashSet<>();
+			for (var groupFiles : filesByGroup.values()) allPackPaths.addAll(groupFiles.keySet());
+			for (String rule : modpack.editable) {
+				if (rule == null || rule.startsWith("!")) continue;
+				PathRuleSet matcher = new PathRuleSet(List.of(rule));
+				boolean matched = false;
+				long matchedMods = 0;
+				for (String path : allPackPaths) if (matcher.matches(path)) {
+					matched = true;
+					if (ModpackPathPolicy.isActiveMod(path)) matchedMods++;
+				}
+				if (!matched) LOGGER.warn("pack-wide editable rule '{}' matched no pack files", rule);
+				else
+					if (matchedMods > 0)
+						LOGGER.warn(
+								"pack-wide editable rule '{}' matches {} active mod(s), which will load from the standard mods folder instead of the modpack projection. Not recommended: such mods need a restart to update and fall outside in-place mod management. Use this only for mods that break when loaded in place.",
+								rule, matchedMods);
+			}
+		}
 		for (var entry : declarations.entrySet()) {
 			Set<String> rules = entry.getValue().editable;
 			if (rules == null || rules.isEmpty()) continue;
@@ -310,7 +352,7 @@ public final class ModpackCandidateScanner {
 		}
 	}
 
-	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
+	private static PathRuleSet compileRuleSet(Collection<String> rules, String groupId, String name) throws CandidateBuildException {
 		try {
 			return new PathRuleSet(rules);
 		} catch (IllegalArgumentException e) {
@@ -457,7 +499,7 @@ public final class ModpackCandidateScanner {
 			String mcVersion,
 			Path serverRoot,
 			Path groupRoot,
-			Map<String, Map<String, ServerConfigJsons.GroupDeclaration>> modpack,
+			ServerConfigJsons.ModpackFields modpack,
 			boolean applyPlatformExclusions,
 			Path stagingDirectory,
 			Executor executor,

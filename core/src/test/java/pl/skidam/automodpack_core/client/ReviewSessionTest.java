@@ -165,7 +165,7 @@ class ReviewSessionTest {
 
 		harness.actions().setFirstInstallLocalModCleanup().accept(false);
 		harness.actions().setLaunchWritesUnverified().accept(true);
-		harness.actions().reselectAndPreview().accept(new SelectionIntent(Set.of("main")));
+		harness.actions().reselectAndPreview().accept(SelectionIntent.ofEnabled(Set.of("main")));
 
 		assertEquals(RecordingScreens.Kind.WELCOME, screens.last);
 		assertTrue(screens.lastWelcome.keepExistingMods());

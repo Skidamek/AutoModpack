@@ -5,357 +5,579 @@ import java.util.*;
 public final class GroupSelectionResolver {
 	private GroupSelectionResolver() {}
 
-	public static SelectionIntent defaultIntent(GroupManifest manifest) {
-		Objects.requireNonNull(manifest);
-		Set<String> requestedGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) {
-			GroupManifest.Group group = entry.getValue();
-			if (group.selection() == GroupSelectionMode.RECOMMENDED) requestedGroups.add(entry.getKey());
+	public record SelectionUpdate(SelectionIntent intent, ResolvedSelection resolution, NavigableSet<String> turnedOff, String error) {
+		public SelectionUpdate {
+			intent = Objects.requireNonNull(intent, "intent");
+			turnedOff = turnedOff == null ? Collections.emptyNavigableSet() : Collections.unmodifiableNavigableSet(new TreeSet<>(turnedOff));
+			error = error == null ? "" : error;
 		}
-		return new SelectionIntent(requestedGroups);
+
+		public boolean ok() {
+			return error.isEmpty() && resolution != null;
+		}
 	}
 
 	public static ResolvedSelection resolveDefault(GroupManifest manifest, ClientPlatform platform) {
-		return resolveInternal(manifest, defaultIntent(manifest), platform, true);
+		return resolve(manifest, SelectionIntent.DEFAULTS, platform);
 	}
 
 	public static ResolvedSelection resolve(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform) {
-		return resolveInternal(manifest, intent, platform, false);
-	}
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(intent, "selection intent");
 
-	private static ResolvedSelection resolveInternal(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, boolean defaultSelection) {
-		Objects.requireNonNull(manifest);
-		Objects.requireNonNull(intent);
-		ResolutionState state = new ResolutionState(manifest, intent, platform);
-		state.initializeMandatoryGroups();
-		state.collectStaleChoices();
+		Map<String, GroupManifest.Group> groups = manifest.groups();
+		Map<String, GroupManifest.Category> categories = manifest.categories();
 
-		for (String groupId : state.requiredGroups) state.resolveRoot(groupId, Source.REQUIRED, true);
-		for (String category : intent.requestedCategories()) for (var entry : manifest.groups().entrySet()) {
+		NavigableSet<String> staleGroups = new TreeSet<>();
+		for (String id : intent.enabled()) {
+			if (!groups.containsKey(id)) staleGroups.add(id);
+		}
+
+		Map<String, Set<GroupResolution.Reason>> reasons = new LinkedHashMap<>();
+		Map<String, Set<String>> related = new LinkedHashMap<>();
+		for (String id : groups.keySet()) {
+			reasons.put(id, new LinkedHashSet<>());
+			related.put(id, new LinkedHashSet<>());
+		}
+
+		NavigableSet<String> selected = new TreeSet<>();
+		NavigableSet<String> coreRoots = new TreeSet<>();
+		NavigableSet<String> unavailable = new TreeSet<>();
+		NavigableSet<String> requestedUnavailable = new TreeSet<>();
+		Map<String, Set<String>> blockedBy = new LinkedHashMap<>();
+		List<String> errors = new ArrayList<>();
+
+		for (var entry : groups.entrySet()) {
+			String id = entry.getKey();
+			if (!entry.getValue().supports(platform)) {
+				unavailable.add(id);
+				reasons.get(id).add(GroupResolution.Reason.PLATFORM_INCOMPATIBLE);
+			} else {
+				Set<String> badDeps = incompatibleTransitiveDeps(manifest, id, platform);
+				if (!badDeps.isEmpty()) blockedBy.put(id, badDeps);
+			}
+		}
+
+		// Pass 1: REQUIRED groups always install.
+		for (var entry : groups.entrySet()) {
+			String id = entry.getKey();
 			GroupManifest.Group group = entry.getValue();
-			if (category.equals(group.category()) && !group.alwaysInstalled() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
-		}
-		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) {
-			GroupManifest.Group group = manifest.groups().get(groupId);
-			state.resolveRoot(groupId, defaultSelection && group.arrivesSelected() ? Source.DEFAULT_SELECTED : Source.EXPLICIT, false);
-		}
-
-		state.checkConflicts();
-		ResolvedSelection resolved = state.result();
-		if (!state.errors.isEmpty()) throw new SelectionResolutionException(state.errors.stream().distinct().sorted().toList(), resolved);
-		return resolved;
-	}
-
-	public static SelectionIntent prefer(GroupManifest manifest, SelectionIntent current, String clicked, ClientPlatform platform) {
-		Objects.requireNonNull(manifest);
-		Objects.requireNonNull(current);
-		Objects.requireNonNull(clicked);
-		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
-		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
-		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		GroupManifest.Group clickedGroup = manifest.groups().get(clicked);
-		if (clickedGroup != null && requestedCategories.remove(clickedGroup.category())) {
-			for (var entry : manifest.groups().entrySet()) {
-				GroupManifest.Group group = entry.getValue();
-				if (clickedGroup.category().equals(group.category()) && !group.alwaysInstalled() && group.supports(platform)) requestedGroups.add(entry.getKey());
-			}
-		}
-		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
-		excludedGroups.remove(clicked);
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
-	}
-
-	/** Persists a category request and clears the per-group choices inside it, so the category speaks with one voice. */
-	public static SelectionIntent preferCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
-		Objects.requireNonNull(manifest);
-		Objects.requireNonNull(current);
-		Objects.requireNonNull(category);
-		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
-		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
-		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		requestedCategories.add(category);
-		clearCategoryChoices(categoryGroups(manifest, category, platform), requestedGroups, excludedGroups);
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
-	}
-
-	/** Excludes every optional group in the category and drops the category request, so one click turns the whole category off - even groups that are on by default. */
-	public static SelectionIntent excludeCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
-		Objects.requireNonNull(manifest);
-		Objects.requireNonNull(current);
-		Objects.requireNonNull(category);
-		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
-		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
-		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		requestedCategories.remove(category);
-		Set<String> categoryGroups = categoryGroups(manifest, category, platform);
-		clearCategoryChoices(categoryGroups, requestedGroups, excludedGroups);
-		excludedGroups.addAll(categoryGroups);
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
-	}
-
-	private static Set<String> categoryGroups(GroupManifest manifest, String category, ClientPlatform platform) {
-		Set<String> categoryGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().alwaysInstalled() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
-		return categoryGroups;
-	}
-
-	private static void clearCategoryChoices(Set<String> categoryGroups, Set<String> requestedGroups, Set<String> excludedGroups) {
-		for (String groupId : categoryGroups) {
-			requestedGroups.remove(groupId);
-			excludedGroups.remove(groupId);
-		}
-	}
-
-	public static boolean conflicts(GroupManifest manifest, String first, String second) {
-		if (Objects.equals(first, second)) return false;
-		GroupManifest.Group firstGroup = manifest.groups().get(first);
-		GroupManifest.Group secondGroup = manifest.groups().get(second);
-		return (firstGroup != null && firstGroup.breaksWith().contains(second)) || (secondGroup != null && secondGroup.breaksWith().contains(first));
-	}
-
-	/** Builds the deterministic intent that keeps newly preferred groups and removes the choices which conflict with them. */
-	public static Optional<ConflictReplacement> replaceConflicts(GroupManifest manifest, SelectionIntent candidate, Set<String> preferredGroups,
-			ClientPlatform platform, ResolvedSelection partial) {
-		Objects.requireNonNull(manifest);
-		Objects.requireNonNull(candidate);
-		Objects.requireNonNull(preferredGroups);
-		if (preferredGroups.isEmpty() || partial == null) return Optional.empty();
-		Set<String> conflicts = new TreeSet<>();
-		for (String preferred : preferredGroups) {
-			GroupResolution resolution = partial.resolution(preferred);
-			if (resolution != null && resolution.status() == GroupResolution.Status.CONFLICT) conflicts.addAll(resolution.relatedGroups());
-		}
-		conflicts.removeAll(preferredGroups);
-		if (conflicts.isEmpty()) return Optional.empty();
-
-		Set<String> requestedGroups = new TreeSet<>(candidate.requestedGroups());
-		requestedGroups.removeIf(groupId -> !preferredGroups.contains(groupId) && selectsAny(manifest, new SelectionIntent(Set.of(groupId)), platform, conflicts));
-		Set<String> requestedCategories = new TreeSet<>(candidate.requestedCategories());
-		Set<String> expandedGroups = new TreeSet<>();
-		for (String category : new TreeSet<>(requestedCategories)) {
-			if (!selectsAny(manifest, new SelectionIntent(Set.of(), Set.of(category), Set.of()), platform, conflicts)) continue;
-			requestedCategories.remove(category);
-			for (var entry : manifest.groups().entrySet()) {
-				GroupManifest.Group group = entry.getValue();
-				if (!category.equals(group.category()) || group.alwaysInstalled() || !group.supports(platform)) continue;
-				if (!selectsAny(manifest, new SelectionIntent(Set.of(entry.getKey())), platform, conflicts)) expandedGroups.add(entry.getKey());
-			}
-		}
-		requestedGroups.addAll(expandedGroups);
-		SelectionIntent replacement = new SelectionIntent(requestedGroups, requestedCategories, candidate.excludedGroups());
-		try {
-			resolve(manifest, replacement, platform);
-			return Optional.of(new ConflictReplacement(replacement, conflicts));
-		} catch (SelectionResolutionException ignored) {
-			return Optional.empty();
-		}
-	}
-
-	private static boolean selectsAny(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, Set<String> groupIds) {
-		try {
-			return !Collections.disjoint(resolve(manifest, intent, platform).selectedGroups(), groupIds);
-		} catch (SelectionResolutionException exception) {
-			return exception.resolution() != null && !Collections.disjoint(exception.resolution().selectedGroups(), groupIds);
-		}
-	}
-
-	public record ConflictReplacement(SelectionIntent intent, Set<String> conflictingGroups) {
-		public ConflictReplacement {
-			intent = Objects.requireNonNull(intent);
-			conflictingGroups = Set.copyOf(new TreeSet<>(conflictingGroups));
-		}
-	}
-
-	/** Names the resolution context in messages: the platform id, or the plain fact that nothing is known about the platform. */
-	private static String platformName(ClientPlatform platform) {
-		return platform == null ? "no platform detected" : "platform " + platform.id();
-	}
-
-	private enum Source {
-		REQUIRED,
-		DEFAULT_SELECTED,
-		EXPLICIT
-	}
-
-	private static final class ResolutionState {
-		private final GroupManifest manifest;
-		private final SelectionIntent intent;
-		private final ClientPlatform platform;
-		private final NavigableSet<String> selected = new TreeSet<>();
-		private final NavigableSet<String> staleGroups = new TreeSet<>();
-		private final NavigableSet<String> requiredGroups = new TreeSet<>();
-		private final NavigableSet<String> forcedGroups = new TreeSet<>();
-		private final NavigableSet<String> dependencyGroups = new TreeSet<>();
-		private final NavigableSet<String> unavailableGroups = new TreeSet<>();
-		private final NavigableSet<String> requestedUnavailableGroups = new TreeSet<>();
-		private final NavigableSet<String> blockedGroups = new TreeSet<>();
-		private final NavigableSet<String> excludedGroups = new TreeSet<>();
-		private final NavigableSet<String> conflictGroups = new TreeSet<>();
-		private final Map<String, EnumSet<GroupResolution.Reason>> reasons = new TreeMap<>();
-		private final Map<String, NavigableSet<String>> relatedGroups = new TreeMap<>();
-		private final List<String> errors = new ArrayList<>();
-
-		private ResolutionState(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform) {
-			this.manifest = manifest;
-			this.intent = intent;
-			this.platform = platform;
-		}
-
-		private void initializeMandatoryGroups() {
-			for (var entry : manifest.groups().entrySet()) if (entry.getValue().alwaysInstalled()) {
-				requiredGroups.add(entry.getKey());
-				forcedGroups.add(entry.getKey());
-				addReason(entry.getKey(), GroupResolution.Reason.REQUIRED);
-				addReason(entry.getKey(), GroupResolution.Reason.FORCED);
-			}
-		}
-
-		private void collectStaleChoices() {
-			for (String groupId : intent.requestedGroups()) if (!manifest.groups().containsKey(groupId)) staleGroups.add(groupId);
-		}
-
-		private void resolveRoot(String groupId, Source source, boolean forced) {
-			Closure closure = resolveClosure(groupId, source, forced, false, new LinkedHashSet<>());
-			if (closure.success()) selected.addAll(closure.groups());
-			else if (source == Source.EXPLICIT) {
-				if (unavailableGroups.stream().anyMatch(closure.groups()::contains)) {
-					requestedUnavailableGroups.add(groupId);
-					addReason(groupId, GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE);
-					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platformName(platform));
-				} else if (!closure.excluded()) {
-					errors.add("Group '" + groupId + "' was explicitly requested but could not be selected");
-				}
-			}
-		}
-
-		private Closure resolveClosure(String groupId, Source source, boolean forced, boolean dependency, Set<String> active) {
-			GroupManifest.Group group = manifest.groups().get(groupId);
-			if (group == null) {
-				if (forced) errors.add("Group '" + groupId + "' is missing");
-				return Closure.failure(Set.of());
-			}
-			markSource(groupId, source, forced, dependency, group);
-			if (intent.excludedGroups().contains(groupId)) {
-				excludedGroups.add(groupId);
-				addReason(groupId, GroupResolution.Reason.EXPLICIT_EXCLUSION);
-				if (forced) errors.add("Group '" + groupId + "' is required and cannot be excluded");
-				return Closure.excluded(Set.of(groupId));
-			}
+			if (group.selection() != GroupSelectionMode.REQUIRED) continue;
+			coreRoots.add(id);
 			if (!group.supports(platform)) {
-				unavailableGroups.add(groupId);
-				addReason(groupId, GroupResolution.Reason.PLATFORM_INCOMPATIBLE);
-				if (forced) errors.add("Group '" + groupId + "' is unavailable on " + platformName(platform));
-				return Closure.failure(Set.of(groupId));
-			}
-			if (selected.contains(groupId)) return Closure.success(Set.of(groupId));
-			if (!active.add(groupId)) {
-				errors.add("Group dependency cycle includes '" + groupId + "'");
-				return Closure.failure(Set.of(groupId));
-			}
-			Set<String> closure = new TreeSet<>();
-			try {
-				for (String dependencyId : group.requires()) {
-					Closure dependencyClosure = resolveClosure(dependencyId, source, forced || group.alwaysInstalled(), true, active);
-					if (!dependencyClosure.success()) {
-						Set<String> blocked = new TreeSet<>(dependencyClosure.groups());
-						blocked.add(groupId);
-						blockedGroups.addAll(blocked);
-						addReason(groupId, GroupResolution.Reason.BLOCKED_BY_DEPENDENCY);
-						relate(groupId, dependencyId);
-						if (dependencyClosure.excluded()) errors.add("Group '" + groupId + "' cannot be selected because dependency '" + dependencyId + "' was excluded");
-						else if (forced) errors.add("Group '" + groupId + "' cannot be selected because dependency '" + dependencyId + "' is unavailable");
-						return Closure.failure(blocked, dependencyClosure.excluded());
-					}
-					relate(dependencyId, groupId);
-					closure.addAll(dependencyClosure.groups());
-				}
-				closure.add(groupId);
-				return Closure.success(closure);
-			} finally {
-				active.remove(groupId);
+				errors.add("Required group '" + id + "' is not available on " + platformLabel(platform));
+			} else if (blockedBy.containsKey(id)) {
+				errors.add("Required group '" + id + "' requires incompatible groups on " + platformLabel(platform) + ": " + String.join(", ", blockedBy.get(id)));
+			} else {
+				selected.add(id);
+				reasons.get(id).add(GroupResolution.Reason.REQUIRED);
 			}
 		}
 
-		private void markSource(String groupId, Source source, boolean forced, boolean dependency, GroupManifest.Group group) {
-			if (dependency) {
-				addReason(groupId, GroupResolution.Reason.DEPENDENCY);
-				dependencyGroups.add(groupId);
-			}
-			if (forced || group.alwaysInstalled()) {
-				forcedGroups.add(groupId);
-				addReason(groupId, GroupResolution.Reason.FORCED);
-			}
-			if (group.alwaysInstalled()) {
-				requiredGroups.add(groupId);
-				addReason(groupId, GroupResolution.Reason.REQUIRED);
-			}
-			if (source == Source.DEFAULT_SELECTED) addReason(groupId, GroupResolution.Reason.DEFAULT_SELECTED);
-			if (source == Source.EXPLICIT) addReason(groupId, GroupResolution.Reason.EXPLICIT_GROUP);
-		}
+		// Pass 2: Uncategorized and ANY-category choosable groups.
+		for (var entry : groups.entrySet()) {
+			String id = entry.getKey();
+			GroupManifest.Group group = entry.getValue();
+			if (!group.selection().choosable()) continue;
+			GroupManifest.Category cat = manifest.categoryOf(id);
+			if (cat != null && cat.pick().isExclusive()) continue;
 
-		private void checkConflicts() {
-			List<String> ordered = new ArrayList<>(selected);
-			for (int i = 0; i < ordered.size(); i++) for (int j = i + 1; j < ordered.size(); j++) {
-				String first = ordered.get(i);
-				String second = ordered.get(j);
-				if (!conflicts(manifest, first, second)) continue;
-				conflictGroups.add(first);
-				conflictGroups.add(second);
-				addReason(first, GroupResolution.Reason.CONFLICTING_GROUP);
-				addReason(second, GroupResolution.Reason.CONFLICTING_GROUP);
-				relate(first, second);
-				relate(second, first);
-				errors.add("Groups '" + first + "' and '" + second + "' cannot be selected together");
-			}
-		}
-
-		private ResolvedSelection result() {
-			NavigableMap<String, GroupResolution> explanations = new TreeMap<>();
-			for (var entry : manifest.groups().entrySet()) {
-				String groupId = entry.getKey();
-				GroupManifest.Group group = entry.getValue();
-				EnumSet<GroupResolution.Reason> groupReasons = reasons.getOrDefault(groupId, EnumSet.noneOf(GroupResolution.Reason.class));
+			if (intent.enabled().contains(id)) {
 				if (!group.supports(platform)) {
-					unavailableGroups.add(groupId);
-					groupReasons.add(GroupResolution.Reason.PLATFORM_INCOMPATIBLE);
+					requestedUnavailable.add(id);
+					reasons.get(id).add(GroupResolution.Reason.EXPLICIT_ENABLE_UNAVAILABLE);
+					errors.add("Requested group '" + id + "' is not available on " + platformLabel(platform));
+				} else if (blockedBy.containsKey(id)) {
+					requestedUnavailable.add(id);
+					reasons.get(id).add(GroupResolution.Reason.EXPLICIT_ENABLE_UNAVAILABLE);
+					errors.add("Requested group '" + id + "' requires incompatible groups on " + platformLabel(platform) + ": " + String.join(", ", blockedBy.get(id)));
+				} else {
+					selected.add(id);
+					reasons.get(id).add(GroupResolution.Reason.EXPLICIT_ENABLE);
 				}
-				GroupResolution.Status status;
-				if (conflictGroups.contains(groupId)) status = GroupResolution.Status.CONFLICT;
-				else if (selected.contains(groupId)) status = GroupResolution.Status.SELECTED;
-				else if (excludedGroups.contains(groupId) || intent.excludedGroups().contains(groupId)) status = GroupResolution.Status.EXCLUDED;
-				else if (unavailableGroups.contains(groupId)) status = GroupResolution.Status.UNAVAILABLE;
-				else if (blockedGroups.contains(groupId)) status = GroupResolution.Status.BLOCKED;
-				else status = GroupResolution.Status.AVAILABLE;
-				explanations.put(groupId, new GroupResolution(groupId, status, groupReasons, relatedGroups.get(groupId)));
+			} else if (group.selection() == GroupSelectionMode.RECOMMENDED) {
+				if (intent.disabled().contains(id)) {
+					reasons.get(id).add(GroupResolution.Reason.EXPLICIT_DISABLE);
+				} else if (group.supports(platform) && !blockedBy.containsKey(id)) {
+					selected.add(id);
+					reasons.get(id).add(GroupResolution.Reason.RECOMMENDED);
+				}
 			}
-			dependencyGroups.retainAll(selected);
-			return new ResolvedSelection(intent, selected, staleGroups, requiredGroups, forcedGroups, dependencyGroups, unavailableGroups, requestedUnavailableGroups, explanations);
 		}
 
-		private void addReason(String groupId, GroupResolution.Reason reason) {
-			reasons.computeIfAbsent(groupId, ignored -> EnumSet.noneOf(GroupResolution.Reason.class)).add(reason);
+		// Pass 3: Exclusive categories (AT_MOST_ONE, EXACTLY_ONE).
+		Map<String, List<String>> exclusiveMembers = exclusiveCategoryMembers(manifest);
+		for (var catEntry : exclusiveMembers.entrySet()) {
+			String catId = catEntry.getKey();
+			GroupManifest.Category cat = categories.get(catId);
+			List<String> compatible = new ArrayList<>();
+			for (String id : catEntry.getValue()) {
+				GroupManifest.Group group = groups.get(id);
+				if (!group.supports(platform)) {
+					if (intent.enabled().contains(id)) {
+						requestedUnavailable.add(id);
+						reasons.get(id).add(GroupResolution.Reason.EXPLICIT_ENABLE_UNAVAILABLE);
+						errors.add("Requested group '" + id + "' in category '" + catId + "' is not available on " + platformLabel(platform));
+					}
+				} else if (blockedBy.containsKey(id)) {
+					if (intent.enabled().contains(id)) {
+						requestedUnavailable.add(id);
+						reasons.get(id).add(GroupResolution.Reason.EXPLICIT_ENABLE_UNAVAILABLE);
+						errors.add("Requested group '" + id + "' in category '" + catId + "' requires incompatible groups on " + platformLabel(platform) + ": "
+								+ String.join(", ", blockedBy.get(id)));
+					}
+				} else {
+					compatible.add(id);
+				}
+			}
+
+			List<String> explicit = compatible.stream().filter(intent.enabled()::contains).toList();
+			if (explicit.size() > 1) {
+				for (String id : explicit) {
+					reasons.get(id).add(GroupResolution.Reason.EXCLUSIVE_CONFLICT);
+					for (String other : explicit) if (!other.equals(id)) related.get(id).add(other);
+				}
+				errors.add("Multiple groups selected in exclusive category '" + catId + "': " + String.join(", ", explicit));
+			} else if (explicit.size() == 1) {
+				String winner = explicit.get(0);
+				selected.add(winner);
+				reasons.get(winner).add(GroupResolution.Reason.EXPLICIT_ENABLE);
+				for (String id : compatible) {
+					if (!id.equals(winner) && groups.get(id).selection() == GroupSelectionMode.RECOMMENDED && intent.disabled().contains(id))
+						reasons.get(id).add(GroupResolution.Reason.EXPLICIT_DISABLE);
+				}
+			} else {
+				List<String> recommended = new ArrayList<>();
+				for (String id : compatible) {
+					GroupManifest.Group group = groups.get(id);
+					if (group.selection() != GroupSelectionMode.RECOMMENDED) continue;
+					if (intent.disabled().contains(id)) reasons.get(id).add(GroupResolution.Reason.EXPLICIT_DISABLE);
+					else recommended.add(id);
+				}
+				if (recommended.size() > 1) {
+					for (String id : recommended) {
+						reasons.get(id).add(GroupResolution.Reason.EXCLUSIVE_CONFLICT);
+						for (String other : recommended) if (!other.equals(id)) related.get(id).add(other);
+					}
+					errors.add("Exclusive category '" + catId + "' has multiple RECOMMENDED defaults: " + String.join(", ", recommended));
+				} else if (recommended.size() == 1) {
+					String winner = recommended.get(0);
+					selected.add(winner);
+					reasons.get(winner).add(GroupResolution.Reason.RECOMMENDED);
+				} else if (cat.pick() == CategoryPickMode.EXACTLY_ONE && !compatible.isEmpty()) {
+					String fallback = null;
+					for (String id : compatible) {
+						if (!intent.disabled().contains(id)) {
+							fallback = id;
+							break;
+						}
+					}
+					if (fallback != null) {
+						selected.add(fallback);
+						reasons.get(fallback).add(GroupResolution.Reason.CATEGORY_DEFAULT);
+					} else {
+						errors.add("Category '" + catId + "' requires selecting one option");
+					}
+				}
+			}
 		}
 
-		private void relate(String groupId, String relatedGroupId) {
-			relatedGroups.computeIfAbsent(groupId, ignored -> new TreeSet<>()).add(relatedGroupId);
+		// Pass 4: Transitive dependency closure (`requires`) + tracking core-locked and dependency groups.
+		NavigableSet<String> requiredGroups = new TreeSet<>(coreRoots);
+		NavigableSet<String> dependencyGroups = new TreeSet<>();
+
+		ArrayDeque<String> queue = new ArrayDeque<>(selected);
+		Set<String> expanded = new HashSet<>();
+		while (!queue.isEmpty()) {
+			String parent = queue.removeFirst();
+			if (!expanded.add(parent)) continue;
+			boolean parentFromCore = requiredGroups.contains(parent);
+			for (String dep : groups.get(parent).requires()) {
+				GroupManifest.Group depGroup = groups.get(dep);
+				if (depGroup == null) {
+					errors.add("Group '" + parent + "' requires missing group '" + dep + "'");
+					continue;
+				}
+				if (!depGroup.supports(platform)) {
+					blockedBy.computeIfAbsent(parent, ignored -> new LinkedHashSet<>()).add(dep);
+					errors.add("Group '" + parent + "' requires '" + dep + "', which is not available on " + platformLabel(platform));
+					continue;
+				}
+				selected.add(dep);
+				dependencyGroups.add(dep);
+				if (parentFromCore) requiredGroups.add(dep);
+				reasons.get(dep).add(GroupResolution.Reason.DEPENDENCY);
+				related.get(dep).add(parent);
+				queue.addLast(dep);
+			}
+		}
+		// Keep propagation exact when a non-core group entered `dep` before a core group did.
+		ArrayDeque<String> coreQueue = new ArrayDeque<>(coreRoots);
+		Set<String> coreVisited = new HashSet<>();
+		while (!coreQueue.isEmpty()) {
+			String coreId = coreQueue.removeFirst();
+			if (!coreVisited.add(coreId)) continue;
+			GroupManifest.Group coreGroup = groups.get(coreId);
+			if (coreGroup == null) continue;
+			for (String dep : coreGroup.requires()) {
+				if (selected.contains(dep) && requiredGroups.add(dep)) coreQueue.addLast(dep);
+			}
+		}
+
+		// Pass 5: Verify no exclusive category ended up with > 1 group after dependency expansion.
+		Map<String, List<String>> conflicts = new LinkedHashMap<>();
+		for (var catEntry : exclusiveMembers.entrySet()) {
+			String catId = catEntry.getKey();
+			List<String> chosenInCat = new ArrayList<>();
+			for (String id : catEntry.getValue()) if (selected.contains(id)) chosenInCat.add(id);
+			if (chosenInCat.size() > 1) {
+				conflicts.put(catId, chosenInCat);
+				errors.add("Exclusive category '" + catId + "' cannot install multiple groups together: " + String.join(", ", chosenInCat));
+			}
+		}
+
+		// Assemble per-group statuses.
+		NavigableMap<String, GroupResolution> groupResolutions = new TreeMap<>();
+		for (var entry : groups.entrySet()) {
+			String id = entry.getKey();
+			GroupManifest.Group group = entry.getValue();
+			String catId = group.category();
+			List<String> catConflicts = catId.isEmpty() ? List.of() : conflicts.getOrDefault(catId, List.of());
+
+			GroupResolution.Status status;
+			if (catConflicts.size() > 1 && catConflicts.contains(id)) {
+				status = GroupResolution.Status.CONFLICT;
+				reasons.get(id).add(GroupResolution.Reason.EXCLUSIVE_CONFLICT);
+				for (String other : catConflicts) if (!other.equals(id)) related.get(id).add(other);
+			} else if (unavailable.contains(id)) {
+				status = GroupResolution.Status.UNAVAILABLE;
+			} else if (blockedBy.containsKey(id)) {
+				status = GroupResolution.Status.BLOCKED;
+				reasons.get(id).add(GroupResolution.Reason.BLOCKED_BY_DEPENDENCY);
+				related.get(id).addAll(blockedBy.get(id));
+			} else if (selected.contains(id)) {
+				status = GroupResolution.Status.SELECTED;
+			} else if (reasons.get(id).contains(GroupResolution.Reason.EXPLICIT_DISABLE)) {
+				status = GroupResolution.Status.EXCLUDED;
+			} else if (reasons.get(id).contains(GroupResolution.Reason.EXCLUSIVE_CONFLICT)) {
+				status = GroupResolution.Status.CONFLICT;
+			} else {
+				status = GroupResolution.Status.AVAILABLE;
+				if (group.selection() == GroupSelectionMode.AUTOMATIC) reasons.get(id).add(GroupResolution.Reason.AUTOMATIC_UNUSED);
+			}
+			groupResolutions.put(id, new GroupResolution(id, status, reasons.get(id), related.get(id)));
+		}
+
+		ResolvedSelection resolution = new ResolvedSelection(intent, selected, staleGroups, requiredGroups, dependencyGroups, unavailable, requestedUnavailable, groupResolutions);
+		if (!errors.isEmpty()) throw new SelectionResolutionException(errors.stream().distinct().toList(), resolution);
+		return resolution;
+	}
+
+	// ------------------------------------------------------------------ UI transition operations
+
+	public static SelectionUpdate toggleGroup(GroupManifest manifest, SelectionIntent current, String groupId, ClientPlatform platform) {
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(current, "current");
+		GroupManifest.Group group = manifest.groups().get(groupId);
+		if (group == null) return failure(current, null, "Unknown group: " + groupId);
+		if (!group.selection().choosable()) return failure(current, null, "Group cannot be toggled directly");
+
+		GroupManifest.Category category = manifest.categoryOf(groupId);
+		ResolvedSelection previous = safeResolve(manifest, current, platform);
+		if (previous == null) return failure(current, null, "Current selection is invalid");
+
+		boolean currentlySelected = previous.selectedGroups().contains(groupId);
+		if (category != null && category.pick().isExclusive()) {
+			if (currentlySelected) {
+				if (category.pick() == CategoryPickMode.EXACTLY_ONE) return failure(current, previous, "This category requires keeping one option selected");
+				return pickInCategory(manifest, current, group.category(), null, platform);
+			}
+			return pickInCategory(manifest, current, group.category(), groupId, platform);
+		}
+
+		if (currentlySelected && previous.requiredGroups().contains(groupId))
+			return failure(current, previous, "Required by core modpack");
+
+		Set<String> enabled = new TreeSet<>(current.enabled());
+		Set<String> disabled = new TreeSet<>(current.disabled());
+		if (currentlySelected) {
+			Set<String> cascade = selectedDependentsClosure(manifest, previous.selectedGroups(), groupId);
+			for (String off : cascade) {
+				GroupManifest.Group offGroup = manifest.groups().get(off);
+				if (offGroup == null || !offGroup.selection().choosable()) continue;
+				if (previous.requiredGroups().contains(off))
+					return failure(current, previous, "Cannot turn off because '" + manifest.displayName(off) + "' is required");
+				GroupManifest.Category offCat = manifest.categoryOf(off);
+				if (offCat != null && offCat.pick() == CategoryPickMode.EXACTLY_ONE) {
+					return failure(current, previous, "Cannot turn off mandatory option '" + manifest.displayName(off) + "'");
+				}
+				enabled.remove(off);
+				if (offGroup.selection() == GroupSelectionMode.RECOMMENDED) disabled.add(off);
+			}
+			// Clean any stale disabled non-RECOMMENDED ids that no longer apply.
+			pruneEnabledNonExclusive(manifest, enabled, disabled);
+		} else {
+			if (!group.supports(platform)) return failure(current, previous, "Not available on this platform");
+			enableGroupTree(manifest, groupId, enabled, disabled, platform);
+		}
+
+		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
+		return settleTransition(manifest, current, previous, nextIntent, Set.of(groupId), platform);
+	}
+
+	public static SelectionUpdate pickInCategory(GroupManifest manifest, SelectionIntent current, String categoryId, String chosenGroupId, ClientPlatform platform) {
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(current, "current");
+		String chosenId = (chosenGroupId == null || chosenGroupId.isEmpty()) ? null : chosenGroupId;
+		GroupManifest.Category category = manifest.categories().get(categoryId);
+		if (category == null || !category.pick().isExclusive()) return failure(current, null, "Not an exclusive category: " + categoryId);
+		if (chosenId == null && category.pick() == CategoryPickMode.EXACTLY_ONE)
+			return failure(current, safeResolve(manifest, current, platform), "Category requires one option");
+		if (chosenId != null) {
+			GroupManifest.Group chosen = manifest.groups().get(chosenId);
+			if (chosen == null || !categoryId.equals(chosen.category())) return failure(current, null, "Group does not belong to category: " + categoryId);
+			if (!chosen.supports(platform)) return failure(current, safeResolve(manifest, current, platform), "Not available on this platform");
+		}
+
+		ResolvedSelection previous = safeResolve(manifest, current, platform);
+		if (previous == null) return failure(current, null, "Current selection is invalid");
+
+		Set<String> enabled = new TreeSet<>(current.enabled());
+		Set<String> disabled = new TreeSet<>(current.disabled());
+		List<String> members = categoryMembers(manifest, categoryId);
+
+		// Cascade off currently selected choosable dependents outside this category whose dependency was a displaced sibling.
+		for (String sibling : members) {
+			if (sibling.equals(chosenId) || !previous.selectedGroups().contains(sibling)) continue;
+			for (String dep : selectedDependentsClosure(manifest, previous.selectedGroups(), sibling)) {
+				GroupManifest.Group depGroup = manifest.groups().get(dep);
+				if (depGroup != null && !categoryId.equals(depGroup.category()) && depGroup.selection().choosable() && !previous.requiredGroups().contains(dep)) {
+					enabled.remove(dep);
+					if (depGroup.selection() == GroupSelectionMode.RECOMMENDED) disabled.add(dep);
+				}
+			}
+		}
+
+		for (String sibling : members) {
+			enabled.remove(sibling);
+			disabled.remove(sibling);
+		}
+
+		if (chosenId == null) {
+			for (String sibling : members) {
+				GroupManifest.Group siblingGroup = manifest.groups().get(sibling);
+				if (siblingGroup != null && siblingGroup.supports(platform) && siblingGroup.selection() == GroupSelectionMode.RECOMMENDED) disabled.add(sibling);
+			}
+		} else {
+			enableGroupTree(manifest, chosenId, enabled, disabled, platform);
+			// Drop redundant enabled flag when the category's clean state already selects chosenId naturally.
+			Set<String> probeEnabled = new TreeSet<>(enabled);
+			probeEnabled.remove(chosenId);
+			try {
+				ResolvedSelection probe = resolve(manifest, new SelectionIntent(probeEnabled, disabled, current.platform()), platform);
+				if (probe.selectedGroups().contains(chosenId)) enabled.remove(chosenId);
+			} catch (SelectionResolutionException ignored) {
+			}
+		}
+
+		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
+		Set<String> suppressed = chosenId == null ? Set.copyOf(members) : Set.of(chosenId);
+		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform);
+	}
+
+	public static SelectionUpdate setCategoryAll(GroupManifest manifest, SelectionIntent current, String categoryId, boolean selectAll, ClientPlatform platform) {
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(current, "current");
+		GroupManifest.Category category = manifest.categories().get(categoryId);
+		if (category == null || category.pick().isExclusive()) return failure(current, null, "Bulk toggle is only valid on ANY categories");
+
+		ResolvedSelection previous = safeResolve(manifest, current, platform);
+		if (previous == null) return failure(current, null, "Current selection is invalid");
+
+		Set<String> enabled = new TreeSet<>(current.enabled());
+		Set<String> disabled = new TreeSet<>(current.disabled());
+		List<String> members = categoryMembers(manifest, categoryId);
+
+		if (selectAll) {
+			for (String id : members) {
+				GroupManifest.Group g = manifest.groups().get(id);
+				if (g == null || !g.selection().choosable() || !g.supports(platform)) continue;
+				enableGroupTree(manifest, id, enabled, disabled, platform);
+			}
+		} else {
+			Set<String> toClear = new LinkedHashSet<>();
+			for (String id : members) {
+				GroupManifest.Group g = manifest.groups().get(id);
+				if (g == null || !g.selection().choosable() || previous.requiredGroups().contains(id)) continue;
+				if (previous.selectedGroups().contains(id)) toClear.addAll(selectedDependentsClosure(manifest, previous.selectedGroups(), id));
+				else {
+					enabled.remove(id);
+					if (g.selection() == GroupSelectionMode.RECOMMENDED) disabled.add(id);
+				}
+			}
+			for (String off : toClear) {
+				GroupManifest.Group offGroup = manifest.groups().get(off);
+				if (offGroup == null || !offGroup.selection().choosable() || previous.requiredGroups().contains(off)) continue;
+				GroupManifest.Category offCat = manifest.categoryOf(off);
+				if (offCat != null && offCat.pick() == CategoryPickMode.EXACTLY_ONE)
+					return failure(current, previous, "Cannot clear because '" + manifest.displayName(off) + "' is mandatory");
+				enabled.remove(off);
+				if (offGroup.selection() == GroupSelectionMode.RECOMMENDED) disabled.add(off);
+			}
+		}
+
+		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
+		Set<String> suppressed = new HashSet<>(members);
+		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform);
+	}
+
+	public static SelectionUpdate withPlatform(GroupManifest manifest, SelectionIntent current, ClientPlatform override, ClientPlatform effectivePlatform) {
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(current, "current");
+		ResolvedSelection previous = safeResolve(manifest, current, effectivePlatform);
+		Set<String> enabled = new TreeSet<>();
+		for (String id : current.enabled()) {
+			GroupManifest.Group g = manifest.groups().get(id);
+			if (g != null && g.supports(effectivePlatform) && incompatibleTransitiveDeps(manifest, id, effectivePlatform).isEmpty()) enabled.add(id);
+		}
+		SelectionIntent nextIntent = new SelectionIntent(enabled, current.disabled(), override);
+		try {
+			ResolvedSelection next = resolve(manifest, nextIntent, effectivePlatform);
+			NavigableSet<String> turnedOff = new TreeSet<>();
+			for (String id : current.enabled()) if (!enabled.contains(id)) turnedOff.add(id);
+			return new SelectionUpdate(nextIntent, next, turnedOff, "");
+		} catch (SelectionResolutionException e) {
+			return new SelectionUpdate(current, previous, Collections.emptyNavigableSet(), String.join("; ", e.errors()));
 		}
 	}
 
-	private record Closure(boolean success, Set<String> groups, boolean excluded) {
-		private static Closure success(Set<String> groups) {
-			return new Closure(true, Set.copyOf(groups), false);
+	private static SelectionUpdate settleTransition(GroupManifest manifest, SelectionIntent previousIntent, ResolvedSelection previous,
+			SelectionIntent candidateIntent, Set<String> suppressFromNotice, ClientPlatform platform) {
+		try {
+			ResolvedSelection next = resolve(manifest, candidateIntent, platform);
+			NavigableSet<String> turnedOff = new TreeSet<>();
+			for (String id : previous.selectedGroups()) {
+				if (next.selectedGroups().contains(id) || suppressFromNotice.contains(id)) continue;
+				GroupManifest.Group g = manifest.groups().get(id);
+				if (g != null && !g.selection().automatic()) turnedOff.add(id);
+			}
+			return new SelectionUpdate(candidateIntent, next, turnedOff, "");
+		} catch (SelectionResolutionException e) {
+			String msg = e.errors().isEmpty() ? "Selection cannot be resolved" : e.errors().get(0);
+			return new SelectionUpdate(previousIntent, previous, Collections.emptyNavigableSet(), msg);
 		}
+	}
 
-		private static Closure failure(Set<String> groups) {
-			return failure(groups, false);
-		}
+	private static void enableGroupTree(GroupManifest manifest, String groupId, Set<String> enabled, Set<String> disabled, ClientPlatform platform) {
+		GroupManifest.Group target = manifest.groups().get(groupId);
+		if (target == null) return;
+		if (target.selection() == GroupSelectionMode.OPTIONAL) enabled.add(groupId);
+		disabled.remove(groupId);
 
-		private static Closure failure(Set<String> groups, boolean excluded) {
-			return new Closure(false, Set.copyOf(groups), excluded);
+		// Transitive dependencies: clear disabled, and if a dependency sits in an exclusive category, make room for it.
+		ArrayDeque<String> queue = new ArrayDeque<>(target.requires());
+		Set<String> visited = new HashSet<>();
+		visited.add(groupId);
+		while (!queue.isEmpty()) {
+			String depId = queue.removeFirst();
+			if (!visited.add(depId)) continue;
+			GroupManifest.Group dep = manifest.groups().get(depId);
+			if (dep == null || !dep.supports(platform)) continue;
+			disabled.remove(depId);
+			GroupManifest.Category depCat = manifest.categoryOf(depId);
+			if (depCat != null && depCat.pick().isExclusive()) {
+				for (String sibling : categoryMembers(manifest, dep.category())) {
+					if (!sibling.equals(depId)) enabled.remove(sibling);
+				}
+				if (dep.selection().choosable()) enabled.add(depId);
+			}
+			queue.addAll(dep.requires());
 		}
+	}
 
-		private static Closure excluded(Set<String> groups) {
-			return new Closure(false, Set.copyOf(groups), true);
+	private static void pruneEnabledNonExclusive(GroupManifest manifest, Set<String> enabled, Set<String> disabled) {
+		Iterator<String> it = enabled.iterator();
+		while (it.hasNext()) {
+			String id = it.next();
+			GroupManifest.Group g = manifest.groups().get(id);
+			if (g == null) continue;
+			GroupManifest.Category cat = manifest.categoryOf(id);
+			if ((cat == null || !cat.pick().isExclusive()) && g.selection() == GroupSelectionMode.RECOMMENDED) it.remove();
 		}
+	}
+
+	private static Set<String> selectedDependentsClosure(GroupManifest manifest, Set<String> selectedGroups, String targetId) {
+		Set<String> closure = new LinkedHashSet<>();
+		closure.add(targetId);
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (String candidate : selectedGroups) {
+				if (closure.contains(candidate)) continue;
+				GroupManifest.Group g = manifest.groups().get(candidate);
+				if (g == null) continue;
+				for (String dep : g.requires()) {
+					if (closure.contains(dep)) {
+						closure.add(candidate);
+						changed = true;
+						break;
+					}
+				}
+			}
+		}
+		return closure;
+	}
+
+	private static SelectionUpdate failure(SelectionIntent current, ResolvedSelection fallback, String message) {
+		return new SelectionUpdate(current, fallback, Collections.emptyNavigableSet(), message);
+	}
+
+	private static ResolvedSelection safeResolve(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform) {
+		try {
+			return resolve(manifest, intent, platform);
+		} catch (SelectionResolutionException e) {
+			return e.resolution();
+		}
+	}
+
+	private static Set<String> incompatibleTransitiveDeps(GroupManifest manifest, String groupId, ClientPlatform platform) {
+		Set<String> bad = new LinkedHashSet<>();
+		ArrayDeque<String> queue = new ArrayDeque<>(manifest.groups().get(groupId).requires());
+		Set<String> visited = new HashSet<>();
+		while (!queue.isEmpty()) {
+			String depId = queue.removeFirst();
+			if (!visited.add(depId)) continue;
+			GroupManifest.Group dep = manifest.groups().get(depId);
+			if (dep == null) continue;
+			if (!dep.supports(platform)) bad.add(depId);
+			queue.addAll(dep.requires());
+		}
+		return bad;
+	}
+
+	private static List<String> categoryMembers(GroupManifest manifest, String categoryId) {
+		List<String> members = new ArrayList<>();
+		for (var entry : manifest.groups().entrySet()) {
+			if (categoryId.equals(entry.getValue().category())) members.add(entry.getKey());
+		}
+		return members;
+	}
+
+	private static Map<String, List<String>> exclusiveCategoryMembers(GroupManifest manifest) {
+		Map<String, List<String>> members = new LinkedHashMap<>();
+		for (var entry : manifest.categories().entrySet()) {
+			if (entry.getValue().pick().isExclusive()) members.put(entry.getKey(), new ArrayList<>());
+		}
+		if (members.isEmpty()) return Map.of();
+		for (var entry : manifest.groups().entrySet()) {
+			String catId = entry.getValue().category();
+			List<String> list = members.get(catId);
+			if (list != null) list.add(entry.getKey());
+		}
+		return members;
+	}
+
+	private static String platformLabel(ClientPlatform platform) {
+		return platform == null ? "undetected platform" : platform.id();
 	}
 }

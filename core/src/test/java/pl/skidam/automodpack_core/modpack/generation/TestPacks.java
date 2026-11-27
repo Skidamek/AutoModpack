@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -26,12 +27,11 @@ public final class TestPacks {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = description;
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		group.files = new TreeMap<>(Map.of(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, sha1, null)));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 

@@ -9,13 +9,8 @@ import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 
 /**
- * The persisted per-modpack group selection: the player's declared desire, written at every consent moment.
- *
- * <p>
- * Writers must hold the game-directory mutation lock, like every other durable state file; the consent moments
- * (save, update confirm, removal confirm) and the generation store's forget path already do. Reads are safe
- * without it because every write is an atomic replacement.
- * </p>
+ * The persisted per-modpack group selection: the player's sparse override ({@code enabled}/{@code disabled}/{@code platform}),
+ * written at every consent moment.
  */
 public final class ClientSelectionStore {
 	private final Path path;
@@ -36,8 +31,9 @@ public final class ClientSelectionStore {
 		ModpackId.requireValid(modpackId);
 		Objects.requireNonNull(target);
 		SelectionJsons.ClientSelectionStoreFields fields = read();
-		fields.selections.put(modpackId, new SelectionJsons.ClientSelectionStoreFields.ModpackSelection(new LinkedHashSet<>(target.requestedGroups()),
-				new LinkedHashSet<>(target.requestedCategories()), new LinkedHashSet<>(target.excludedGroups()), target.platform() == null ? null : target.platform().id()));
+		fields.selections.put(modpackId, new SelectionJsons.ClientSelectionStoreFields.ModpackSelection(
+				new LinkedHashSet<>(target.enabled()), new LinkedHashSet<>(target.disabled()),
+				target.platform() == null ? null : target.platform().id()));
 		fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 		ConfigTools.writeAtomic(path, fields);
 	}
@@ -52,12 +48,10 @@ public final class ClientSelectionStore {
 	}
 
 	private static SelectionIntent intent(SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection) {
-		return new SelectionIntent(selection.requestedGroups, selection.requestedCategories, selection.excludedGroups, platform(selection.platform));
+		return new SelectionIntent(selection.enabled, selection.disabled, platform(selection.platform));
 	}
 
 	private static ClientPlatform platform(String platform) {
-		// Strict on purpose: a stored platform this build cannot parse is corrupt durable state, so the
-		// read's set-aside path handles it loudly instead of silently re-resolving under another platform.
 		return platform == null ? null : ClientPlatform.parse(platform);
 	}
 
@@ -74,9 +68,13 @@ public final class ClientSelectionStore {
 
 	/** The document's completeness contract: unusable content is set aside as evidence and reads as no selection. */
 	private static SelectionJsons.ClientSelectionStoreFields validated(SelectionJsons.ClientSelectionStoreFields fields) {
-		if (fields.DO_NOT_CHANGE_IT != 1) throw new IllegalArgumentException("Client group selection file version " + fields.DO_NOT_CHANGE_IT + " is not supported");
+		if (fields.DO_NOT_CHANGE_IT != 2) throw new IllegalArgumentException("Client group selection file version " + fields.DO_NOT_CHANGE_IT + " is not supported");
 		if (fields.selections == null) fields.selections = new LinkedHashMap<>();
-		for (SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection : fields.selections.values()) platform(selection.platform);
+		for (var entry : fields.selections.entrySet()) {
+			ModpackId.requireValid(entry.getKey());
+			if (entry.getValue() == null) throw new IllegalArgumentException("Selection entry for " + entry.getKey() + " is null");
+			intent(entry.getValue());
+		}
 		return fields;
 	}
 }

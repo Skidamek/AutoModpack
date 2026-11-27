@@ -48,7 +48,7 @@ public final class UpdatePreview {
 		Objects.requireNonNull(decision, "reconciliation decision");
 		GroupConsequences consequences = selection == null
 				? new GroupConsequences(Set.of(), Set.of(), Set.of())
-				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
+				: new GroupConsequences(selection.intent().enabled(), selection.selectedGroups(), selection.staleGroups(), selection.groupResolutions());
 		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of(), List.of(), null);
 	}
 
@@ -111,7 +111,7 @@ public final class UpdatePreview {
 		Map<String, String> names = new TreeMap<>();
 		Map<String, List<String>> ownersByPath = new TreeMap<>();
 		manifest.groups().forEach((groupId, group) -> {
-			names.put(groupId, group.displayName().isBlank() ? groupId : group.displayName());
+			names.put(groupId, manifest.displayName(groupId));
 			group.files().keySet().forEach(path -> ownersByPath.computeIfAbsent(path, ignored -> new ArrayList<>()).add(groupId));
 		});
 		List<ChangeSet.Change> changes = new ArrayList<>(changeSet.changes().size());

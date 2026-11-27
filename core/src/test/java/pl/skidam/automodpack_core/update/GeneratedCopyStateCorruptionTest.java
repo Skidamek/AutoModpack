@@ -67,7 +67,7 @@ class GeneratedCopyStateCorruptionTest {
 
 	@Test
 	void aLegacyTreeWithTwoSelectionsKeepsTheOneTheActivePointerCommittedUnder() throws Exception {
-		SelectionIntent applied = new SelectionIntent(Set.of("main"));
+		SelectionIntent applied = SelectionIntent.ofEnabled(Set.of("main"));
 		String appliedDigest = UpdateTransaction.digest(applied);
 		seedLegacyTree();
 		Path appliedFile = tempDir.resolve("game").resolve(StoragePaths.CLIENT_GENERATED_COPIES_DIR).resolve(MODPACK_ID).resolve(CONTENT_TOKEN).resolve(appliedDigest + ".json");
@@ -78,9 +78,8 @@ class GeneratedCopyStateCorruptionTest {
 		state.modpackId = MODPACK_ID;
 		state.contentToken = CONTENT_TOKEN;
 		state.ownershipLedger = OwnershipLedger.empty(MODPACK_ID).toFields();
-		state.selectedGroups = List.copyOf(applied.requestedGroups());
-		state.selectedCategories = List.of();
-		state.excludedGroups = List.of();
+		state.enabledGroups = List.copyOf(applied.enabled());
+		state.disabledGroups = List.of();
 		ConfigTools.writeAtomic(activeState, state);
 
 		ClientStorage storage = TestDataRoot.open(tempDir.resolve("game"), tempDir.resolve("data"));
@@ -136,7 +135,7 @@ class GeneratedCopyStateCorruptionTest {
 		GeneratedCopyState rebuilt = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(target.selection().intent()));
 		assertEquals(List.of(new GeneratedCopyState.Entry(ModpackPathPolicy.generatedBundlePath(), HashUtils.sha1(bundleBytes), bundleBytes.length)), rebuilt.entries());
 		assertEquals(1, GeneratedCopyState.loadAll(storage).size(), "Only the active generation is rebuilt");
-		SelectionIntent applied = new SelectionIntent(Set.of("main"), List.of(), List.of(), ClientPlatform.LINUX);
+		SelectionIntent applied = new SelectionIntent(Set.of("main"), Set.of(), ClientPlatform.LINUX);
 		GeneratedCopyState read = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(applied));
 		assertEquals(rebuilt.entries(), read.entries(), "The rebuilt record answers to the selection the pointer committed under");
 	}

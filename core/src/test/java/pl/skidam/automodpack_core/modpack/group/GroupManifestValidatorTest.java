@@ -13,132 +13,190 @@ class GroupManifestValidatorTest {
 	@Test
 	void acceptsIdenticalSharedFileAndPreservesDeclarationOrder() {
 		var fields = catalogue();
-		fields.categories = linkedCategories("General", linkedGroups("visuals", group(file("a")), "main", group(file("a"))));
+		fields.groups = linkedGroups("visuals", group(file("a")), "main", group(file("a")));
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		assertEquals(List.of("visuals", "main"), new ArrayList<>(manifest.groups().keySet()));
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
 	@Test
-	void validatesCategoryNameAndRoundTrips() {
+	void validatesCategoryAndRoundTrips() {
 		var fields = catalogue();
-		fields.categories = linkedCategories("Visuals", linkedGroups("main", group(file("a"))));
+		fields.categories = linkedCategories("visuals", category("Visuals", CategoryPickMode.AT_MOST_ONE));
+		var main = group(file("a"));
+		main.category = "visuals";
+		fields.groups = linkedGroups("main", main);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals("Visuals", manifest.groups().get("main").category());
+		assertEquals("visuals", manifest.groups().get("main").category());
+		assertEquals("Visuals", manifest.categoryDisplayName("visuals"));
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
 	@Test
-	void everyValidatedGroupCarriesItsCategoryName() {
+	void uncategorizedGroupCarriesEmptyCategory() {
 		var fields = catalogue();
-		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))));
+		fields.groups = linkedGroups("main", group(file("a")));
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals("General", manifest.groups().get("main").category());
+		assertEquals("", manifest.groups().get("main").category());
 	}
 
 	@Test
-	void rejectsMissingSelectionFlags() {
+	void rejectsMissingSelectionMode() {
 		var fields = catalogue();
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.files = Map.of("mods/example.jar", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 
 		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
-		assertTrue(failure.getMessage().contains("missing its selection flags"));
+		assertTrue(failure.getMessage().contains("missing its selection mode"), failure.getMessage());
 	}
 
 	@Test
-	void rejectsEmptyCategory() {
-		var fields = catalogue();
-		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))), "Empty", linkedGroups());
+	void rejectsEmptyCategoryAndUnknownGroupCategory() {
+		var emptyCat = catalogue();
+		emptyCat.categories = linkedCategories("empty", category("Empty", CategoryPickMode.ANY));
+		emptyCat.groups = linkedGroups("main", group(file("a")));
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(emptyCat));
 
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		var unknownCat = catalogue();
+		var group = group(file("a"));
+		group.category = "missing";
+		unknownCat.groups = linkedGroups("main", group);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(unknownCat));
 	}
 
 	@Test
-	void rejectsDuplicateGroupIdsAcrossCategories() {
-		var fields = catalogue();
-		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))), "Visuals", linkedGroups("main", group(file("a"))));
-
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
-	}
-
-	@Test
-	void rejectsCaseInsensitiveDuplicateCategoryNames() {
-		var fields = catalogue();
-		fields.categories = linkedCategories("General", linkedGroups("main", group(file("a"))), "general", linkedGroups("other", group(file("a"))));
-
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
-	}
-
-	@Test
-	void rejectsBlankPaddedControlCharacterAndOverlongCategoryNames() {
-		for (String name : List.of("", "   ", " padded", "control\u0007char", "x".repeat(65))) {
+	void rejectsRequiredOrAutomaticGroupInsideExclusiveCategory() {
+		for (GroupSelectionMode forbidden : List.of(GroupSelectionMode.REQUIRED, GroupSelectionMode.AUTOMATIC)) {
 			var fields = catalogue();
-			fields.categories = linkedCategories(name, linkedGroups("main", group(file("a"))));
-			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), name);
+			fields.categories = linkedCategories("shaders", category("Shaders", CategoryPickMode.AT_MOST_ONE));
+			var g = group(file("a"));
+			g.category = "shaders";
+			g.selection = forbidden;
+			fields.groups = linkedGroups("shader-a", g);
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), forbidden.name());
+		}
+	}
+
+	@Test
+	void rejectsInvalidIdentifiersAndWindowsDeviceNames() {
+		for (String bad : List.of("", "   ", "Main", "padded ", "my.group", "../bad", "con", "nul", "com1", "x".repeat(65))) {
+			var badGroup = catalogue();
+			badGroup.groups = linkedGroups(bad, group(file("a")));
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(badGroup), "group:" + bad);
+
+			var badCategory = catalogue();
+			badCategory.categories = linkedCategories(bad, category("Bad", CategoryPickMode.ANY));
+			var g = group(file("a"));
+			g.category = bad;
+			badCategory.groups = linkedGroups("main", g);
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(badCategory), "cat:" + bad);
 		}
 	}
 
 	@Test
 	void preservesDeclarationOrderThroughValidateAndSerializeRoundTrip() {
 		var fields = catalogue();
-		fields.categories = linkedCategories("Visuals", linkedGroups("z-shaders", group(file("a")), "a-packs", group(file("a"))), "General", linkedGroups("main", group(file("a"))));
+		fields.categories = linkedCategories("visuals", category("Visuals", CategoryPickMode.ANY), "extras", category("Extras", CategoryPickMode.ANY));
+		var z = group(file("a"));
+		z.category = "visuals";
+		var a = group(file("a"));
+		a.category = "visuals";
+		var main = group(file("a"));
+		main.category = "extras";
+		fields.groups = linkedGroups("z-shaders", z, "a-packs", a, "main", main);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals(List.of("Visuals", "General"), manifest.groups().values().stream().map(GroupManifest.Group::category).distinct().toList());
+		assertEquals(List.of("visuals", "extras"), new ArrayList<>(manifest.categories().keySet()));
 		assertEquals(List.of("z-shaders", "a-packs", "main"), new ArrayList<>(manifest.groups().keySet()));
 		var roundTripped = GroupManifestValidator.validate(manifest.toFields()).toFields();
-		assertEquals(List.of("Visuals", "General"), new ArrayList<>(roundTripped.categories.keySet()));
-		assertEquals(List.of("z-shaders", "a-packs"), new ArrayList<>(roundTripped.categories.get("Visuals").keySet()));
-		assertEquals(List.of("main"), new ArrayList<>(roundTripped.categories.get("General").keySet()));
+		assertEquals(List.of("visuals", "extras"), new ArrayList<>(roundTripped.categories.keySet()));
+		assertEquals(List.of("z-shaders", "a-packs", "main"), new ArrayList<>(roundTripped.groups.keySet()));
 		var parsed = ConfigTools.parse(ConfigTools.GSON.toJson(fields), ModpackJsons.CompleteModpackContentFields.class);
-		assertEquals(List.of("Visuals", "General"), new ArrayList<>(parsed.categories.keySet()));
-		assertEquals(List.of("z-shaders", "a-packs", "main"), parsed.categories.values().stream().flatMap(category -> category.keySet().stream()).toList());
+		assertEquals(List.of("visuals", "extras"), new ArrayList<>(parsed.categories.keySet()));
+		assertEquals(List.of("z-shaders", "a-packs", "main"), new ArrayList<>(parsed.groups.keySet()));
 	}
 
 	@Test
 	void rejectsDifferentCoSelectableVariant() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", group(file("a")), "visuals", group(file("b")));
+		fields.groups = linkedGroups("main", group(file("a")), "visuals", group(file("b")));
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void acceptsDifferentMutuallyExclusiveVariant() {
+	void acceptsDifferentExclusiveCategoryVariants() {
 		var fields = catalogue();
+		fields.categories = linkedCategories("shaders", category("Shaders", CategoryPickMode.AT_MOST_ONE));
 		var first = group(file("a"));
+		first.category = "shaders";
 		var second = group(file("b"));
-		first.breaksWith = Set.of("second");
-		fields.categories = oneCategory("first", first, "second", second);
+		second.category = "shaders";
+		fields.groups = linkedGroups("first", first, "second", second);
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void rejectsConflictingDefaultSelections() {
+	void rejectsConflictingRecommendedSelectionsInExclusiveCategory() {
 		var fields = catalogue();
+		fields.categories = linkedCategories("shaders", category("Shaders", CategoryPickMode.AT_MOST_ONE));
 		var first = group(file("a"));
+		first.category = "shaders";
+		first.selection = GroupSelectionMode.RECOMMENDED;
 		var second = group(file("b"));
-		first.defaultSelected = true;
-		second.defaultSelected = true;
-		first.breaksWith = Set.of("second");
-		fields.categories = oneCategory("first", first, "second", second);
+		second.category = "shaders";
+		second.selection = GroupSelectionMode.RECOMMENDED;
+		fields.groups = linkedGroups("first", first, "second", second);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void rejectsGroupThatConflictsWithForcedGroup() {
+	void acceptsOptionalGroupRequiringNonDefaultExclusiveCategoryMember() {
 		var fields = catalogue();
-		var forced = group(file("a"));
-		var optional = group(file("b"));
-		forced.required = true;
-		optional.breaksWith = Set.of("forced");
-		fields.categories = oneCategory("forced", forced, "optional", optional);
+		fields.categories = linkedCategories("shaders", category("Shaders", CategoryPickMode.EXACTLY_ONE));
+		var bsl = group(file("a"));
+		bsl.category = "shaders";
+		bsl.selection = GroupSelectionMode.RECOMMENDED;
+		var comp = group(file("b"));
+		comp.category = "shaders";
+		comp.selection = GroupSelectionMode.OPTIONAL;
+		var addon = group(file("b"));
+		addon.requires = Set.of("comp");
+		fields.groups = linkedGroups("bsl", bsl, "comp", comp, "addon", addon);
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsAutomaticGroupWithDifferentFileWhenCoSelectableViaActivator() {
+		var fields = catalogue();
+		var auto = groupAt("mods/shared.jar", file("a"));
+		auto.selection = GroupSelectionMode.AUTOMATIC;
+		var consumer = groupAt("mods/shared.jar", file("b"));
+		consumer.requires = Set.of("auto");
+		fields.groups = linkedGroups("auto", auto, "consumer", consumer);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsRequiredGroupWithMutualConflictThroughExclusiveCategory() {
+		var fields = catalogue();
+		fields.categories = linkedCategories("mode", category("Mode", CategoryPickMode.EXACTLY_ONE));
+		var main = group(file("a"));
+		main.selection = GroupSelectionMode.REQUIRED;
+		main.requires = Set.of("mode-a");
+		var modeA = group(file("a"));
+		modeA.category = "mode";
+		modeA.selection = GroupSelectionMode.RECOMMENDED;
+		var modeB = group(file("b"));
+		modeB.category = "mode";
+		modeB.selection = GroupSelectionMode.OPTIONAL;
+		main.requires = Set.of("mode-a", "mode-b");
+		fields.groups = linkedGroups("main", main, "mode-a", modeA, "mode-b", modeB);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -149,30 +207,21 @@ class GroupManifestValidatorTest {
 		dependency.compatiblePlatforms = Set.of("windows");
 		var optional = group(file("a"));
 		optional.requires = Set.of("dependency");
-		fields.categories = oneCategory("dependency", dependency, "optional", optional);
+		fields.groups = linkedGroups("dependency", dependency, "optional", optional);
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void rejectsRequiredOrForcedGroupBlockedByUnavailableDependency() {
+	void rejectsRequiredGroupBlockedByUnavailableDependency() {
 		var requiredFields = catalogue();
 		var requiredDependency = group(file("a"));
 		requiredDependency.compatiblePlatforms = Set.of("windows");
 		var required = group(file("a"));
-		required.required = true;
+		required.selection = GroupSelectionMode.REQUIRED;
 		required.requires = Set.of("dependency");
-		requiredFields.categories = oneCategory("dependency", requiredDependency, "required", required);
+		requiredFields.groups = linkedGroups("dependency", requiredDependency, "required", required);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(requiredFields));
-
-		var forcedFields = catalogue();
-		var forcedDependency = group(file("a"));
-		forcedDependency.compatiblePlatforms = Set.of("windows");
-		var forced = group(file("a"));
-		forced.required = true;
-		forced.requires = Set.of("dependency");
-		forcedFields.categories = oneCategory("dependency", forcedDependency, "forced", forced);
-		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(forcedFields));
 	}
 
 	@Test
@@ -180,7 +229,7 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(file("a"));
 		group.files = Map.of("C:/escape.jar", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -189,7 +238,7 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(file("a"));
 		group.files = Map.of("C:escape.jar", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -198,7 +247,7 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(file("a"));
 		group.files = Map.of("AUTOMODPACK-CONTENT.JSON", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -208,7 +257,7 @@ class GroupManifestValidatorTest {
 		var group = group(file("a"));
 		group.requires = Set.of("missing");
 		group.files = Map.of("../escape", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -217,7 +266,7 @@ class GroupManifestValidatorTest {
 		var file = ConfigTools.GSON.fromJson("{\"size\":\"1\",\"type\":\"other\",\"editable\":false,\"sha1\":\"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8\"}",
 				ModpackJsons.CompleteModpackContentFields.GroupFileFields.class);
 		var fields = catalogue();
-		fields.categories = oneCategory("main", groupAt("mods/example.jar", file));
+		fields.groups = linkedGroups("main", groupAt("mods/example.jar", file));
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
@@ -225,7 +274,7 @@ class GroupManifestValidatorTest {
 	void rejectsReservedRoots() {
 		for (String invalid : List.of("saves/world.dat", "logs/latest.log", "screenshots/image.png")) {
 			var fields = catalogue();
-			fields.categories = oneCategory("main", groupAt(invalid, fileOfType("other")));
+			fields.groups = linkedGroups("main", groupAt(invalid, fileOfType("other")));
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), invalid);
 		}
 	}
@@ -234,7 +283,7 @@ class GroupManifestValidatorTest {
 	void acceptsModFilesAtAnyNonReservedPath() {
 		for (String path : List.of("mods/example.jar", "resourcepacks/example.jar", "shaderpacks/example.jar", "config/example.jar", "outside/example.jar")) {
 			var fields = catalogue();
-			fields.categories = oneCategory("main", groupAt(path, fileOfType("mod")));
+			fields.groups = linkedGroups("main", groupAt(path, fileOfType("mod")));
 			assertDoesNotThrow(() -> GroupManifestValidator.validate(fields), path);
 		}
 	}
@@ -242,7 +291,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void acceptsGenericFilesInsideMods() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", groupAt("mods/README.txt", fileOfType("other")));
+		fields.groups = linkedGroups("main", groupAt("mods/README.txt", fileOfType("other")));
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
@@ -252,7 +301,7 @@ class GroupManifestValidatorTest {
 		for (String path : List.of("mods", "config", "shaderpacks", "resourcepacks", "MODS/example.jar", "Config/example.jar", "ShaderPacks/example.jar",
 				"ResourcePacks/example.jar")) {
 			var fields = catalogue();
-			fields.categories = oneCategory("main", groupAt(path, fileOfType("mod")));
+			fields.groups = linkedGroups("main", groupAt(path, fileOfType("mod")));
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), path);
 		}
 	}
@@ -260,7 +309,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void rejectsCoSelectableModsThatShareALiveBasename() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));
+		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
@@ -270,7 +319,7 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(fileOfType("mod"));
 		group.files = Map.of("outside", fileOfType("mod"), "outside/nested.jar", fileOfType("mod"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
@@ -278,7 +327,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void rejectsCoSelectableFileDirectoryConflict() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", groupAt("outside", fileOfType("mod")), "visuals", groupAt("outside/nested.jar", fileOfType("mod")));
+		fields.groups = linkedGroups("main", groupAt("outside", fileOfType("mod")), "visuals", groupAt("outside/nested.jar", fileOfType("mod")));
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
@@ -286,6 +335,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void prefixWalkReportsEveryAncestorConflictOfANestedAndAliasedCatalogue() {
 		var fields = catalogue();
+		fields.categories = linkedCategories("pair", category("Pair", CategoryPickMode.AT_MOST_ONE));
 		var trunk = group(fileOfType("mod"));
 		trunk.compatiblePlatforms = Set.of("linux");
 		trunk.files = Map.of("outside/t", fileOfType("mod"), "outside/t/u", fileOfType("mod"), "outside/t/u/v.jar", fileOfType("mod"));
@@ -296,11 +346,12 @@ class GroupManifestValidatorTest {
 		var fork3 = groupAt("outside/k/z.jar", fileOfType("mod"));
 		fork3.compatiblePlatforms = Set.of("linux");
 		var exclusive = groupAt("outside/e", fileOfType("mod"));
+		exclusive.category = "pair";
 		exclusive.compatiblePlatforms = Set.of("linux");
-		exclusive.breaksWith = Set.of("leaf");
 		var leaf = groupAt("outside/e/f.jar", fileOfType("mod"));
+		leaf.category = "pair";
 		leaf.compatiblePlatforms = Set.of("linux");
-		fields.categories = oneCategory("trunk", trunk, "fork1", fork1, "fork2", fork2, "fork3", fork3, "exclusive", exclusive, "leaf", leaf);
+		fields.groups = linkedGroups("trunk", trunk, "fork1", fork1, "fork2", fork2, "fork3", fork3, "exclusive", exclusive, "leaf", leaf);
 
 		// The aliased key 'outside/k' (two owners) pairs with the descendant once per owner, the chain pairs every
 		// ancestor depth once, and the mutually exclusive pair is silent: exactly the pairwise scan's conflict set.
@@ -313,11 +364,14 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void acceptsFileDirectoryPathsForMutuallyExclusiveGroups() {
+	void acceptsFileDirectoryPathsForExclusiveGroups() {
 		var fields = catalogue();
+		fields.categories = linkedCategories("pair", category("Pair", CategoryPickMode.AT_MOST_ONE));
 		var first = groupAt("outside", fileOfType("mod"));
-		first.breaksWith = Set.of("second");
-		fields.categories = oneCategory("first", first, "second", groupAt("outside/nested.jar", fileOfType("mod")));
+		first.category = "pair";
+		var second = groupAt("outside/nested.jar", fileOfType("mod"));
+		second.category = "pair";
+		fields.groups = linkedGroups("first", first, "second", second);
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
@@ -325,7 +379,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void acceptsSameModBasenameOutsideLiveModsDirectory() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", groupAt("mods/main.jar", fileOfType("mod")), "resourcepack", groupAt("resourcepacks/main.jar", fileOfType("mod")),
+		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "resourcepack", groupAt("resourcepacks/main.jar", fileOfType("mod")),
 				"shaderpack", groupAt("shaderpacks/main.jar", fileOfType("mod")));
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
@@ -337,7 +391,7 @@ class GroupManifestValidatorTest {
 		var group = group(file("a"));
 		group.compatiblePlatforms = Set.of("windows");
 		group.files = Map.of("mods/CON.txt", file("a"), "config/bad?.json", file("a"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -347,47 +401,43 @@ class GroupManifestValidatorTest {
 		var windowsGroup = group(file("a"));
 		windowsGroup.compatiblePlatforms = Set.of("windows");
 		windowsGroup.files = Map.of("mods/A.jar", file("a"), "mods/a.jar", file("a"));
-		windows.categories = oneCategory("main", windowsGroup);
+		windows.groups = linkedGroups("main", windowsGroup);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(windows));
 
 		var linux = catalogue();
 		var linuxGroup = group(file("a"));
 		linuxGroup.compatiblePlatforms = Set.of("linux");
 		linuxGroup.files = Map.of("mods/A.jar", file("a"), "mods/a.jar", file("a"));
-		linux.categories = oneCategory("main", linuxGroup);
+		linux.groups = linkedGroups("main", linuxGroup);
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(linux));
 	}
 
 	@Test
-	void acceptsConflictingGroupsInOneCategoryUntilRequestedTogether() {
+	void rejectsDifferentSamePathContentInsideAnyCategory() {
 		var fields = catalogue();
+		fields.categories = linkedCategories("bundle", category("Bundle", CategoryPickMode.ANY));
 		var first = group(file("a"));
-		first.breaksWith = Set.of("second");
-		var second = group(file("a"));
-		fields.categories = linkedCategories("bundle", linkedGroups("first", first, "second", second));
-
-		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
-	}
-
-	@Test
-	void rejectsDifferentSamePathContentInsideOneCategoryBundle() {
-		var fields = catalogue();
-		var first = group(file("a"));
+		first.category = "bundle";
 		var second = group(file("b"));
-		fields.categories = linkedCategories("bundle", linkedGroups("first", first, "second", second));
+		second.category = "bundle";
+		fields.groups = linkedGroups("first", first, "second", second);
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test
-	void acceptsCategoryWithDependencyConflictUntilRequestedTogether() {
+	void rejectsDependencyCrossingBackIntoExclusiveCategoryFromOtherGroup() {
 		var fields = catalogue();
-		var dependency = group(file("a"));
+		fields.categories = linkedCategories("mode", category("Mode", CategoryPickMode.EXACTLY_ONE));
 		var first = group(file("a"));
-		first.requires = Set.of("dependency");
+		first.category = "mode";
+		first.selection = GroupSelectionMode.RECOMMENDED;
 		var second = group(file("a"));
-		second.breaksWith = Set.of("dependency");
-		fields.categories = linkedCategories("bundle", linkedGroups("first", first, "second", second), "General", linkedGroups("dependency", dependency));
+		second.category = "mode";
+		second.selection = GroupSelectionMode.OPTIONAL;
+		var wrapper = group(file("a"));
+		wrapper.requires = Set.of("second");
+		fields.groups = linkedGroups("first", first, "second", second, "wrapper", wrapper);
 
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
@@ -397,7 +447,7 @@ class GroupManifestValidatorTest {
 		var fields = catalogue();
 		var group = group(file("a"));
 		group.compatiblePlatforms = Set.of("Android");
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
@@ -407,7 +457,7 @@ class GroupManifestValidatorTest {
 		var blank = catalogue();
 		var blankGroup = group(file("a"));
 		blankGroup.compatiblePlatforms = Set.of("   ");
-		blank.categories = oneCategory("main", blankGroup);
+		blank.groups = linkedGroups("main", blankGroup);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(blank));
 	}
 
@@ -415,12 +465,12 @@ class GroupManifestValidatorTest {
 	void validatesRulesForDeclaredOnlyPlatforms() {
 		var fields = catalogue();
 		var app = group(file("a"));
-		app.required = true;
+		app.selection = GroupSelectionMode.REQUIRED;
 		app.compatiblePlatforms = Set.of("android");
 		app.requires = Set.of("win-lib");
 		var winLib = group(file("a"));
 		winLib.compatiblePlatforms = Set.of("windows");
-		fields.categories = oneCategory("app", app, "win-lib", winLib);
+		fields.groups = linkedGroups("app", app, "win-lib", winLib);
 
 		// No detectable platform can see this graph, so only the declared android coverage can reject the impossible requirement.
 		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
@@ -432,10 +482,9 @@ class GroupManifestValidatorTest {
 	void publishingRefusesNamesOnlyABroaderCaseFoldJoinsWhileLoadingKeepsThem() {
 		var fields = catalogue();
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = Map.of("config/stra\u00DFe.toml", fileOfType("config"), "config/strasse.toml", fileOfType("config"));
-		fields.categories = oneCategory("main", group);
+		fields.groups = linkedGroups("main", group);
 
 		GroupManifestValidator.validate(fields);
 		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validateForPublish(fields));
@@ -446,7 +495,7 @@ class GroupManifestValidatorTest {
 	@Test
 	void theSamePolicyDocumentAlwaysValidatesToTheSameManifest() {
 		var fields = catalogue();
-		fields.categories = oneCategory("main", group(file("a")));
+		fields.groups = linkedGroups("main", group(file("a")));
 
 		GroupManifest first = GroupManifestValidator.validate(fields);
 
@@ -457,8 +506,15 @@ class GroupManifestValidatorTest {
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.categories = new LinkedHashMap<>();
+		fields.groups = new LinkedHashMap<>();
 		return fields;
+	}
+
+	private static ModpackJsons.CompleteModpackContentFields.CategoryFields category(String name, CategoryPickMode pick) {
+		var cat = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+		cat.name = name;
+		cat.pick = pick;
+		return cat;
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group(ModpackJsons.CompleteModpackContentFields.GroupFileFields file) {
@@ -467,8 +523,7 @@ class GroupManifestValidatorTest {
 
 	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields groupAt(String path, ModpackJsons.CompleteModpackContentFields.GroupFileFields file) {
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.files = Map.of(path, file);
 		return group;
 	}
@@ -494,14 +549,9 @@ class GroupManifestValidatorTest {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> linkedCategories(Object... values) {
-		Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> categories = new LinkedHashMap<>();
-		for (int i = 0; i < values.length; i += 2)
-			categories.put((String) values[i], (Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>) values[i + 1]);
+	private static Map<String, ModpackJsons.CompleteModpackContentFields.CategoryFields> linkedCategories(Object... values) {
+		Map<String, ModpackJsons.CompleteModpackContentFields.CategoryFields> categories = new LinkedHashMap<>();
+		for (int i = 0; i < values.length; i += 2) categories.put((String) values[i], (ModpackJsons.CompleteModpackContentFields.CategoryFields) values[i + 1]);
 		return categories;
-	}
-
-	private static Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields>> oneCategory(Object... values) {
-		return linkedCategories("General", linkedGroups(values));
 	}
 }

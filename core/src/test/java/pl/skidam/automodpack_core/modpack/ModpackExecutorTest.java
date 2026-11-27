@@ -28,11 +28,13 @@ import pl.skidam.automodpack_core.TestEnvironment;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.config.ServerConfigStore;
+import pl.skidam.automodpack_core.config.TomlConfigs;
 import pl.skidam.automodpack_core.loader.LoaderManagerService.ModPlatform;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
@@ -623,7 +625,7 @@ class ModpackExecutorTest {
 			assertEquals(PackAbsence.Kind.NOTHING_FOUND, previewed.absence().orElseThrow().kind());
 
 			// Files that no group would hand out are refused too, and named as the group configuration they are.
-			ServerConfigStore.install(config(false, false));
+			ServerConfigStore.install(config(GroupSelectionMode.OPTIONAL));
 			Files.createDirectories(groups.resolve("main/config"));
 			Files.writeString(groups.resolve("main/config/example.txt"), "one", StandardCharsets.UTF_8);
 			ModpackExecutor.PublishResult.NothingToPublish unselected = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
@@ -631,7 +633,7 @@ class ModpackExecutorTest {
 			assertTrue(executor.currentDocument().isEmpty());
 
 			// A group selected by default is enough; only a required one is not the sole way out.
-			ServerConfigStore.install(config(false, true));
+			ServerConfigStore.install(config(GroupSelectionMode.RECOMMENDED));
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
 			assertNull(executor.packAbsence());
 			assertTrue(executor.currentDocument().isPresent());
@@ -640,7 +642,7 @@ class ModpackExecutorTest {
 			// earlier generation re-advertises it the same way a publish does.
 			Files.writeString(groups.resolve("main/config/example.txt"), "two", StandardCharsets.UTF_8);
 			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
-			ServerConfigStore.install(config(false, false));
+			ServerConfigStore.install(config(GroupSelectionMode.OPTIONAL));
 			ModpackExecutor.PublishResult.NothingToPublish refusedAgain = assertInstanceOf(ModpackExecutor.PublishResult.NothingToPublish.class, executor.publish());
 			assertEquals(PackAbsence.Kind.NOTHING_SELECTED, refusedAgain.absence().kind());
 			assertNotNull(executor.packAbsence());
@@ -659,49 +661,87 @@ class ModpackExecutorTest {
 	@Test
 	void theAbsenceVerdictIsAPropertyOfTheManifest() {
 		// An all-empty manifest refuses regardless of flags: there is nothing any selection could hand out.
-		assertEquals(PackAbsence.Kind.NOTHING_FOUND, ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{true, true}), Map.of())).kind());
+		assertEquals(PackAbsence.Kind.NOTHING_FOUND, ModpackExecutor.absenceOf(manifestOf(Map.of("main", GroupSelectionMode.REQUIRED), Map.of())).kind());
 
 		// The flags alone satisfy nobody: a selected-but-empty group next to files nobody receives is refused too.
-		PackAbsence unselected = ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{true, false}, "extra", new boolean[]{false, false}),
-				Map.of("main", Map.of(), "extra", Map.of("config/extra.txt", "extra"))));
+		PackAbsence unselected = ModpackExecutor.absenceOf(manifestOf(Map.of("main", GroupSelectionMode.REQUIRED, "extra", GroupSelectionMode.OPTIONAL, "unused-auto", GroupSelectionMode.AUTOMATIC),
+				Map.of("main", Map.of(), "extra", Map.of("config/extra.txt", "extra"), "unused-auto", Map.of("config/auto.txt", "auto"))));
 		assertEquals(PackAbsence.Kind.NOTHING_SELECTED, unselected.kind());
 
 		// A group that carries files and would be received is all the pack needs.
-		assertNull(ModpackExecutor.absenceOf(manifestOf(Map.of("main", new boolean[]{false, true}), Map.of("main", Map.of("config/a.txt", "a")))));
+		assertNull(ModpackExecutor.absenceOf(manifestOf(Map.of("main", GroupSelectionMode.RECOMMENDED), Map.of("main", Map.of("config/a.txt", "a")))));
+
+		// An EXACTLY_ONE category auto-picks its first option even when marked OPTIONAL, satisfying default selection.
+		ModpackJsons.CompleteModpackContentFields exclusiveFields = new ModpackJsons.CompleteModpackContentFields();
+		exclusiveFields.modpackId = "abc1234";
+		var shaders = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+		shaders.pick = CategoryPickMode.EXACTLY_ONE;
+		exclusiveFields.categories = Map.of("shaders", shaders);
+		var shaderA = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		shaderA.category = "shaders";
+		shaderA.selection = GroupSelectionMode.OPTIONAL;
+		String sha = HashUtils.sha1("s".getBytes(StandardCharsets.UTF_8));
+		shaderA.files = Map.of("shaderpacks/a.zip", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", false, sha, null));
+		exclusiveFields.groups = Map.of("shader-a", shaderA);
+		assertNull(ModpackExecutor.absenceOf(GroupManifestValidator.validate(exclusiveFields)));
+	}
+
+	@Test
+	void importFoldersAddsNonEmptyValidFoldersIntoServerToml() throws Exception {
+		Path serverToml = tempDir.resolve("server.toml");
+		ServerConfigJsons.ServerConfigFieldsV3 initial = TomlConfigs.readOrCreate(serverToml, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		Path groupRoot = tempDir.resolve("host-modpack");
+		Files.createDirectories(groupRoot.resolve("main"));
+		Files.createDirectories(groupRoot.resolve("shaders"));
+		Files.writeString(groupRoot.resolve("shaders/pack.txt"), "s", StandardCharsets.UTF_8);
+		Files.createDirectories(groupRoot.resolve("empty-dir"));
+		Files.createDirectories(groupRoot.resolve("Invalid.Name"));
+		Files.writeString(groupRoot.resolve("Invalid.Name/x.txt"), "x", StandardCharsets.UTF_8);
+
+		GroupInspector.ImportResult result = GroupInspector.importFolders(serverToml, groupRoot, initial.modpack, null);
+
+		assertEquals(List.of("shaders"), result.imported());
+		assertEquals(List.of("empty-dir (empty folder)"), result.skipped());
+		assertTrue(result.warnings().stream().anyMatch(w -> w.contains("Invalid.Name")), result.warnings().toString());
+		ServerConfigJsons.ServerConfigFieldsV3 reread = TomlConfigs.read(serverToml, ServerConfigJsons.ServerConfigFieldsV3.class).orElseThrow();
+		assertTrue(reread.modpack.groups.containsKey("shaders"));
+		assertEquals(GroupSelectionMode.OPTIONAL, reread.modpack.groups.get("shaders").selection);
 	}
 
 	private static ServerConfigJsons.ServerConfigFieldsV3 config() {
-		return config(true, false);
+		return config(GroupSelectionMode.REQUIRED);
 	}
 
-	private static ServerConfigJsons.ServerConfigFieldsV3 config(boolean required, boolean defaultSelected) {
+	private static ServerConfigJsons.ServerConfigFieldsV3 config(GroupSelectionMode selection) {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
-		main.selection = GroupSelectionMode.of(required, defaultSelected);
+		main.selection = selection;
 		main.fromServer = Set.of();
 		main.autoExcludeServerSideMods = ServerSideModExclusion.DISABLED;
-		config.modpack.categories = Map.of("General", Map.of("main", main));
+		config.modpack.autoExcludeServerSideMods = ServerSideModExclusion.DISABLED;
+		config.modpack.exclude = Set.of();
+		config.modpack.editable = Set.of();
+		config.modpack.groups = Map.of("main", main);
 		config.validateSecrets = false;
 		return config;
 	}
 
-	private static GroupManifest manifestOf(Map<String, boolean[]> groups, Map<String, Map<String, String>> filesByGroup) {
+	private static GroupManifest manifestOf(Map<String, GroupSelectionMode> groups, Map<String, Map<String, String>> filesByGroup) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> category = new HashMap<>();
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groupFields = new HashMap<>();
 		for (var entry : groups.entrySet()) {
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			group.required = entry.getValue()[0];
-			group.defaultSelected = entry.getValue()[1];
+			group.selection = entry.getValue();
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new HashMap<>();
 			for (var file : filesByGroup.getOrDefault(entry.getKey(), Map.of()).entrySet()) {
 				String sha1 = HashUtils.sha1(file.getValue().getBytes(StandardCharsets.UTF_8));
 				files.put(file.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.getValue().length()), false, sha1, null));
 			}
 			group.files = files;
-			category.put(entry.getKey(), group);
+			groupFields.put(entry.getKey(), group);
 		}
-		fields.categories = Map.of("General", category);
+		fields.groups = groupFields;
 		return GroupManifestValidator.validate(fields);
 	}
 

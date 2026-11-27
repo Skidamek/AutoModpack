@@ -30,6 +30,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
+import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
 import pl.skidam.automodpack_core.text.L10n;
@@ -687,8 +688,8 @@ public final class AutoTestBridge {
 			return;
 		}
 		if (!(listener instanceof AbstractWidget widget)) return;
-		// The row's checkbox is represented by the row element itself; exposing it again as a bare widget would duplicate every row.
-		if (listener instanceof CheckboxWidget) return;
+		// The row's primary control (checkbox/card) is represented by the row element itself; exposing it again as a bare widget would duplicate every row.
+		if (listener instanceof CheckboxWidget || listener instanceof GroupSelectionList.RowPrimaryControl) return;
 		widgets.add(widget);
 	}
 

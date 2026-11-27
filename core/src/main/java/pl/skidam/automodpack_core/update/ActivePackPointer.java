@@ -141,9 +141,8 @@ final class ActivePackPointer {
 
 	private void write(SelectionIntent applied, ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
 		SelectionIntent selection = Objects.requireNonNull(applied, "applied selection");
-		state.selectedGroups = List.copyOf(selection.requestedGroups());
-		state.selectedCategories = List.copyOf(selection.requestedCategories());
-		state.excludedGroups = List.copyOf(selection.excludedGroups());
+		state.enabledGroups = List.copyOf(selection.enabled());
+		state.disabledGroups = List.copyOf(selection.disabled());
 		state.selectedPlatform = selection.platform() == null ? null : selection.platform().id();
 		publish(state);
 	}
@@ -179,9 +178,8 @@ final class ActivePackPointer {
 		copy.manifest = state.manifest;
 		copy.manifestSha1 = state.manifestSha1;
 		copy.createdAt = state.createdAt;
-		copy.selectedGroups = state.selectedGroups;
-		copy.selectedCategories = state.selectedCategories;
-		copy.excludedGroups = state.excludedGroups;
+		copy.enabledGroups = state.enabledGroups;
+		copy.disabledGroups = state.disabledGroups;
 		copy.selectedPlatform = state.selectedPlatform;
 		copy.detached = state.detached;
 		return copy;

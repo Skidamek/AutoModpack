@@ -135,7 +135,7 @@ public class ModpackUpdater implements AutoCloseable {
 	void reselectTarget(SelectionIntent intent) {
 		Objects.requireNonNull(intent, "intent");
 		SelectedModpackTarget current = getSelectedTarget();
-		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.document(), current.expectedPriorIntent(), intent, current.platform());
+		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.document(), current.expectedPriorIntent(), intent, ClientPlatform.effective(intent));
 		selectedTarget = replacement;
 		serverModpackContent = replacement.flatTarget();
 	}

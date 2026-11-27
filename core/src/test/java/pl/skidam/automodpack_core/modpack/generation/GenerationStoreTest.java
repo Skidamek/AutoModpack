@@ -31,9 +31,11 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -55,7 +57,7 @@ class GenerationStoreTest {
 		GenerationStore.Current current = store.loadCurrent().orElseThrow();
 		assertEquals(root.entry().seq(), current.seq());
 		assertEquals("First", root.entry().notes());
-		assertEquals("one", current.manifest().toFields().categories.get("General").get("main").description);
+		assertEquals("one", current.manifest().toFields().groups.get("main").description);
 		assertEquals(1, current.seq());
 
 		GenerationStore.Publication second = store.publish(candidate("two", "content-two"), "Second", null);
@@ -105,8 +107,8 @@ class GenerationStoreTest {
 		ContentTree tree = ContentTree.fromManifest(publication.manifest());
 		assertEquals(2, tree.size());
 		assertEquals(Set.of(performanceHash, fantasyHash), tree.objectHashes());
-		var performance = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), new SelectionIntent(Set.of("performance")), ClientPlatform.LINUX));
-		var fantasy = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), new SelectionIntent(Set.of("fantasy")), ClientPlatform.LINUX));
+		var performance = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), SelectionIntent.ofEnabled(Set.of("performance")), ClientPlatform.LINUX));
+		var fantasy = SelectedTreeComposer.compose(publication.manifest(), GroupSelectionResolver.resolve(publication.manifest(), SelectionIntent.ofEnabled(Set.of("fantasy")), ClientPlatform.LINUX));
 		assertEquals(performanceHash, performance.list.iterator().next().sha1);
 		assertEquals(fantasyHash, fantasy.list.iterator().next().sha1);
 		assertNotEquals(ContentTree.tokenOf(TestPacks.manifest("only", "config/example.txt", performanceText)), publication.entry().contentToken());
@@ -433,7 +435,7 @@ class GenerationStoreTest {
 		GenerationStore reopened = new GenerationStore(state, objects);
 		GenerationStore.Current current = reopened.loadCurrent().orElseThrow();
 		assertEquals(2, current.seq());
-		assertEquals("renamed", current.manifest().toFields().categories.get("General").get("main").description);
+		assertEquals("renamed", current.manifest().toFields().groups.get("main").description);
 
 		// Republishing the very same policy again changes nothing at all: the head stays where it is.
 		GenerationStore.Publication unchanged = reopened.publish(candidate("renamed", "content-one"), "Nothing", null);
@@ -504,11 +506,10 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = "one";
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("8", false, sha1("tampered"), null));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		Path policyObject = DataRootResolver.objectFile(objects, root.entry().policySha1());
 		Files.write(policyObject, ConfigTools.GSON.toJson(fields).getBytes(StandardCharsets.UTF_8));
 
@@ -540,18 +541,17 @@ class GenerationStoreTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileEntry(GenerationJsons.HeadDocumentFields fields) {
-		return fields.policy.categories.get("General").get("main").files.get("config/example.txt");
+		return fields.policy.groups.get("main").files.get("config/example.txt");
 	}
 
 	private static GroupManifest manifest(String description, String content) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, sha1(content), null));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 
@@ -578,11 +578,10 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = "multi";
 		group.files = entries;
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of());
 	}
 
@@ -594,19 +593,21 @@ class GenerationStoreTest {
 		Files.writeString(fantasyFile, fantasyContent, StandardCharsets.UTF_8);
 		String performanceHash = sha1(performanceContent);
 		String fantasyHash = sha1(fantasyContent);
+		var variant = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+		variant.name = "Variant";
+		variant.pick = CategoryPickMode.AT_MOST_ONE;
 		var performance = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		performance.required = false;
-		performance.defaultSelected = false;
-		performance.breaksWith = Set.of("fantasy");
+		performance.category = "variant";
+		performance.selection = GroupSelectionMode.OPTIONAL;
 		performance.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(performanceContent.length()), false, performanceHash, null));
 		var fantasy = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		fantasy.required = false;
-		fantasy.defaultSelected = false;
-		fantasy.breaksWith = Set.of("performance");
+		fantasy.category = "variant";
+		fantasy.selection = GroupSelectionMode.OPTIONAL;
 		fantasy.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(fantasyContent.length()), false, fantasyHash, null));
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.categories = Map.of("General", Map.of("performance", performance, "fantasy", fantasy));
+		fields.categories = Map.of("variant", variant);
+		fields.groups = Map.of("performance", performance, "fantasy", fantasy);
 		TreeMap<String, StagedObject> staged = new TreeMap<>();
 		staged.put(performanceHash, stagedObject(performanceFile, performanceHash, performanceContent.length()));
 		staged.put(fantasyHash, stagedObject(fantasyFile, fantasyHash, fantasyContent.length()));
@@ -621,11 +622,10 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.description = description;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, hash, null));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of());
 	}

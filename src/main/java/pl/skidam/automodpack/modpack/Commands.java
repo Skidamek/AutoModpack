@@ -186,6 +186,12 @@ public class Commands {
 					.then(literal("groups")
 							.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 							.executes(Commands::modpackGroups)
+							.then(literal("import")
+									.executes(Commands::modpackGroupsImportAll)
+									.then(argument("folder", StringArgumentType.word())
+											.executes(Commands::modpackGroupsImportOne)
+									)
+							)
 							.then(argument("group-id", StringArgumentType.word())
 									.executes(Commands::modpackGroupDetail)
 							)
@@ -798,7 +804,7 @@ public class Commands {
 		runAsync(context, "Group overview", () -> {
 			try {
 				Optional<PackDocument> published = Hosting.role().currentDocument();
-				for (String line : GroupInspector.overview(ServerConfigStore.current().modpack.categories, published.map(PackDocument::manifest).orElse(null)))
+				for (String line : GroupInspector.overview(ServerConfigStore.current().modpack, published.map(PackDocument::manifest).orElse(null)))
 					send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
 				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
@@ -812,7 +818,7 @@ public class Commands {
 		runAsync(context, "Group detail", () -> {
 			try {
 				Optional<PackDocument> published = Hosting.role().currentDocument();
-				Optional<List<String>> lines = GroupInspector.detail(ServerConfigStore.current().modpack.categories, groupId, published.map(PackDocument::manifest).orElse(null));
+				Optional<List<String>> lines = GroupInspector.detail(ServerConfigStore.current().modpack, groupId, published.map(PackDocument::manifest).orElse(null));
 				if (lines.isEmpty()) {
 					send(context, "Unknown group id: " + groupId + ". Run /automodpack groups for the list.", ChatFormatting.RED, false);
 					return;
@@ -820,6 +826,35 @@ public class Commands {
 				for (String line : lines.get()) send(context, line, ChatFormatting.WHITE, false);
 			} catch (IOException e) {
 				send(context, "Failed to read the published modpack: " + e.getMessage(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int modpackGroupsImportAll(CommandContext<CommandSourceStack> context) {
+		return importGroups(context, null);
+	}
+
+	private static int modpackGroupsImportOne(CommandContext<CommandSourceStack> context) {
+		return importGroups(context, StringArgumentType.getString(context, "folder"));
+	}
+
+	private static int importGroups(CommandContext<CommandSourceStack> context, String folder) {
+		runAsync(context, "Import groups", () -> {
+			try {
+				GroupInspector.ImportResult result = GroupInspector.importFolders(StoragePaths.SERVER_CONFIG_FILE,
+						GameDirectory.current().resolve(StoragePaths.HOST_MODPACK_DIR), ServerConfigStore.current().modpack, folder);
+				if (!result.imported().isEmpty()) {
+					ConfigUtils.reloadServerConfig();
+					send(context, "Imported group(s) into server.toml: " + String.join(", ", result.imported()), ChatFormatting.GREEN, false);
+					send(context, "Run /automodpack generate to publish the updated group list.", ChatFormatting.GRAY, false);
+				}
+				if (!result.skipped().isEmpty()) send(context, "Skipped: " + String.join(", ", result.skipped()), ChatFormatting.YELLOW, false);
+				for (String warning : result.warnings()) send(context, warning, ChatFormatting.RED, false);
+				if (result.imported().isEmpty() && result.skipped().isEmpty() && result.warnings().isEmpty())
+					send(context, "No undeclared non-empty group folders found under host-modpack/.", ChatFormatting.YELLOW, false);
+			} catch (Exception e) {
+				send(context, "Failed to import group folders: " + e.getMessage(), ChatFormatting.RED, true);
 			}
 		});
 		return Command.SINGLE_SUCCESS;

@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.config.ServerConfigStore;
 import pl.skidam.automodpack_core.config.WireJsons;
 import pl.skidam.automodpack_core.modpack.PackAbsence;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.host.HostAdvertisement;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -114,19 +115,17 @@ class AdvertiseEndpointTest {
 			head.policy.loaderVersion = "0.16.10";
 
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields core = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			core.required = true;
-			core.defaultSelected = true;
+			core.selection = GroupSelectionMode.REQUIRED;
 			core.files = Map.of("mods/core.jar", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("100", false, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", null));
 
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields opt = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			opt.required = false;
-			opt.defaultSelected = false;
+			opt.selection = GroupSelectionMode.OPTIONAL;
 			opt.files = Map.of("mods/optional.jar", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("900", false, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", null));
 
 			Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
 			groups.put("core", core);
 			groups.put("optional", opt);
-			head.policy.categories = Map.of("Main", groups);
+			head.policy.groups = groups;
 			Files.writeString(headFile, ConfigTools.GSON.toJson(head), StandardCharsets.UTF_8);
 
 			WireJsons.AdvertiseFields ad = HostAdvertisement.build(new GenerationHosting(Map.of(GenerationHosting.HEAD_DOCUMENT_KEY, headFile)), null);

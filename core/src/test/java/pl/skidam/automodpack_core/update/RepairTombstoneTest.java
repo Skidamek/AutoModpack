@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -49,7 +50,7 @@ class RepairTombstoneTest {
 		OwnershipLedger parent = TestPacks.document(manifest(earlier)).ownershipLedger();
 		PackDocument document = TestPacks.document(manifest(Map.of("config/kept.toml", kept)), parent, TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
 		storage.writeActiveState(document);
 		write(storage.activePath("config/kept.toml"), kept);
@@ -78,7 +79,7 @@ class RepairTombstoneTest {
 		OwnershipLedger parent = TestPacks.document(manifest(Map.of("config/Foo.toml", bytes))).ownershipLedger();
 		PackDocument document = TestPacks.document(manifest(Map.of("config/foo.toml", bytes)), parent, TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
 		storage.writeActiveState(document);
 		write(storage.activePath("config/foo.toml"), bytes);
@@ -103,7 +104,7 @@ class RepairTombstoneTest {
 		OwnershipLedger parent = TestPacks.document(manifest(Map.of("config/Foo.toml", bytes))).ownershipLedger();
 		PackDocument document = TestPacks.document(manifest(Map.of("config/foo.toml", bytes)), parent, TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		new ClientSelectionStore(storage.selectionFile()).put(document.manifest().modpackId(), target.selection().intent());
 		storage.writeActiveState(document);
 		write(storage.activePath("config/foo.toml"), bytes);
@@ -123,12 +124,11 @@ class RepairTombstoneTest {
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		contents.forEach((path, bytes) -> files.put(path, new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), false, HashUtils.sha1(bytes), "0")));
 		group.files = files;
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 

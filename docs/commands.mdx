@@ -41,5 +41,6 @@ Both bootstrap exports contain trust data or a provisioning secret. Treat them l
 
 ## Groups
 
-- `groups` - Lists every modpack group under its category, with published file counts and sizes.
-- `groups <group-id>` - Shows one group's flags, dependencies, glob rules, and the files its published generation carries.
+- `groups` - Lists configured categories and groups with their selection modes, dependencies, and published file counts and sizes.
+- `groups <group-id>` - Shows one group's settings, category, dependencies, file rules, and published files.
+- `groups import [folder]` - Creates `[groups.<id>]` entries in `server.toml` for undeclared non-empty directories under `automodpack/host-modpack/`. Pass `folder` to import one directory.

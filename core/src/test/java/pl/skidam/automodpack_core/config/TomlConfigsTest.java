@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,12 +10,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ServerConfigJsons.ServerConfigFieldsV3;
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -39,17 +43,17 @@ class TomlConfigsTest {
 		assertTrue(text.contains("[nag]"), text);
 		assertTrue(text.contains("[export-http]"), text);
 		assertTrue(text.contains("[modpack]"), text);
-		assertTrue(text.contains("[modpack.groups.General.main]"), text);
+		assertTrue(text.contains("[groups.main]"), text);
+		assertFalse(text.contains("[modpack.groups"), text);
+		assertFalse(text.contains("[categories"), text);
 		assertTrue(text.contains("from-server = [\"mods/*.jar\", \"kubejs/**\", \"emotes/*\"]"), text);
-		assertTrue(text.contains("# extra paths from the server root"), text);
-		assertTrue(text.contains("name = \"\""), text);
-		assertTrue(text.contains("# REQUIRED is always installed. RECOMMENDED is pre-selected, players can opt out. OPTIONAL starts unchecked."), text);
+		assertTrue(text.contains("name = \"Core\""), text);
 		assertTrue(text.contains("selection = \"REQUIRED\""), text);
 		assertTrue(text.contains("auto-exclude-server-side-mods = \"METADATA\""), text);
-		assertTrue(text.contains("Use exclude for anything else."), text);
 		assertFalse(text.contains("default-selected"), text);
 		assertEquals("", config.modpack.name);
-		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.autoExcludeServerSideMods);
+		assertNull(config.modpack.groups.get("main").autoExcludeServerSideMods);
 	}
 
 	@Test
@@ -96,9 +100,9 @@ class TomlConfigsTest {
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		String withoutComments = text
 				.replaceAll("(?m)^[ \\t]*# require a login-issued download secret\\R", "")
-				.replaceAll("(?m)^[ \\t]*# extra paths from the server root\\R", "");
+				.replaceAll("(?m)^[ \\t]*# host-modpack/<id>/ is included in full.*\\R", "");
 		assertFalse(withoutComments.contains("require a login-issued download secret"));
-		assertFalse(withoutComments.contains("extra paths from the server root"));
+		assertFalse(withoutComments.contains("host-modpack/<id>/ is included in full"));
 		Files.writeString(serverConfig(), withoutComments, StandardCharsets.UTF_8);
 
 		ServerConfigFieldsV3 config = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
@@ -106,7 +110,7 @@ class TomlConfigsTest {
 
 		String after = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertFalse(after.contains("require a login-issued download secret"), after);
-		assertFalse(after.contains("extra paths from the server root"), after);
+		assertFalse(after.contains("host-modpack/<id>/ is included in full"), after);
 		assertTrue(after.contains("validate = true"), after);
 		assertTrue(after.contains("from-server ="), after);
 	}
@@ -146,18 +150,18 @@ class TomlConfigsTest {
 	@Test
 	void saveRemovesArrayElementsTheModelDropped() throws IOException {
 		String userFile = """
-				[modpack.groups.General.main]
+				[groups.main]
 				from-server = ['mods/*.jar', 'kubejs/**']
 				""";
 		Files.writeString(serverConfig(), userFile, StandardCharsets.UTF_8);
 		ServerConfigFieldsV3 config = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		config.modpack.categories.get("General").get("main").fromServer = Set.of("mods/*.jar");
+		config.modpack.groups.get("main").fromServer = Set.of("mods/*.jar");
 		TomlConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("mods/*.jar"), "kept rule lost:\n" + text);
-		assertFalse(text.contains("kubejs"), "removed rule resurrected:\n" + text);
+		assertFalse(text.contains("kubejs/**"), "removed rule resurrected:\n" + text);
 		assertEquals(Set.of("mods/*.jar"),
-				TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.categories.get("General").get("main").fromServer);
+				TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow().modpack.groups.get("main").fromServer);
 	}
 
 	@Test
@@ -166,25 +170,38 @@ class TomlConfigsTest {
 				[network]
 				connection-mode = "holepunch"
 
-				[modpack.groups.General.main]
+				[modpack]
+				auto-exclude-server-side-mods = "platforms"
+
+				[categories.shaders]
+				pick = "at_most_one"
+
+				[groups.main]
+				category = "shaders"
 				selection = "recommended"
 				auto-exclude-server-side-mods = "metadata"
 				""";
 		Files.writeString(serverConfig(), mixed, StandardCharsets.UTF_8);
 		ServerConfigFieldsV3 config = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
-		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.categories.get("General").get("main").selection);
-		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.autoExcludeServerSideMods);
+		assertEquals(CategoryPickMode.AT_MOST_ONE, config.modpack.categories.get("shaders").pick);
+		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.groups.get("main").selection);
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.groups.get("main").autoExcludeServerSideMods);
 		assertEquals(mixed, Files.readString(serverConfig(), StandardCharsets.UTF_8));
 
 		TomlConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
 		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
 		assertTrue(text.contains("connection-mode = \"HOLEPUNCH\""), text);
+		assertTrue(text.contains("pick = \"AT_MOST_ONE\""), text);
 		assertTrue(text.contains("selection = \"RECOMMENDED\""), text);
+		assertTrue(text.contains("auto-exclude-server-side-mods = \"PLATFORMS\""), text);
 		assertTrue(text.contains("auto-exclude-server-side-mods = \"METADATA\""), text);
-		assertFalse(text.contains("connection-mode = \"holepunch\""), text);
-		assertFalse(text.contains("selection = \"recommended\""), text);
-		assertFalse(text.contains("auto-exclude-server-side-mods = \"metadata\""), text);
+		assertFalse(text.contains("\"holepunch\""), text);
+		assertFalse(text.contains("\"at_most_one\""), text);
+		assertFalse(text.contains("\"recommended\""), text);
+		assertFalse(text.contains("\"platforms\""), text);
+		assertFalse(text.contains("\"metadata\""), text);
 	}
 
 	@Test
@@ -195,17 +212,47 @@ class TomlConfigsTest {
 	}
 
 	@Test
-	void categoryNamedNameDoesNotCollideWithModpackName() throws IOException {
-		String src = """
-				[modpack]
-				name = "My Pack"
+	void categoryAndGroupTablesRoundTripSparselyWithoutBloatingOptionalKeys() throws IOException {
+		ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
+		ServerConfigJsons.CategoryDeclaration shaders = new ServerConfigJsons.CategoryDeclaration();
+		shaders.name = "Shaders";
+		shaders.pick = CategoryPickMode.AT_MOST_ONE;
+		config.modpack.categories.put("shaders", shaders);
+		ServerConfigJsons.GroupDeclaration bsl = new ServerConfigJsons.GroupDeclaration();
+		bsl.name = "BSL Shaders";
+		bsl.category = "shaders";
+		bsl.selection = GroupSelectionMode.RECOMMENDED;
+		config.modpack.groups.put("bsl", bsl);
 
-				[modpack.groups.name.main]
-				selection = "REQUIRED"
-				""";
-		Files.writeString(serverConfig(), src, StandardCharsets.UTF_8);
-		ServerConfigFieldsV3 config = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
-		assertEquals("My Pack", config.modpack.name);
-		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("name").get("main").selection);
+		TomlConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("[categories.shaders]"), text);
+		assertTrue(text.contains("[groups.bsl]"), text);
+		assertFalse(text.contains("[groups.bsl]\nname = \"BSL Shaders\"\ndescription"), "blank description should stay omitted sparsely:\n" + text);
+		ServerConfigFieldsV3 reread = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals("Shaders", reread.modpack.categories.get("shaders").name);
+		assertEquals(CategoryPickMode.AT_MOST_ONE, reread.modpack.categories.get("shaders").pick);
+		assertEquals(GroupSelectionMode.RECOMMENDED, reread.modpack.groups.get("bsl").selection);
+		assertNull(reread.modpack.groups.get("bsl").autoExcludeServerSideMods);
+	}
+
+	@Test
+	void insertImportedGroupsAppendsNewGroupsLosslesslyWithoutTouchingExistingTables() throws IOException {
+		String existing = "# header comment\r\nmodpack-host = true\r\n\r\n[groups.main]\r\nselection = \"REQUIRED\" # keep inline\r\n";
+		Files.writeString(serverConfig(), existing, StandardCharsets.UTF_8);
+		Map<String, ServerConfigJsons.GroupDeclaration> imported = new LinkedHashMap<>();
+		ServerConfigJsons.GroupDeclaration extras = new ServerConfigJsons.GroupDeclaration();
+		extras.selection = GroupSelectionMode.OPTIONAL;
+		imported.put("extras", extras);
+		imported.put("main", new ServerConfigJsons.GroupDeclaration());
+
+		TomlConfigs.insertImportedGroups(serverConfig(), imported);
+		String after = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(after.contains("# header comment\r\n"), after);
+		assertTrue(after.contains("selection = \"REQUIRED\" # keep inline"), after);
+		assertTrue(after.contains("[groups.extras]"), after);
+		ServerConfigFieldsV3 reread = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(GroupSelectionMode.REQUIRED, reread.modpack.groups.get("main").selection, "existing main must not be overwritten");
+		assertEquals(GroupSelectionMode.OPTIONAL, reread.modpack.groups.get("extras").selection);
 	}
 }

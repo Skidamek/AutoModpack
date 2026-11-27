@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
@@ -41,11 +42,8 @@ import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
-import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -98,25 +96,6 @@ final class InstalledModpackController {
 	/** The selection the active pointer committed under; the prior every switch, activation, and update plans against. */
 	private SelectionIntent appliedSelection(String modpackId) throws IOException {
 		return new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null);
-	}
-
-	/** One applied selection change, the conflict the player must settle first, or the player-facing reason the change cannot apply. */
-	record SelectionChange(SelectionIntent intent, ResolvedSelection resolution, GroupSelectionResolver.ConflictReplacement conflict, String failure) {}
-
-	/**
-	 * The outcome of applying one selection change: the resolver's answer when it holds, otherwise the conflict offer that
-	 * can settle it, otherwise the reason it cannot. Screens route between the outcomes; the resolver policy stays here.
-	 */
-	SelectionChange planSelectionChange(GroupManifest manifest, SelectionIntent next, Set<String> preferredGroups, String preferredName, ClientPlatform platform) {
-		try {
-			return new SelectionChange(next, GroupSelectionResolver.resolve(manifest, next, platform), null, null);
-		} catch (SelectionResolutionException exception) {
-			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, platform, exception.resolution()).orElse(null);
-			if (replacement != null) return new SelectionChange(next, null, replacement, null);
-			return new SelectionChange(next, null, null, preferredGroups.isEmpty()
-					? VersionedText.str("automodpack.selection.changeInvalid")
-					: VersionedText.str("automodpack.selection.cannotSelect", preferredName));
-		}
 	}
 
 	boolean relayed(InstalledPacks.Pack pack) {
@@ -320,7 +299,9 @@ final class InstalledModpackController {
 	boolean pendingGroupChanges(InstalledPacks.Pack pack) {
 		try {
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
-			return desired != null && !desired.equals(appliedSelection(pack.modpackId()));
+			if (desired == null) return false;
+			SelectionIntent applied = appliedSelection(pack.modpackId());
+			return !desired.equals(applied) || !Objects.equals(ClientPlatform.effective(desired), ClientPlatform.effective(applied));
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
@@ -399,7 +380,7 @@ final class InstalledModpackController {
 	void activate(InstalledPacks.Pack pack, Runnable released) {
 		try {
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
-			SelectionIntent targetSelection = desired == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : desired;
+			SelectionIntent targetSelection = desired == null ? SelectionIntent.DEFAULTS : desired;
 			SwitchFlow.start(storage, pack.record(), appliedSelection(pack.modpackId()), targetSelection, pack.name(), released, LoaderServices.modpackLoader());
 		} catch (IOException | RuntimeException e) {
 			released.run();
@@ -460,8 +441,7 @@ final class InstalledModpackController {
 	/** A group id to display-name map for a manifest; unnamed groups fall back to their id. */
 	static Map<String, String> groupNames(GroupManifest manifest) {
 		Map<String, String> names = new TreeMap<>();
-		manifest.groups().forEach((groupId, group) -> names.put(groupId,
-				group.displayName().isBlank() ? groupId : group.displayName()));
+		manifest.groups().forEach((groupId, group) -> names.put(groupId, manifest.displayName(groupId)));
 		return Map.copyOf(names);
 	}
 
