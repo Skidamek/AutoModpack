@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -78,8 +79,7 @@ class GeneratedCopyStateCorruptionTest {
 		state.modpackId = MODPACK_ID;
 		state.contentToken = CONTENT_TOKEN;
 		state.ownershipLedger = OwnershipLedger.empty(MODPACK_ID).toFields();
-		state.enabledGroups = List.copyOf(applied.enabled());
-		state.disabledGroups = List.of();
+		state.selection = SelectionJsons.SelectionFields.from(applied);
 		ConfigTools.writeAtomic(activeState, state);
 
 		ClientStorage storage = TestDataRoot.open(tempDir.resolve("game"), tempDir.resolve("data"));

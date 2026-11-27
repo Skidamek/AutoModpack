@@ -22,8 +22,8 @@ public final class ClientSelectionStore {
 	public Optional<SelectionIntent> get(String modpackId) {
 		ModpackId.requireValid(modpackId);
 		SelectionJsons.ClientSelectionStoreFields fields = read();
-		SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get(modpackId);
-		return selection == null ? Optional.empty() : Optional.of(intent(selection));
+		SelectionJsons.SelectionFields selection = fields.selections.get(modpackId);
+		return selection == null ? Optional.empty() : Optional.of(selection.toIntent());
 	}
 
 	/** Records the desire verbatim: the store is the player's declared choice, and the last consent wins. */
@@ -31,9 +31,7 @@ public final class ClientSelectionStore {
 		ModpackId.requireValid(modpackId);
 		Objects.requireNonNull(target);
 		SelectionJsons.ClientSelectionStoreFields fields = read();
-		fields.selections.put(modpackId, new SelectionJsons.ClientSelectionStoreFields.ModpackSelection(
-				new LinkedHashSet<>(target.enabled()), new LinkedHashSet<>(target.disabled()),
-				target.platform() == null ? null : target.platform().id()));
+		fields.selections.put(modpackId, SelectionJsons.SelectionFields.from(target));
 		fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 		ConfigTools.writeAtomic(path, fields);
 	}
@@ -45,14 +43,6 @@ public final class ClientSelectionStore {
 		if (fields.selections.remove(modpackId) == null) return;
 		fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 		ConfigTools.writeAtomic(path, fields);
-	}
-
-	private static SelectionIntent intent(SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection) {
-		return new SelectionIntent(selection.enabled, selection.disabled, platform(selection.platform));
-	}
-
-	private static ClientPlatform platform(String platform) {
-		return platform == null ? null : ClientPlatform.parse(platform);
 	}
 
 	private SelectionJsons.ClientSelectionStoreFields read() {
@@ -72,8 +62,10 @@ public final class ClientSelectionStore {
 		if (fields.selections == null) fields.selections = new LinkedHashMap<>();
 		for (var entry : fields.selections.entrySet()) {
 			ModpackId.requireValid(entry.getKey());
-			if (entry.getValue() == null) throw new IllegalArgumentException("Selection entry for " + entry.getKey() + " is null");
-			intent(entry.getValue());
+			SelectionJsons.SelectionFields value = entry.getValue();
+			if (value == null || value.enabled == null || value.disabled == null)
+				throw new IllegalArgumentException("Selection entry for " + entry.getKey() + " is incomplete");
+			value.toIntent();
 		}
 		return fields;
 	}

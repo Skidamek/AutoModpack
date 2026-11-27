@@ -70,7 +70,7 @@ class ClientGenerationStoreTest {
 		ClientStorageJsons.ClientGenerationStateFields read = storage.readActiveState();
 		read.contentToken = "0".repeat(40);
 		read.detached = true;
-		read.enabledGroups = List.of("tampered");
+		read.selection.enabled = List.of("tampered");
 		read.manifest = null;
 		read.ownershipLedger = null;
 
@@ -78,7 +78,7 @@ class ClientGenerationStoreTest {
 		assertEquals(document.contentToken(), next.contentToken, "the parse is cached, the document it hands out is not");
 		assertFalse(next.detached);
 		assertNotNull(next.manifest);
-		assertEquals(List.of("main"), next.enabledGroups);
+		assertEquals(List.of("main"), next.selection.enabled);
 		assertEquals(document.contentToken(), new ClientGenerationStore(storage).activeDocument().orElseThrow().contentToken());
 	}
 

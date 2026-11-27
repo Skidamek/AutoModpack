@@ -2,14 +2,14 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -31,12 +31,8 @@ public final class UpdateTransaction {
 	public Purpose purpose;
 	/** The durable plan. A class tree, not records: the Gson shipped in Minecraft 1.18 cannot deserialize records. */
 	public UpdatePlan plan;
-	public String targetPlatform;
-	public boolean expectedPriorSelectionPresent;
-	public List<String> expectedPriorEnabledGroups;
-	public List<String> expectedPriorDisabledGroups;
-	public List<String> enabledGroups;
-	public List<String> disabledGroups;
+	public SelectionJsons.SelectionFields expectedPriorSelection;
+	public SelectionJsons.SelectionFields targetSelection;
 	public String overlayDigest;
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public String expectedSelectedModpackId;
@@ -73,12 +69,9 @@ public final class UpdateTransaction {
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
-		transaction.targetPlatform = target.platform() == null ? null : target.platform().id();
-		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
-		transaction.expectedPriorEnabledGroups = intentValues(target.expectedPriorIntent(), IntentPart.ENABLED);
-		transaction.expectedPriorDisabledGroups = intentValues(target.expectedPriorIntent(), IntentPart.DISABLED);
-		transaction.enabledGroups = new ArrayList<>(target.selection().intent().enabled());
-		transaction.disabledGroups = new ArrayList<>(target.selection().intent().disabled());
+		transaction.expectedPriorSelection = SelectionJsons.SelectionFields.from(target.expectedPriorIntent());
+		SelectionIntent targetIntent = target.selection().intent().withPlatform(target.platform());
+		transaction.targetSelection = SelectionJsons.SelectionFields.from(targetIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -102,12 +95,8 @@ public final class UpdateTransaction {
 		OwnershipLedger ledger = OwnershipLedger.fromFields(Objects.requireNonNull(plannedAgainst.installedLedger(), "plannedAgainst.installedLedger"));
 		UpdateTransaction transaction = base(purpose);
 		fillGeneration(transaction, plan.packTarget(), ledger);
-		transaction.targetPlatform = platform == null ? null : platform.id();
-		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
-		transaction.expectedPriorEnabledGroups = intentValues(expectedPriorIntent, IntentPart.ENABLED);
-		transaction.expectedPriorDisabledGroups = intentValues(expectedPriorIntent, IntentPart.DISABLED);
-		transaction.enabledGroups = List.of();
-		transaction.disabledGroups = List.of();
+		transaction.expectedPriorSelection = SelectionJsons.SelectionFields.from(expectedPriorIntent);
+		transaction.targetSelection = SelectionJsons.SelectionFields.from(new SelectionIntent(Set.of(), Set.of(), platform));
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -131,18 +120,6 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	private enum IntentPart {
-		ENABLED, DISABLED
-	}
-
-	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
-		if (intent == null) return List.of();
-		return switch (part) {
-			case ENABLED -> new ArrayList<>(intent.enabled());
-			case DISABLED -> new ArrayList<>(intent.disabled());
-		};
-	}
-
 	public UpdatePlan plan() {
 		return plan;
 	}
@@ -156,7 +133,7 @@ public final class UpdateTransaction {
 	}
 
 	public ClientPlatform platform() {
-		return targetPlatform == null ? null : ClientPlatform.parse(targetPlatform);
+		return targetSelection == null || targetSelection.platform == null ? null : ClientPlatform.parse(targetSelection.platform);
 	}
 
 	/** The installed projection this plan was planned against, or null when the plan saw no installed generation. */
@@ -165,12 +142,12 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorEnabledGroups, expectedPriorDisabledGroups) : null;
+		return expectedPriorSelection == null ? null : expectedPriorSelection.toIntent();
 	}
 
 	/** The target selection carrying the platform this transaction resolved under, so the commit pins the exact resolution. */
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(enabledGroups, disabledGroups, platform());
+		return targetSelection.toIntent();
 	}
 
 	/** The selection the transaction plans for; generated-copy state is keyed by it. */

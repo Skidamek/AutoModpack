@@ -361,8 +361,10 @@ class BestEffortApplyTest {
 			try (var fixture = BestEffortApplyTest.class.getResourceAsStream("journals/" + release)) {
 				released.addAll(keys(JsonParser.parseString(new String(fixture.readAllBytes(), StandardCharsets.UTF_8)), ""));
 			}
-		// rc.5's UpdateTransaction declares both result fields; its fixtures leave them null, and v3 replaced requested*/excluded* with sparse enabled*/disabled*.
-		released.addAll(Set.of("resultOperation", "resultPath", "enabledGroups", "disabledGroups", "expectedPriorEnabledGroups", "expectedPriorDisabledGroups"));
+		// rc.5's UpdateTransaction declares both result fields; its fixtures leave them null, and v3 replaced requested*/excluded* with SelectionFields.
+		released.addAll(Set.of("resultOperation", "resultPath",
+				"targetSelection", "targetSelection.enabled", "targetSelection.disabled", "targetSelection.platform",
+				"expectedPriorSelection", "expectedPriorSelection.enabled", "expectedPriorSelection.disabled", "expectedPriorSelection.platform"));
 
 		Set<String> unknown = new TreeSet<>(written);
 		unknown.removeAll(released);

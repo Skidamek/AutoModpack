@@ -15,7 +15,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -24,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import pl.skidam.automodpack_core.Environment;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -273,9 +273,7 @@ public final class InstanceTree {
 		fields.activeModpackId = identity.activeModpackId();
 		fields.contentToken = identity.contentToken();
 		fields.detached = identity.detached();
-		SelectionIntent selection = identity.selection();
-		fields.enabledGroups = selection == null ? List.of() : List.copyOf(selection.enabled());
-		fields.disabledGroups = selection == null ? List.of() : List.copyOf(selection.disabled());
+		fields.selection = SelectionJsons.SelectionFields.from(identity.selection());
 		List<ClientStorageJsons.InstanceTreeFields.TombstoneFields> tombstones = new ArrayList<>();
 		for (Tombstone tombstone : identity.tombstones()) {
 			ClientStorageJsons.InstanceTreeFields.TombstoneFields row = new ClientStorageJsons.InstanceTreeFields.TombstoneFields();
@@ -306,13 +304,7 @@ public final class InstanceTree {
 		List<Tombstone> tombstones = new ArrayList<>();
 		for (ClientStorageJsons.InstanceTreeFields.TombstoneFields row : fields.tombstones)
 			tombstones.add(new Tombstone(row.modpackId, row.deletedPaths == null ? List.of() : row.deletedPaths));
-		SelectionIntent selection = fields.activeModpackId == null || fields.activeModpackId.isBlank()
-				? null
-				: new SelectionIntent(set(fields.enabledGroups), set(fields.disabledGroups));
+		SelectionIntent selection = fields.selection == null ? null : fields.selection.toIntent();
 		return of(new LiveIdentity(fields.activeModpackId, fields.contentToken, fields.detached, selection, tombstones), files);
-	}
-
-	private static NavigableSet<String> set(List<String> values) {
-		return new TreeSet<>(values == null ? List.of() : values);
 	}
 }

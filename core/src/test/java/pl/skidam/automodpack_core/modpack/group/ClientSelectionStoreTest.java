@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -29,9 +30,9 @@ class ClientSelectionStoreTest {
 
 		assertEquals(intent, store.get("abc1234").orElseThrow());
 		SelectionJsons.ClientSelectionStoreFields fields = ConfigTools.read(path, SelectionJsons.ClientSelectionStoreFields.class).orElseThrow();
-		SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get("abc1234");
-		assertEquals(Set.of("optional", "stale-group"), selection.enabled);
-		assertEquals(Set.of("variant"), selection.disabled);
+		SelectionJsons.SelectionFields selection = fields.selections.get("abc1234");
+		assertEquals(List.of("optional", "stale-group"), selection.enabled);
+		assertEquals(List.of("variant"), selection.disabled);
 	}
 
 	@Test

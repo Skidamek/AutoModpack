@@ -296,9 +296,8 @@ public final class ClientGenerationStore {
 	private Optional<SelectionIntent> appliedSelection(ClientStorageJsons.ClientGenerationStateFields state, String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (state == null || !normalizedModpackId.equals(state.modpackId)) return Optional.empty();
-		if (state.enabledGroups == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
-		return Optional.of(new SelectionIntent(state.enabledGroups, state.disabledGroups,
-				state.selectedPlatform == null ? null : ClientPlatform.parse(state.selectedPlatform)));
+		if (state.selection == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
+		return Optional.of(state.selection.toIntent());
 	}
 
 	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
@@ -578,8 +577,7 @@ public final class ClientGenerationStore {
 		}
 		SelectionIntent applied = appliedSelection(identity, modpackId);
 		if (current != null && modpackId.equals(current.modpackId) && document.contentToken().equals(current.contentToken) && current.detached
-				&& Objects.equals(current.enabledGroups, List.copyOf(applied.enabled()))
-				&& Objects.equals(current.disabledGroups, List.copyOf(applied.disabled())))
+				&& current.selection != null && current.selection.toIntent().equals(applied))
 			return false;
 		storage.writeActiveState(document, applied, true);
 		makeProjectionEditable();

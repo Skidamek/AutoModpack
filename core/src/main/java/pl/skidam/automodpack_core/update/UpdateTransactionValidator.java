@@ -22,7 +22,6 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -291,19 +290,15 @@ final class UpdateTransactionValidator {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.expectedPriorEnabledGroups == null || transaction.expectedPriorDisabledGroups == null
-				|| transaction.enabledGroups == null || transaction.disabledGroups == null)
-			throw new IOException("Selection metadata is incomplete");
-		if (!isCanonicalIntentList(transaction.expectedPriorEnabledGroups) || !isCanonicalIntentList(transaction.expectedPriorDisabledGroups)
-				|| !isCanonicalIntentList(transaction.enabledGroups) || !isCanonicalIntentList(transaction.disabledGroups))
-			throw new IOException("Selection metadata is not canonical");
+		if (transaction.targetSelection == null || !transaction.targetSelection.isCanonical())
+			throw new IOException("Target selection metadata is invalid or non-canonical");
+		if (transaction.expectedPriorSelection != null && !transaction.expectedPriorSelection.isCanonical())
+			throw new IOException("Prior selection metadata is invalid or non-canonical");
 		try {
 			if (!transaction.selectionDigest().equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 					? transaction.targetIntent()
 					: transaction.expectedPriorIntent())))
 				throw new IOException("Selection digest does not match selection metadata");
-			if (transaction.targetPlatform != null && !ClientPlatform.parse(transaction.targetPlatform).id().equals(transaction.targetPlatform))
-				throw new IOException("Selection platform is not canonical");
 		} catch (RuntimeException e) {
 			throw new IOException("Selection metadata is invalid", e);
 		}
@@ -344,10 +339,6 @@ final class UpdateTransactionValidator {
 		} catch (RuntimeException e) {
 			throw new IOException("Manifest ownership ledger is invalid", e);
 		}
-	}
-
-	private static boolean isCanonicalIntentList(List<String> values) {
-		return values != null && values.equals(values.stream().distinct().sorted().toList());
 	}
 
 	Map<FileKey, ProjectedFile> validateFinalState(List<ProjectedFile> entries, String modpackId) throws IOException {
