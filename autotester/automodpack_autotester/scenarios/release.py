@@ -54,14 +54,11 @@ def no_modpack_server(case: TestCase) -> None:
         case.configure_server(
             connection_mode="HOLEPUNCH",
             overrides={
-                "modpack": {
-                    "General": {
-                        "main": {
-                            "required": True,
-                            "default-selected": True,
-                            "from-server": ["config/excluded-only.txt"],
-                            "exclude": ["config/excluded-only.txt"],
-                        }
+                "groups": {
+                    "main": {
+                        "selection": "REQUIRED",
+                        "from-server": ["config/excluded-only.txt"],
+                        "exclude": ["config/excluded-only.txt"],
                     }
                 }
             },

@@ -11,10 +11,13 @@ from pathlib import Path
 
 from automodpack_autotester.bridge import BridgeClient, Selector, select_elements
 from automodpack_autotester.cache import deduplicate_tree, materialize_tree, prune_passed_case
-from automodpack_autotester.hmc import hmc_asset_name
+from automodpack_autotester.harness import _deep_merge, _dump_toml
+from automodpack_autotester.hmc import hmc_asset_name, write_hmc_config
 from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
 from automodpack_autotester.process import LogTailer, PortReservation
+from automodpack_autotester.provider import linux_render_wrapper
 from automodpack_autotester.proxy import FaultProxy
+from automodpack_autotester.server_seed import _download
 from automodpack_autotester.static_server import StaticHttpsHost
 
 
@@ -175,3 +178,62 @@ def test_hmc_asset_names_and_mod_fixture():
     assert hmc_asset_name("darwin", "arm64") == "headlessmc-launcher-macos-arm64"
     fx = {"modId": "test_mod", "version": "1.2.3", "marker": "ok"}
     assert_valid_mod_fixture(valid_mod_jar_bytes(fx, "26.2"), fx, "26.2")
+
+
+def test_toml_emitter_round_trips_server_config_and_deep_merges():
+    import tomllib
+
+    base = {
+        "modpack-host": True,
+        "network": {"connection-mode": "HOLEPUNCH", "bind-port": -1},
+        "groups": {"main": {"selection": "REQUIRED", "from-server": ["mods/*.jar"]}},
+    }
+    _deep_merge(base, {"modpack": {"name": "Pack"}, "groups": {"main": {"exclude": ["**/.*"]}}})
+    parsed = tomllib.loads(_dump_toml(base))
+    assert parsed["modpack-host"] is True
+    assert parsed["network"]["bind-port"] == -1
+    assert parsed["modpack"]["name"] == "Pack"
+    assert parsed["groups"]["main"]["from-server"] == ["mods/*.jar"]
+    assert parsed["groups"]["main"]["exclude"] == ["**/.*"]
+
+
+def test_render_wrapper_priority_and_hmc_xvfb_flag(tmp_path: Path, monkeypatch):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd in ("xvfb-run", "gamescope") else None)
+    assert linux_render_wrapper(1280, 720) == ["/usr/bin/xvfb-run", "-a", "-s", "-screen 0 1280x720x24"]
+    monkeypatch.setattr(shutil, "which", lambda cmd: "/usr/bin/gamescope" if cmd == "gamescope" else None)
+    assert linux_render_wrapper(1280, 720) == ["/usr/bin/gamescope", "--backend", "headless", "-W", "1280", "-H", "720", "--"]
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
+    assert linux_render_wrapper(1280, 720) is None
+
+    write_hmc_config(tmp_path, tmp_path / "mc", tmp_path / "game", tmp_path / "jdk", xvfb_check=True)
+    cfg = (tmp_path / "headlessmc" / "config.properties").read_text(encoding="utf-8")
+    assert "hmc.xvfb.check=true" in cfg
+
+
+def test_server_seed_download_sets_non_urllib_user_agent(tmp_path: Path, monkeypatch):
+    seen_ua: list[str] = []
+
+    class FakeResp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, n=-1):
+            if getattr(self, "_done", False):
+                return b""
+            self._done = True
+            return b"installer-bytes"
+
+    def fake_urlopen(req, timeout=None):
+        seen_ua.append(req.get_header("User-agent") or "")
+        return FakeResp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    out = tmp_path / "inst.jar"
+    _download("https://example.invalid/forge.jar", out)
+    assert seen_ua == ["automodpack-autotester"]
+    assert out.read_bytes() == b"installer-bytes"

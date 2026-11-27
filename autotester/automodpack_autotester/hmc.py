@@ -104,7 +104,16 @@ def target_hmc_cache(target: Target) -> Path:
     return shared_cache_root() / "hmc" / target.id
 
 
-def write_hmc_config(config_root: Path, mc_cache: Path, game_dir: Path, java_home: Path, *, username: str | None = None, user_uuid: str | None = None) -> None:
+def write_hmc_config(
+    config_root: Path,
+    mc_cache: Path,
+    game_dir: Path,
+    java_home: Path,
+    *,
+    username: str | None = None,
+    user_uuid: str | None = None,
+    xvfb_check: bool = False,
+) -> None:
     cfg_dir = config_root / "headlessmc"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     props = {
@@ -115,7 +124,7 @@ def write_hmc_config(config_root: Path, mc_cache: Path, game_dir: Path, java_hom
         "hmc.java.versions": java_home.as_posix(),
         "hmc.launcher.crash-report-watcher": "true",
         "hmc.jline.enabled": "false",
-        "hmc.xvfb.check": "false",
+        "hmc.xvfb.check": "true" if xvfb_check else "false",
     }
     if username:
         props["hmc.offline.username"] = username

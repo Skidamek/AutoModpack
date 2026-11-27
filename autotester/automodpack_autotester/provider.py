@@ -51,7 +51,7 @@ class ClientProcess(Protocol):
     token: str
     bridge: BridgeClient | None
 
-    def start(self, *, fast_timers: bool = True, render: bool = False, extra_jvm_args: list[str] | None = None) -> None: ...
+    def start(self, *, fast_timers: bool = True, render: bool = False, extra_jvm_args: list[str] | None = None, resolution: tuple[int, int] | None = None) -> None: ...
     def stop(self, *, force: bool = True) -> None: ...
     def wait_ready(self, timeout: float = 180.0) -> BridgeClient: ...
     def wait_exit(self, timeout: float = 60.0) -> int: ...
@@ -95,10 +95,7 @@ class LocalServer:
             mods_dir.mkdir(parents=True, exist_ok=True)
             dest_jar = mods_dir / self.artifact.name
             if not dest_jar.exists():
-                try:
-                    os.link(self.artifact, dest_jar)
-                except OSError:
-                    shutil.copy2(self.artifact, dest_jar)
+                shutil.copy2(self.artifact, dest_jar)
             self._materialized = True
         write_server_properties(
             self.server_dir,
@@ -156,6 +153,17 @@ class LocalServer:
         return self._proc.tailer.tail(tail) if self._proc is not None else (self.log_path.read_text(encoding="utf-8", errors="replace") if self.log_path.is_file() else "")
 
 
+def linux_render_wrapper(width: int = 1280, height: int = 720) -> list[str] | None:
+    """Return a virtual display command prefix on Linux (`xvfb-run` first, then `gamescope` headless)."""
+    xvfb = shutil.which("xvfb-run")
+    if xvfb:
+        return [xvfb, "-a", "-s", f"-screen 0 {width}x{height}x24"]
+    gamescope = shutil.which("gamescope")
+    if gamescope:
+        return [gamescope, "--backend", "headless", "-W", str(width), "-H", str(height), "--"]
+    return None
+
+
 class LocalClient:
     """Native HeadlessMC 3 Minecraft client running directly on the host OS (no Docker)."""
 
@@ -171,8 +179,9 @@ class LocalClient:
         self._proc: ManagedProcess | None = None
         self.log_path = client_root / f"client-{name}.log"
         self._prepared = False
+        self._render = False
 
-    def _prepare(self) -> tuple[Path, Path, Path]:
+    def _prepare(self, *, xvfb_check: bool = False, gui_scale: int | None = None) -> tuple[Path, Path, Path]:
         home = java_home(self.settings, self.target.java)
         mc_cache = ensure_profile_prepared(self.target, self.settings, home)
         self.game_dir.mkdir(parents=True, exist_ok=True)
@@ -180,24 +189,26 @@ class LocalClient:
         mods_dir.mkdir(parents=True, exist_ok=True)
         dest_jar = mods_dir / self.artifact.name
         if not dest_jar.exists():
-            try:
-                os.link(self.artifact, dest_jar)
-            except OSError:
-                shutil.copy2(self.artifact, dest_jar)
+            shutil.copy2(self.artifact, dest_jar)
         seed_fml_toml(self.game_dir, self.target)
         options_txt = self.game_dir / "options.txt"
         if not options_txt.is_file():
-            options_txt.write_text("onboardAccessibility:false\nskipMultiplayerWarning:true\n", encoding="utf-8")
+            extra = f"guiScale:{gui_scale}\n" if gui_scale is not None else ""
+            options_txt.write_text(f"onboardAccessibility:false\nskipMultiplayerWarning:true\n{extra}", encoding="utf-8")
+        elif gui_scale is not None:
+            lines = [line for line in options_txt.read_text(encoding="utf-8").splitlines() if not line.startswith("guiScale:")]
+            lines.append(f"guiScale:{gui_scale}")
+            options_txt.write_text("\n".join(lines) + "\n", encoding="utf-8")
         import uuid
 
         player_name = f"amp_{self.name}"[:16]
         player_uuid = str(uuid.uuid3(uuid.NAMESPACE_DNS, f"OfflinePlayer:{player_name}"))
         cfg_root = self.client_root / "hmc-config"
-        write_hmc_config(cfg_root, mc_cache, self.game_dir, home, username=player_name, user_uuid=player_uuid)
+        write_hmc_config(cfg_root, mc_cache, self.game_dir, home, username=player_name, user_uuid=player_uuid, xvfb_check=xvfb_check)
         self._prepared = True
         return mc_cache, home, cfg_root
 
-    def start(self, *, fast_timers: bool = True, render: bool = False, extra_jvm_args: list[str] | None = None) -> None:
+    def start(self, *, fast_timers: bool = True, render: bool = False, extra_jvm_args: list[str] | None = None, resolution: tuple[int, int] | None = None) -> None:
         if self.bridge is not None:
             self.bridge.close()
             self.bridge = None
@@ -205,7 +216,9 @@ class LocalClient:
         state_file = self.game_dir / "automodpack" / "autotest" / "bridge-state.json"
         state_file.unlink(missing_ok=True)
 
-        mc_cache, home, cfg_root = self._prepare()
+        self._render = render
+        width, height = resolution or ((1280, 720) if render else (854, 480))
+        mc_cache, home, cfg_root = self._prepare(xvfb_check=render, gui_scale=2 if render else None)
         hmc_bin = ensure_hmc_binary(self.settings)
         memory = str((self.settings.get("jvm") or {}).get("clientMemory", "1G"))
         jvm_args = [
@@ -228,16 +241,14 @@ class LocalClient:
             *([] if render else ["-lwjgl"]),
             "--jvm",
             " ".join(jvm_args),
-            "--game",
-            "--width 854 --height 480",
             "--resolution",
-            "854x480",
+            f"{width}x{height}",
         ]
         if render and not sys.platform.startswith("win"):
-            xvfb = shutil.which("xvfb-run")
-            if not xvfb:
-                raise RuntimeError("render=True requires xvfb-run on Linux")
-            argv = [xvfb, "-a", *argv]
+            wrapper = linux_render_wrapper(width, height)
+            if not wrapper:
+                raise RuntimeError("render=True requires xvfb-run or gamescope on Linux")
+            argv = [*wrapper, *argv]
         env = hmc_env(mc_cache, home, cfg_root)
         self._proc = ManagedProcess(argv, cwd=self.game_dir, env=env, log_path=self.log_path)
         self._proc.start()
@@ -254,10 +265,20 @@ class LocalClient:
             if client is not None:
                 try:
                     client.ping()
-                    self.bridge = client
-                    return client
                 except Exception:
                     client.close()
+                    time.sleep(0.05)
+                    continue
+                if self._render and "forcing headless mode" in self.logs(200).lower():
+                    client.close()
+                    self.stop(force=True)
+                    raise RuntimeError(
+                        "HeadlessMC forced stub-LWJGL headless mode despite render=True. "
+                        "Offline rendered UI requires Xvfb (xvfb-run) on Linux with hmc.xvfb.check=true, "
+                        "or a logged-in Microsoft account."
+                    )
+                self.bridge = client
+                return client
             time.sleep(0.05)
         raise TimeoutError(f"Client {self.name!r} bridge did not become ready within {timeout:.0f}s\n--- log tail ---\n{self.logs(60)}")
 
@@ -321,7 +342,7 @@ class LocalProvider:
             name="local",
             os_family=os_family,
             native_windows_ntfs=(os_family == "windows"),
-            rendered_ui=bool(os_family == "windows" or shutil.which("xvfb-run")),
+            rendered_ui=bool(os_family == "linux" and shutil.which("xvfb-run")),
         )
 
     def prerequisites(self, settings: dict, targets: list[Target]) -> list[tuple[str, bool, str]]:
@@ -337,6 +358,16 @@ class LocalProvider:
             except Exception as e:
                 checks.append((f"java-{t.java}", False, str(e)))
         checks.append(("provider", True, f"local ({self.capabilities.os_family}, zero-docker)"))
+        if self.capabilities.os_family == "linux":
+            if shutil.which("xvfb-run"):
+                render_backend = "xvfb-run"
+            elif shutil.which("gamescope"):
+                render_backend = "gamescope (offline rendering requires xvfb-run or Microsoft account)"
+            else:
+                render_backend = "none"
+        else:
+            render_backend = "native"
+        checks.append(("renderedUi", True, render_backend))
         return checks
 
     def create_server(self, target: Target, settings: dict, server_dir: Path, artifact: Path) -> ServerProcess:

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import time
+import tomllib
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -103,19 +105,23 @@ class TestCase:
         return self._clients[name]
 
     def configure_server(self, *, connection_mode: str = "HOLEPUNCH", overrides: dict[str, Any] | None = None) -> Path:
-        """Write automodpack-server.json into the server dir before starting."""
+        """Write automodpack/server.toml into the server dir before starting."""
         cfg = deepcopy((self.settings.get("automodpack") or {}).get("config") or {})
-        cfg["connectionMode"] = connection_mode.upper()
-        if connection_mode.upper() in ("HTTP", "HTTPS"):
-            cfg["bindAddress"] = "0.0.0.0"
-            cfg["bindPort"] = self.server.endpoint_port
-            cfg["advertisedEndpointHost"] = self.server.host
-            cfg["advertisedEndpointPort"] = self.server.endpoint_port
+        network = cfg.setdefault("network", {})
+        mode = connection_mode.upper()
+        network["connection-mode"] = mode
+        if mode in ("HTTP", "HTTPS"):
+            network["bind-address"] = "0.0.0.0"
+            network["bind-port"] = self.server.endpoint_port
+            network["advertised-host"] = self.server.host
+            network["advertised-port"] = self.server.endpoint_port
         if overrides:
-            cfg.update(overrides)
-        cfg_path = self.server.server_dir / "automodpack" / "automodpack-server.json"
+            _deep_merge(cfg, overrides)
+        rendered = _dump_toml(cfg)
+        tomllib.loads(rendered)
+        cfg_path = self.server.server_dir / "automodpack" / "server.toml"
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+        cfg_path.write_text(rendered, encoding="utf-8")
         return cfg_path
 
     def stage_server_file(self, rel_path: str, content: str | bytes) -> Path:
@@ -161,6 +167,54 @@ class TestCase:
                 pass
         if passed and self.prune_passed:
             prune_passed_case(self.case_dir)
+
+
+_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> None:
+    for key, val in patch.items():
+        if isinstance(val, dict) and isinstance(base.get(key), dict):
+            _deep_merge(base[key], val)
+        else:
+            base[key] = deepcopy(val)
+
+
+def _format_key(key: str) -> str:
+    return key if _BARE_KEY_RE.match(key) else json.dumps(key)
+
+
+def _format_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_format_value(v) for v in value) + "]"
+    raise TypeError(f"Unsupported TOML value: {value!r}")
+
+
+def _emit_table(lines: list[str], data: dict[str, Any], prefix: tuple[str, ...]) -> None:
+    scalars = [(k, v) for k, v in data.items() if not isinstance(v, dict)]
+    tables = [(k, v) for k, v in data.items() if isinstance(v, dict)]
+    if prefix and (scalars or not tables):
+        if lines:
+            lines.append("")
+        lines.append("[" + ".".join(_format_key(p) for p in prefix) + "]")
+    for k, v in scalars:
+        lines.append(f"{_format_key(k)} = {_format_value(v)}")
+    for k, v in tables:
+        _emit_table(lines, v, (*prefix, k))
+
+
+def _dump_toml(data: dict[str, Any]) -> str:
+    lines: list[str] = []
+    _emit_table(lines, data, ())
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 def run_scenario_fn(
