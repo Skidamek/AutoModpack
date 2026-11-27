@@ -43,7 +43,7 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 /**
  * Group selection screen: shows optional/recommended groups as 2-line cards under optional category headers
  * (with radio buttons for exclusive categories and bulk toggle only on multi-group ANY categories), delegating
- * every state transition to {@link GroupSelectionResolver}.
+ * selection math to {@link GroupSelectionResolver} and submission lifecycle to {@link Session}.
  */
 public class GroupSelectionScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 500;
@@ -52,18 +52,41 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private static final int ACCENT_DEFAULT = 0xFF55FFFF;
 	private static final int ACCENT_ERROR = 0xFFFF5555;
 
+	interface Session {
+		String submitLabelKey();
+
+		boolean allowSubmitUnchanged();
+
+		default String unchangedTooltipKey() {
+			return null;
+		}
+
+		SelectionIntent initialSelection();
+
+		default String origin() {
+			return "";
+		}
+
+		default boolean isCancelled() {
+			return false;
+		}
+
+		default SourceAvailability sourceAvailability() {
+			return null;
+		}
+
+		void submit(SelectionIntent intent, Runnable release);
+
+		default void cancel() {}
+	}
+
 	private final Screen parent;
 	private final GroupManifest manifest;
-	private final String modpackId;
 	private final String modpackName;
 	private final Map<String, GroupManifest.Group> groups;
-	private final InstalledModpackController controller;
 	private final String origin;
+	private final Session session;
 	private final SelectionIntent initialSelection;
-	private final Consumer<SelectionIntent> selectionAction;
-	private final Runnable cancelAction;
-	private final ReviewConsent actions;
-	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
 
 	private SelectionIntent draft;
@@ -73,41 +96,142 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private String notice = "";
 
 	private boolean closed;
-	private boolean switchInFlight;
-	private boolean saveInFlight;
+	private boolean submitting;
 	private AbstractWidget saveButton;
+	private GroupSelectionList groupList;
+	private double scrollAmount;
 	private DropdownWidget platformDropdown;
 
-	public GroupSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewConsent actions, Consumer<SelectionIntent> selectionAction) {
-		this(parent, target.manifest(), new Entry(target.selection().intent(), selectionAction, () -> {}, actions, null));
+	public static GroupSelectionScreen forReview(Screen parent, SelectedModpackTarget target, String origin, ReviewConsent actions, Consumer<SelectionIntent> selectionAction) {
+		Objects.requireNonNull(target, "target");
+		Objects.requireNonNull(selectionAction, "selectionAction");
+		String safeOrigin = origin == null ? "" : origin;
+		return new GroupSelectionScreen(parent, target.manifest(), new Session() {
+			@Override
+			public String submitLabelKey() {
+				return "automodpack.selection.preview";
+			}
+
+			@Override
+			public boolean allowSubmitUnchanged() {
+				return true;
+			}
+
+			@Override
+			public SelectionIntent initialSelection() {
+				return target.selection().intent();
+			}
+
+			@Override
+			public String origin() {
+				return safeOrigin;
+			}
+
+			@Override
+			public boolean isCancelled() {
+				return actions != null && actions.reviewCancelled().getAsBoolean();
+			}
+
+			@Override
+			public SourceAvailability sourceAvailability() {
+				return actions == null ? null : actions.sourceAvailability().get();
+			}
+
+			@Override
+			public void submit(SelectionIntent intent, Runnable release) {
+				try {
+					selectionAction.accept(intent);
+				} catch (RuntimeException e) {
+					release.run();
+					ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+				}
+			}
+		});
 	}
 
 	public static GroupSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-		return new GroupSelectionScreen(parent, manifest, new Entry(savedSelection, selectionAction, cancelAction, null, null));
+		Objects.requireNonNull(selectionAction, "selectionAction");
+		Runnable safeCancel = cancelAction == null ? () -> {} : cancelAction;
+		return new GroupSelectionScreen(parent, manifest, new Session() {
+			@Override
+			public String submitLabelKey() {
+				return "automodpack.selection.preview";
+			}
+
+			@Override
+			public boolean allowSubmitUnchanged() {
+				return true;
+			}
+
+			@Override
+			public SelectionIntent initialSelection() {
+				return savedSelection;
+			}
+
+			@Override
+			public void submit(SelectionIntent intent, Runnable release) {
+				try {
+					selectionAction.accept(intent);
+				} catch (RuntimeException e) {
+					release.run();
+					ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+				}
+			}
+
+			@Override
+			public void cancel() {
+				safeCancel.run();
+			}
+		});
 	}
 
-	static GroupSelectionScreen forInstalledRecord(Screen parent, PackDocument record) {
-		return new GroupSelectionScreen(parent, record.manifest(), new Entry(null, null, () -> {}, null, record));
+	static GroupSelectionScreen forInstalled(Screen parent, InstalledModpackController controller, PackDocument record) {
+		Objects.requireNonNull(controller, "controller");
+		Objects.requireNonNull(record, "record");
+		GroupManifest manifest = record.manifest();
+		return new GroupSelectionScreen(parent, manifest, new Session() {
+			@Override
+			public String submitLabelKey() {
+				return "automodpack.selection.save";
+			}
+
+			@Override
+			public boolean allowSubmitUnchanged() {
+				return false;
+			}
+
+			@Override
+			public String unchangedTooltipKey() {
+				return "automodpack.selection.noChanges";
+			}
+
+			@Override
+			public SelectionIntent initialSelection() {
+				return controller.savedSelection(manifest.modpackId());
+			}
+
+			@Override
+			public String origin() {
+				return controller.originFor(manifest.modpackId());
+			}
+
+			@Override
+			public void submit(SelectionIntent intent, Runnable release) {
+				controller.switchSelection(record, intent, manifest.modpackName(), release);
+			}
+		});
 	}
 
-	private record Entry(SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
-			ReviewConsent actions, PackDocument localRecord) {}
-
-	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
+	private GroupSelectionScreen(Screen parent, GroupManifest manifest, Session session) {
 		super(VersionedText.text("automodpack.selection.title"));
 		this.parent = parent;
-		this.manifest = Objects.requireNonNull(manifest);
-		this.modpackId = manifest.modpackId();
+		this.manifest = Objects.requireNonNull(manifest, "manifest");
+		this.session = Objects.requireNonNull(session, "session");
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
-		this.controller = new InstalledModpackController();
-		this.origin = controller.originFor(modpackId);
-		this.selectionAction = entry.selectionAction();
-		this.cancelAction = entry.cancelAction();
-		this.actions = entry.actions();
-		this.localRecord = entry.localRecord();
+		this.origin = session.origin();
 		this.detectedPlatform = ClientPlatform.current();
-		SelectionIntent initial = entry.initialSelection() != null ? entry.initialSelection() : controller.savedSelection(modpackId);
+		SelectionIntent initial = session.initialSelection();
 		if (initial == null) initial = SelectionIntent.DEFAULTS;
 		this.initialSelection = initial;
 		this.draft = initial;
@@ -121,23 +245,26 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	@Override
 	protected void init() {
+		if (this.groupList != null) this.scrollAmount = this.groupList.preservedScrollAmount();
 		super.init();
 
 		int actionY = this.height - 28;
-		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : "automodpack.selection.save";
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.text("automodpack.back"), press -> back()),
 				optionalAction(VersionedText.text("automodpack.selection.reset"), press -> resetToDefaults()),
-				primaryAction(VersionedText.text(saveLabel), press -> save()));
+				primaryAction(VersionedText.text(session.submitLabelKey()), press -> save()));
 		List<AbstractWidget> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, footer);
-		actionButtons.get(1).active = !draft.isDefaults();
+		actionButtons.get(1).active = !submitting && !draft.isDefaults();
 		this.saveButton = actionButtons.get(2);
 		this.saveButton.active = canSave();
-		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.text("automodpack.selection.noChanges"));
+		String unchangedTooltip = session.unchangedTooltipKey();
+		if (unchangedTooltip != null && !submitting && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.text(unchangedTooltip));
 
 		int listTop = 78;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - LIST_FOOTER_GAP;
-		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
+		this.groupList = this.addRenderableWidget(
+				new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
+		if (this.scrollAmount > 0) this.groupList.restoreScrollAmount(this.scrollAmount);
 
 		this.platformDropdown = null;
 		if (manifest.hasDeclaredPlatforms()) {
@@ -170,18 +297,6 @@ public class GroupSelectionScreen extends VersionedScreen {
 	private List<GroupSelectionList.Item> listItems() {
 		List<GroupSelectionList.Item> items = new ArrayList<>();
 
-		List<String> uncategorized = new ArrayList<>();
-		for (var entry : groups.entrySet()) {
-			if (entry.getValue().selection().choosable() && entry.getValue().category().isEmpty()) uncategorized.add(entry.getKey());
-		}
-		if (!uncategorized.isEmpty()) {
-			if (!manifest.categories().isEmpty()) {
-				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, "", "", VersionedText.text("automodpack.selection.otherCategory").withStyle(ChatFormatting.BOLD),
-						VersionedText.literal(""), VersionedText.literal(""), null, false, false, false, "", 0));
-			}
-			for (String groupId : uncategorized) items.add(groupItem(groupId, false));
-		}
-
 		for (var catEntry : manifest.categories().entrySet()) {
 			String catId = catEntry.getKey();
 			GroupManifest.Category cat = catEntry.getValue();
@@ -195,6 +310,18 @@ public class GroupSelectionScreen extends VersionedScreen {
 			boolean exclusive = cat.pick().isExclusive();
 			if (cat.pick() == CategoryPickMode.AT_MOST_ONE) items.add(noneRadioItem(catId, members));
 			for (String groupId : members) items.add(groupItem(groupId, exclusive));
+		}
+
+		List<String> uncategorized = new ArrayList<>();
+		for (var entry : groups.entrySet()) {
+			if (entry.getValue().selection().choosable() && entry.getValue().category().isEmpty()) uncategorized.add(entry.getKey());
+		}
+		if (!uncategorized.isEmpty()) {
+			if (!manifest.categories().isEmpty()) {
+				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, "", "", VersionedText.text("automodpack.selection.otherCategory").withStyle(ChatFormatting.BOLD),
+						VersionedText.literal(""), VersionedText.literal(""), null, false, false, false, "", 0));
+			}
+			for (String groupId : uncategorized) items.add(groupItem(groupId, false));
 		}
 		return List.copyOf(items);
 	}
@@ -242,7 +369,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		MutableComponent badge = VersionedText.literal(UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString())
 				.withStyle(ChatFormatting.GRAY);
 		Component subtitle = cardSubtitle(groupId, group, explanation);
-		Component tooltip = cardTooltip(groupId, group, explanation);
+		Component tooltip = cardTooltip(groupId, group, explanation, subtitle);
 		int accent = accentColor(groupId, selected, explanation);
 		return new GroupSelectionList.Item(radio ? GroupSelectionList.Kind.RADIO_GROUP : GroupSelectionList.Kind.CHECKBOX_GROUP,
 				groupId, group.category(), title, subtitle, badge, tooltip, selected, canToggle, true, "", accent);
@@ -268,7 +395,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 		return VersionedText.literal("");
 	}
 
-	private Component cardTooltip(String groupId, GroupManifest.Group group, GroupResolution explanation) {
+	private Component cardTooltip(String groupId, GroupManifest.Group group, GroupResolution explanation, Component subtitle) {
 		List<String> lines = new ArrayList<>();
 		if (!group.description().isBlank()) lines.add(group.description());
 		if (!group.requires().isEmpty()) lines.add(VersionedText.str("automodpack.selection.requires", names(group.requires())));
@@ -287,6 +414,10 @@ public class GroupSelectionScreen extends VersionedScreen {
 			lines.add(VersionedText.str("automodpack.selection.unavailableOn", platformDisplay(effectivePlatform())));
 		}
 		if (lines.isEmpty()) return null;
+		String subtitleText = subtitle == null ? "" : subtitle.getString();
+		if (lines.size() == 1 && lines.get(0).equals(subtitleText) && this.font.width(subtitleText) <= GroupSelectionList.cardTextWidth(panelWidth(PANEL_WIDTH))) {
+			return null;
+		}
 		return VersionedText.literal(String.join("\n", lines)).withStyle(ChatFormatting.GRAY);
 	}
 
@@ -374,7 +505,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (actions != null && actions.reviewCancelled().getAsBoolean()) ScreenImpl.multiplayer();
+		if (session.isCancelled()) ScreenImpl.multiplayer();
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
@@ -403,27 +534,25 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private void save() {
-		if (!resolutionError.isEmpty()) return;
-		if (selectionAction != null) {
-			if (saveInFlight) return;
-			saveInFlight = true;
-			try {
-				selectionAction.accept(draft);
-			} catch (RuntimeException e) {
-				saveInFlight = false;
-				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-			}
-			return;
-		}
-		if (switchInFlight) return;
-		switchInFlight = true;
-		controller.switchSelection(localRecord, draft, modpackName, () -> switchInFlight = false);
+		if (!canSave()) return;
+		submitting = true;
+		if (saveButton != null) saveButton.active = false;
+		session.submit(draft, this::releaseSubmit);
+	}
+
+	private void releaseSubmit() {
+		Runnable finish = () -> {
+			submitting = false;
+			if (!closed) rebuild();
+		};
+		if (this.minecraft != null) this.minecraft.execute(finish);
+		else finish.run();
 	}
 
 	private void back() {
 		if (closed) return;
 		closed = true;
-		cancelAction.run();
+		session.cancel();
 		ScreenImpl.setScreen(parent);
 	}
 
@@ -456,7 +585,7 @@ public class GroupSelectionScreen extends VersionedScreen {
 
 	private boolean canSave() {
 		boolean platformChanged = !Objects.equals(ClientPlatform.effective(initialSelection), effectivePlatform());
-		return resolutionError.isEmpty() && (selectionAction != null || !initialSelection.equals(draft) || platformChanged);
+		return !submitting && resolutionError.isEmpty() && (session.allowSubmitUnchanged() || !initialSelection.equals(draft) || platformChanged);
 	}
 
 	private static long groupBytes(GroupManifest.Group group) {
@@ -535,15 +664,17 @@ public class GroupSelectionScreen extends VersionedScreen {
 			drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
 		} else if (!notice.isEmpty()) {
 			drawWrappedStatus(matrices, VersionedText.literal(notice).withStyle(ChatFormatting.YELLOW));
-		} else if (actions != null && actions.sourceAvailability().get().totalFiles() > 0) {
-			SourceAvailability availability = actions.sourceAvailability().get();
-			String sourceStatus = VersionedText.str(availability.cancelled()
-					? "automodpack.selection.sourcesCancelled"
-					: !availability.complete()
-							? "automodpack.selection.sourcesResolving"
-							: "automodpack.selection.sourcesResolved",
-					availability.resolvedFiles(), availability.totalFiles());
-			drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
+		} else {
+			SourceAvailability availability = session.sourceAvailability();
+			if (availability != null && availability.totalFiles() > 0) {
+				String sourceStatus = VersionedText.str(availability.cancelled()
+						? "automodpack.selection.sourcesCancelled"
+						: !availability.complete()
+								? "automodpack.selection.sourcesResolving"
+								: "automodpack.selection.sourcesResolved",
+						availability.resolvedFiles(), availability.totalFiles());
+				drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
+			}
 		}
 	}
 

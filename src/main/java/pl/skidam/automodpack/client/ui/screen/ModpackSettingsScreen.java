@@ -69,7 +69,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		buildHeaderLines();
-		launchWritesCheckbox = new CheckboxWidget(this.font, panelLeft(PANEL_WIDTH), generationY() + LINE_GAP, panelWidth(PANEL_WIDTH), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> {
+		launchWritesCheckbox = new CheckboxWidget(this.font, panelLeft(PANEL_WIDTH), generationY() + LINE_GAP + 4, panelWidth(PANEL_WIDTH), PackConfirmCopy.launchWritesLabel(), launchWrites, value -> {
 			launchWrites = value;
 			controller.setLaunchWritesUnverified(pack, value);
 		});
@@ -169,7 +169,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 
 	private void openGroups() {
 		if (busy) return;
-		ScreenImpl.setScreen(GroupSelectionScreen.forInstalledRecord(this, pack.record()));
+		ScreenImpl.setScreen(GroupSelectionScreen.forInstalled(this, controller, pack.record()));
 	}
 
 	private void openHistory() {
@@ -253,7 +253,7 @@ public final class ModpackSettingsScreen extends VersionedScreen {
 
 	/** The generation line's y - the end of the header stack the render walks - so the action grid derives from one layout. */
 	private int generationY() {
-		int y = HEADER_TOP + STATE_LINE_GAP + IDENTITY_LINE_GAP + LINE_GAP + LINE_GAP;
+		int y = HEADER_TOP + STATE_LINE_GAP + IDENTITY_LINE_GAP + LINE_GAP * 3;
 		if (pack.connectionDetail() != null) y += LINE_GAP;
 		return y;
 	}

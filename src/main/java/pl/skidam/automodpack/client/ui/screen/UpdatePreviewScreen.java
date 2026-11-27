@@ -197,7 +197,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
 			}
 		};
-		ScreenImpl.setScreen(new GroupSelectionScreen(this, target, actions, action));
+		ScreenImpl.setScreen(GroupSelectionScreen.forReview(this, target, origin, actions, action));
 	}
 
 	private void openFiles() {

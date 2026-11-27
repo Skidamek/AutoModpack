@@ -73,6 +73,11 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return ActionAreaLayout.BUTTON_HEIGHT;
 	}
 
+	public static int cardTextWidth(int rowWidth) {
+		int cardWidth = Math.max(1, rowWidth - CHILD_INDENT - filesButtonWidth() - ActionAreaLayout.SEAM);
+		return Math.max(1, cardWidth - 32);
+	}
+
 	private final int contentWidth;
 
 	public GroupSelectionList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<Item> items, Consumer<Item> onToggle, Consumer<Item> onInspect) {
@@ -94,6 +99,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		Consumer<Item> toggle = Objects.requireNonNull(onToggle, "onToggle");
 		Consumer<Item> inspect = Objects.requireNonNull(onInspect, "onInspect");
 		for (Item item : Objects.requireNonNull(items, "items")) this.addEntry(new Entry(item, toggle, inspect));
+		this.syncLayout();
 	}
 
 	/*? if >=1.21.10 {*/
@@ -185,12 +191,54 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 
 	@Override
+	public void syncLayout() {
+		int left = this.getRowLeft();
+		int width = this.getRowWidth();
+		List<Entry> entries = this.children();
+		for (int i = 0; i < entries.size(); i++) entries.get(i).layoutRow(left, this.getRowTop(i), width);
+	}
+
+	@Override
+	public int viewportTop() {
+		/*? if <1.20.3 {*/
+		/*return this.y0;
+		*//*?} else {*/
+		return this.getY();
+		/*?}*/
+	}
+
+	@Override
+	public int viewportBottom() {
+		/*? if <1.20.3 {*/
+		/*return this.y1;
+		*//*?} else {*/
+		return this.getY() + this.getHeight();
+		/*?}*/
+	}
+
+	public double preservedScrollAmount() {
+		/*? if >=1.21.4 {*/
+		return this.scrollAmount();
+		/*?} else {*/
+		/*return this.getScrollAmount();
+		*//*?}*/
+	}
+
+	public void restoreScrollAmount(double amount) {
+		this.setScrollAmount(amount);
+		this.syncLayout();
+	}
+
+	@Override
 	public RowView rowView(int index) {
 		Item item = this.children().get(index).item();
+		StringBuilder text = new StringBuilder(item.title().getString());
 		String badge = item.badge().getString();
-		String text = badge.isBlank() ? item.title().getString() : item.title().getString() + " " + badge;
-		if (item.kind() == Kind.HEADER) return new RowView(text, !item.actionLabel().isBlank(), null, false);
-		return new RowView(text, item.canToggle(), item.selected(), false);
+		if (!badge.isBlank()) text.append(' ').append(badge);
+		String subtitle = item.subtitle().getString();
+		if (!subtitle.isBlank()) text.append(" | ").append(subtitle);
+		if (item.kind() == Kind.HEADER) return new RowView(text.toString(), !item.actionLabel().isBlank(), null, false);
+		return new RowView(text.toString(), item.canToggle(), item.selected(), false);
 	}
 
 	public int rowCount() {
@@ -269,10 +317,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				return;
 			}
 
-			int filesWidth = item.showFilesButton() ? filesButtonWidth() : 0;
-			int cardWidth = item.showFilesButton()
-					? Math.max(1, rowWidth - CHILD_INDENT - filesWidth - ActionAreaLayout.SEAM)
-					: Math.max(1, rowWidth - CHILD_INDENT);
+			int filesWidth = filesButtonWidth();
+			int cardWidth = Math.max(1, rowWidth - CHILD_INDENT - filesWidth - ActionAreaLayout.SEAM);
 			GroupCardButton card = new GroupCardButton(minecraft.font, 0, 0, cardWidth, CARD_HEIGHT, item, () -> onToggle.accept(item));
 			card.active = item.canToggle();
 			if (item.tooltip() != null) VersionedScreen.setTooltip(card, item.tooltip());
@@ -280,7 +326,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			this.actionButton = null;
 			if (item.showFilesButton()) {
 				Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
-				if (item.tooltip() != null) VersionedScreen.setTooltip(files, item.tooltip());
+				VersionedScreen.setTooltip(files, filesLabel());
 				this.filesButton = files;
 				this.children = List.of(card, files);
 			} else {

@@ -18,5 +18,15 @@ public interface RowViewport {
 
 	int rowHeight();
 
+	default void syncLayout() {}
+
+	default int viewportTop() {
+		return 0;
+	}
+
+	default int viewportBottom() {
+		return Integer.MAX_VALUE;
+	}
+
 	record RowView(String text, boolean enabled, Boolean checked, boolean partial) {}
 }
