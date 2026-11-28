@@ -19,6 +19,14 @@ def _row_texts(gui: dict) -> list[str]:
     return [str(e.get("text") or "") for e in (gui.get("other") or ())]
 
 
+def _row_checked(gui: dict, title: str) -> bool | None:
+    for e in gui.get("other") or ():
+        text = str(e.get("text") or "")
+        if text.lower().startswith(title.lower()):
+            return e.get("checked")
+    return None
+
+
 def _viewport_bounds(gui: dict) -> tuple[int, int]:
     lists = [e for e in (gui.get("other") or ()) if e.get("type") == "GroupSelectionList"]
     if lists:
@@ -83,7 +91,7 @@ def groups_ui(case: TestCase) -> None:
                 "selection": "OPTIONAL",
                 "requires": ["minimap"],
             },
-            "audio": {"name": "Ambient Sounds", "description": "Biome soundscape overhaul", "selection": "OPTIONAL"},
+            "audio": {"name": "Ambient Sounds", "description": "Biome soundscape overhaul", "selection": "OPTIONAL", "conflicts": ["zoom"]},
         },
     }
 
@@ -107,16 +115,45 @@ def groups_ui(case: TestCase) -> None:
         bridge.wait_screen("GroupSelectionScreen", timeout=30.0)
         bridge.assert_layout_clean()
 
-    with case.step("verify hidden REQUIRED/AUTOMATIC rows, hidden OS dropdown, and dependency badge"):
+    with case.step("verify included-automatically section, hidden OS dropdown, dependency badges, and pairwise conflict"):
         gui = bridge.gui()
         texts = "\n".join(_row_texts(gui))
-        assert "Iris Shaders Engine" not in texts, "AUTOMATIC group must stay hidden"
+        assert "Included automatically" in texts, f"REQUIRED/AUTOMATIC groups must surface under their own section: {texts}"
+        assert "Core" in texts, "REQUIRED group must be listed under Included automatically"
+        assert "Iris Shaders Engine" in texts, "AUTOMATIC group required by the default shader must be listed as included"
+        assert "Required by: Complementary Reimagined" in texts, "active AUTOMATIC group must name its dependents"
+        assert any(t.startswith("Core") and t.endswith("Required") for t in _row_texts(gui)), "REQUIRED group must say it is required"
         assert "Complementary Reimagined" in texts
         assert not select_elements(gui, Selector(key="automodpack.selection.platformButton")), "OS dropdown must hide when no platforms are declared"
         assert any("None" in t for t in _row_texts(gui)), "AT_MOST_ONE category must expose None radio option"
         if render:
             time.sleep(0.25)
             bridge.screenshot("group_selection_top")
+
+        bridge.click(Selector(role="other", text="None"), timeout=10.0)
+        bridge.wait_until(
+            lambda g: "Iris Shaders Engine" not in "\n".join(_row_texts(g)),
+            timeout=10.0,
+            desc="AUTOMATIC group hidden once nothing requires it",
+        )
+        bridge.click(Selector(role="other", text="Complementary Reimagined"), timeout=10.0)
+        bridge.wait_until(
+            lambda g: any(t.startswith("Iris Shaders Engine") for t in _row_texts(g)),
+            timeout=10.0,
+            desc="AUTOMATIC group back once its dependent is selected again",
+        )
+
+        _scroll_row_into_view(bridge, "Zoomify")
+        bridge.click(Selector(role="other", text="Zoomify"), timeout=10.0)
+        bridge.wait_until(lambda g: _row_checked(g, "Zoomify") is True, timeout=10.0, desc="Zoomify selected")
+
+        _scroll_row_into_view(bridge, "Ambient Sounds")
+        bridge.click(Selector(role="other", text="Ambient Sounds"), timeout=10.0)
+        bridge.wait_until(
+            lambda g: _row_checked(g, "Ambient Sounds") is True and _row_checked(g, "Zoomify") is False,
+            timeout=10.0,
+            desc="declared conflict turns the other selected group off",
+        )
 
         _scroll_row_into_view(bridge, "Shared Waypoints")
         bridge.click(Selector(role="other", text="Shared Waypoints"), timeout=10.0)
@@ -125,12 +162,9 @@ def groups_ui(case: TestCase) -> None:
             timeout=10.0,
             desc="dependency badge after selecting Shared Waypoints",
         )
-        gui_after = bridge.gui()
-        view_top, _ = _viewport_bounds(gui_after)
-        extras_header = [e for e in (gui_after.get("other") or ()) if "Visual & QoL Extras" in str(e.get("text") or "")]
-        if extras_header and int(extras_header[0]["y"]) < view_top:
-            bridge.call("scroll", x=int(gui_after["screenWidth"]) // 2, y=int(gui_after["screenHeight"]) // 2, dx=0.0, dy=2.0)
-            time.sleep(0.15)
+
+        _scroll_row_into_view(bridge, "Included automatically")
+        _scroll_row_into_view(bridge, "Iris Shaders Engine")
         bridge.assert_layout_clean()
         if render:
             time.sleep(0.25)
@@ -146,10 +180,19 @@ def groups_ui(case: TestCase) -> None:
             "selection": "OPTIONAL",
             "compatible-platforms": ["windows"],
         }
+        rich_overrides["groups"]["win_core"] = {
+            "name": "Windows Runtime",
+            "description": "Required only on Windows",
+            "selection": "REQUIRED",
+            "compatible-platforms": ["windows"],
+        }
         case.configure_server(connection_mode="HOLEPUNCH", overrides=rich_overrides)
         _stage_group_file(case.server.server_dir, "win_only", "win-only\n")
+        _stage_group_file(case.server.server_dir, "win_core", "win-core\n")
         assert case.server.rcon("automodpack config reload").returncode == 0
         assert case.server.rcon("automodpack generate").returncode == 0
+        # Generation runs off the command thread and refuses connections while it runs, so wait for its report.
+        case.server.wait_for_log(r"\[Rcon: (PUBLISHED|NO_CHANGES|FAILED)", timeout=120.0)
 
         bridge.connect(f"{case.server.host}:{case.server.game_port}#amp1={fp}")
         bridge.wait_screen("PackConfirmScreen", timeout=60.0)
@@ -157,6 +200,11 @@ def groups_ui(case: TestCase) -> None:
         bridge.wait_screen("GroupSelectionScreen", timeout=30.0)
         gui_plat = bridge.gui()
         assert select_elements(gui_plat, Selector(text="OS:")), "OS dropdown must appear once compatible-platforms are declared"
+        plat_texts = "\n".join(_row_texts(gui_plat))
+        if case.provider.capabilities.os_family == "windows":
+            assert "Windows Runtime" in plat_texts, "OS-scoped REQUIRED group must be included on its own platform"
+        else:
+            assert "Windows Runtime" not in plat_texts, "OS-scoped REQUIRED group must stay out of Included automatically on another OS"
         bridge.assert_layout_clean()
         if render:
             time.sleep(0.25)

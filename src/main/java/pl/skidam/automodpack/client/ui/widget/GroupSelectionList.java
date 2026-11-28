@@ -20,6 +20,7 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
+import pl.skidam.automodpack.client.ui.versioned.VersionedIconButton;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -41,9 +42,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	private static final int CARD_HEIGHT = 32;
 	private static final int CHILD_INDENT = 8;
 	private static final int RADIO_SIZE = 13;
-	private static final int CARD_FILL_SELECTED = 0x26000000;
-	private static final int CARD_FILL_UNSELECTED = 0x14000000;
-	private static final int CARD_BORDER = 0x28FFFFFF;
+	private static final int ACTION_BUTTON_HEIGHT = 18;
+	private static final int ICON_SIZE = 16;
 	private static final int HEADER_DIVIDER = 0x30FFFFFF;
 	private static final int RADIO_BORDER = 0xFF909090;
 	private static final int RADIO_BORDER_ACTIVE = 0xFFFFFFFF;
@@ -305,8 +305,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				this.primaryControl = null;
 				this.filesButton = null;
 				if (!item.actionLabel().isBlank()) {
-					int buttonWidth = Math.max(44, minecraft.font.width(item.actionLabel()) + 14);
-					Button action = VersionedScreen.buttonWidget(0, 0, buttonWidth, 16, VersionedText.literal(item.actionLabel()), button -> onToggle.accept(item));
+					int buttonWidth = Math.max(48, minecraft.font.width(item.actionLabel()) + 18);
+					Button action = new GroupActionButton(minecraft.font, 0, 0, buttonWidth, ACTION_BUTTON_HEIGHT, VersionedText.literal(item.actionLabel()), button -> onToggle.accept(item));
 					if (item.tooltip() != null) VersionedScreen.setTooltip(action, item.tooltip());
 					this.actionButton = action;
 					this.children = List.of(action);
@@ -325,7 +325,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			this.primaryControl = card;
 			this.actionButton = null;
 			if (item.showFilesButton()) {
-				Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
+				Button files = new GroupFilesButton(0, 0, filesWidth, filesLabel(), button -> onInspect.accept(item));
 				VersionedScreen.setTooltip(files, filesLabel());
 				this.filesButton = files;
 				this.children = List.of(card, files);
@@ -435,6 +435,36 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		}
 	}
 
+	/** {@code Select all} / {@code Clear}: a compact flat pill sized to its label. */
+	private static final class GroupActionButton extends FlatButton {
+		private final Font font;
+
+		private GroupActionButton(Font font, int x, int y, int width, int height, Component message, OnPress onPress) {
+			super(x, y, width, height, message, onPress);
+			this.font = font;
+		}
+
+		@Override
+		protected void drawContent(VersionedMatrices matrices, int left, int top, int width, int height, boolean highlighted) {
+			String label = VersionedScreen.truncateToWidth(font, getMessage().getString(), Math.max(1, width - 6));
+			VersionedScreen.drawTextWithShadow(matrices, font, VersionedText.literal(label), left + (width - font.width(label)) / 2, top + (height - font.lineHeight) / 2,
+					active ? TextColors.WHITE : ListChrome.CARD_TEXT_DISABLED);
+		}
+	}
+
+	/** The row's folder control: a flat square holding our own icon texture, never a resource-pack sprite. */
+	private static final class GroupFilesButton extends FlatButton {
+		private GroupFilesButton(int x, int y, int size, Component message, OnPress onPress) {
+			super(x, y, size, size, message, onPress);
+		}
+
+		@Override
+		protected void drawContent(VersionedMatrices matrices, int left, int top, int width, int height, boolean highlighted) {
+			VersionedScreen.drawTexture(VersionedIconButton.spriteTexture("folder"), matrices, left + (width - ICON_SIZE) / 2, top + (height - ICON_SIZE) / 2, 0, 0, ICON_SIZE,
+					ICON_SIZE, ICON_SIZE, ICON_SIZE);
+		}
+	}
+
 	private static final class GroupCardButton extends AbstractButton implements RowPrimaryControl {
 		private final Font font;
 		private final Item item;
@@ -500,9 +530,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			int height = getHeight();
 			boolean hovered = mouseX >= left && mouseX < left + width && mouseY >= top && mouseY < top + height;
 
-			matrices.fill(left, top, left + width, top + height, item.selected() ? CARD_FILL_SELECTED : CARD_FILL_UNSELECTED);
-			if (hovered && this.active) ListChrome.drawHover(matrices, left, top, width, height);
-			matrices.fill(left, top + height - 1, left + width, top + height, CARD_BORDER);
+			ListChrome.drawCard(matrices, left, top, width, height, item.selected(), this.active && (hovered || isFocused()), this.active);
 			if (item.accentColor() != 0) matrices.fill(left, top, left + 2, top + height, item.accentColor());
 
 			if (item.kind() == Kind.RADIO_GROUP) {

@@ -10,6 +10,7 @@ import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.SourceCounts;
@@ -144,7 +145,9 @@ final class PackConfirmCopy {
 	}
 
 	static boolean canCustomize(GroupManifest manifest) {
-		return manifest.hasChoosableGroups();
+		if (manifest.hasChoosableGroups()) return true;
+		// Without a detected platform an OS-scoped pack is still tunable: the player picks the OS in the group screen.
+		return ClientPlatform.current() == null && manifest.hasDeclaredPlatforms();
 	}
 
 	static Component leftoverLabel(int count) {

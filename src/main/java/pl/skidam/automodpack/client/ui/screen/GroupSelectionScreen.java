@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionSummary;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
@@ -323,7 +325,35 @@ public class GroupSelectionScreen extends VersionedScreen {
 			}
 			for (String groupId : uncategorized) items.add(groupItem(groupId, false));
 		}
+
+		List<String> included = new ArrayList<>();
+		for (var entry : groups.entrySet()) {
+			if (entry.getValue().selection().choosable() || !resolution.selectedGroups().contains(entry.getKey())) continue;
+			included.add(entry.getKey());
+		}
+		if (!included.isEmpty()) {
+			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, "", "", VersionedText.text("automodpack.selection.includedAutomatically").withStyle(ChatFormatting.BOLD, ChatFormatting.WHITE),
+					VersionedText.literal(""), VersionedText.literal(""), null, false, false, false, "", 0));
+			for (String groupId : included) items.add(includedGroupItem(groupId));
+		}
 		return List.copyOf(items);
+	}
+
+	private GroupSelectionList.Item includedGroupItem(String groupId) {
+		GroupManifest.Group group = groups.get(groupId);
+		GroupResolution explanation = resolution.resolution(groupId);
+		MutableComponent title = VersionedText.literal(manifest.displayName(groupId)).withStyle(ChatFormatting.AQUA);
+		MutableComponent badge = VersionedText.literal(UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString())
+				.withStyle(ChatFormatting.GRAY);
+		Component subtitle = includedSubtitle(group, explanation);
+		Component tooltip = cardTooltip(groupId, group, explanation, subtitle);
+		return new GroupSelectionList.Item(GroupSelectionList.Kind.CHECKBOX_GROUP, groupId, group.category(), title, subtitle, badge, tooltip, true, false, true, "", ACCENT_DEFAULT);
+	}
+
+	private Component includedSubtitle(GroupManifest.Group group, GroupResolution explanation) {
+		if (group.selection() == GroupSelectionMode.REQUIRED) return VersionedText.text("automodpack.selection.required").withStyle(ChatFormatting.AQUA);
+		if (explanation != null && !explanation.relatedGroups().isEmpty()) return VersionedText.text("automodpack.selection.dependencyNamed", names(explanation.relatedGroups())).withStyle(ChatFormatting.AQUA);
+		return VersionedText.text("automodpack.selection.required").withStyle(ChatFormatting.AQUA);
 	}
 
 	private GroupSelectionList.Item categoryHeaderItem(String catId, GroupManifest.Category cat, List<String> members) {
@@ -376,6 +406,9 @@ public class GroupSelectionScreen extends VersionedScreen {
 	}
 
 	private Component cardSubtitle(String groupId, GroupManifest.Group group, GroupResolution explanation) {
+		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT && !explanation.relatedGroups().isEmpty()) {
+			return VersionedText.text("automodpack.selection.conflictsWith", names(explanation.relatedGroups())).withStyle(ChatFormatting.RED);
+		}
 		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE) {
 			return VersionedText.text("automodpack.selection.unavailableOn", platformDisplay(effectivePlatform())).withStyle(ChatFormatting.RED);
 		}
@@ -399,6 +432,8 @@ public class GroupSelectionScreen extends VersionedScreen {
 		List<String> lines = new ArrayList<>();
 		if (!group.description().isBlank()) lines.add(group.description());
 		if (!group.requires().isEmpty()) lines.add(VersionedText.str("automodpack.selection.requires", names(group.requires())));
+		Set<String> conflicts = manifest.conflictsOf(groupId);
+		if (!conflicts.isEmpty()) lines.add(VersionedText.str("automodpack.selection.conflictsWith", names(conflicts)));
 		if (explanation != null && !explanation.relatedGroups().isEmpty() && explanation.reasons().contains(GroupResolution.Reason.DEPENDENCY)) {
 			lines.add(VersionedText.str("automodpack.selection.dependencyNamed", names(explanation.relatedGroups())));
 		}
@@ -471,9 +506,8 @@ public class GroupSelectionScreen extends VersionedScreen {
 		this.draft = update.intent();
 		useResolved(update.resolution());
 		this.resolutionError = "";
-		this.notice = update.turnedOff().isEmpty()
-				? ""
-				: UiFormat.plural(update.turnedOff().size(), "automodpack.selection.cascadeTurnedOff", names(update.turnedOff())).getString();
+		String noticeKey = update.turnedOffByConflict() ? "automodpack.selection.conflictTurnedOff" : "automodpack.selection.cascadeTurnedOff";
+		this.notice = update.turnedOff().isEmpty() ? "" : UiFormat.plural(update.turnedOff().size(), noticeKey, names(update.turnedOff())).getString();
 		rebuild();
 	}
 
