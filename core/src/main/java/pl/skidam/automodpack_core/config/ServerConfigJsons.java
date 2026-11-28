@@ -82,8 +82,6 @@ public class ServerConfigJsons {
 
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
-		declaration.name = "Core";
-		declaration.description = "Core modpack files";
 		declaration.selection = GroupSelectionMode.REQUIRED;
 		declaration.fromServer = new LinkedHashSet<>(FACTORY_FROM_SERVER);
 		return declaration;
@@ -127,6 +125,7 @@ public class ServerConfigJsons {
 		@SerializedName("auto-exclude-server-side-mods")
 		public ServerSideModExclusion autoExcludeServerSideMods;
 		public Set<String> requires = Set.of();
+		public Set<String> conflicts = Set.of();
 		@SerializedName("compatible-platforms")
 		public Set<String> compatiblePlatforms = Set.of();
 		@SerializedName("from-server")

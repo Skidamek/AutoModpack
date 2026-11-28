@@ -102,9 +102,10 @@ public final class GroupManifestValidator {
 				}
 
 				Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
+				Set<String> conflicts = validateIds("Group '" + id + "' conflicts with", group.conflicts, errors);
 				Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 				Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-				groups.put(id, new GroupManifest.Group(name, description, category, group.selection, requires, platforms, files));
+				groups.put(id, new GroupManifest.Group(name, description, category, group.selection, requires, platforms, files, conflicts));
 			}
 		}
 
@@ -263,6 +264,10 @@ public final class GroupManifestValidator {
 			GroupManifest.Group group = entry.getValue();
 			if (group.requires().contains(id)) errors.add("Group '" + id + "' cannot require itself");
 			for (String dependency : group.requires()) if (!groups.containsKey(dependency)) errors.add("Group '" + id + "' requires missing group '" + dependency + "'");
+			for (String conflict : group.conflicts()) {
+				if (conflict.equals(id)) errors.add("Group '" + id + "' cannot conflict with itself");
+				else if (!groups.containsKey(conflict)) errors.add("Group '" + id + "' conflicts with missing group '" + conflict + "'");
+			}
 		}
 	}
 
@@ -324,7 +329,30 @@ public final class GroupManifestValidator {
 				queue.addLast(depId);
 			}
 		}
-		return SelectionIntent.ofEnabled(enabled);
+		Set<String> disabled = new LinkedHashSet<>();
+		ArrayDeque<String> toDisable = new ArrayDeque<>();
+		for (String activated : seen) {
+			for (String conflicting : manifest.conflictsOf(activated)) {
+				if (seen.contains(conflicting)) continue;
+				if (disabled.add(conflicting)) toDisable.addLast(conflicting);
+			}
+		}
+		while (!toDisable.isEmpty()) {
+			String blocked = toDisable.removeFirst();
+			for (var entry : manifest.groups().entrySet()) {
+				String candidate = entry.getKey();
+				if (seen.contains(candidate) || !entry.getValue().requires().contains(blocked)) continue;
+				if (disabled.add(candidate)) toDisable.addLast(candidate);
+			}
+		}
+		Set<String> intentDisabled = new LinkedHashSet<>();
+		for (String id : disabled) {
+			GroupManifest.Group other = manifest.groups().get(id);
+			if (other == null) continue;
+			GroupManifest.Category otherCat = manifest.categoryOf(id);
+			if (other.selection() == GroupSelectionMode.RECOMMENDED || (otherCat != null && otherCat.pick() == CategoryPickMode.EXACTLY_ONE)) intentDisabled.add(id);
+		}
+		return new SelectionIntent(enabled, intentDisabled);
 	}
 
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {

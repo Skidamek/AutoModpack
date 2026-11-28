@@ -503,6 +503,94 @@ class GroupManifestValidatorTest {
 		assertEquals(first.groups(), GroupManifestValidator.validateForPublish(fields).groups(), "publishing validates the same document under the wider rule");
 	}
 
+	@Test
+	void acceptsOsScopedRequiredGroupOnEveryCoveredPlatform() {
+		var fields = catalogue();
+		var winCore = groupAt("mods/win-core.jar", file("b"));
+		winCore.selection = GroupSelectionMode.REQUIRED;
+		winCore.compatiblePlatforms = Set.of("windows");
+		winCore.requires = Set.of("win-lib");
+		var winLib = groupAt("mods/win-lib.jar", file("c"));
+		winLib.compatiblePlatforms = Set.of("windows");
+		fields.groups = linkedGroups("main", group(file("a")), "win-core", winCore, "win-lib", winLib);
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertTrue(manifest.groups().get("win-core").supports(ClientPlatform.WINDOWS));
+		assertFalse(manifest.groups().get("win-core").supports(ClientPlatform.LINUX));
+	}
+
+	@Test
+	void rejectsSelfConflictAndUnknownConflictTarget() {
+		var self = catalogue();
+		var selfGroup = group(file("a"));
+		selfGroup.conflicts = Set.of("main");
+		self.groups = linkedGroups("main", selfGroup);
+		GroupValidationException selfFailure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(self));
+		assertTrue(selfFailure.getMessage().contains("cannot conflict with itself"), selfFailure.getMessage());
+
+		var unknown = catalogue();
+		var unknownGroup = group(file("a"));
+		unknownGroup.conflicts = Set.of("missing");
+		unknown.groups = linkedGroups("main", unknownGroup);
+		GroupValidationException unknownFailure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(unknown));
+		assertTrue(unknownFailure.getMessage().contains("conflicts with missing group 'missing'"), unknownFailure.getMessage());
+	}
+
+	@Test
+	void acceptsOverlappingFilesBetweenGroupsThatConflict() {
+		var fields = catalogue();
+		var first = group(file("a"));
+		first.conflicts = Set.of("second");
+		var second = group(file("b"));
+		fields.groups = linkedGroups("first", first, "second", second);
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsTwoConflictingRecommendedDefaults() {
+		var fields = catalogue();
+		var first = group(file("a"));
+		first.selection = GroupSelectionMode.RECOMMENDED;
+		first.conflicts = Set.of("second");
+		var second = groupAt("mods/second.jar", file("b"));
+		second.selection = GroupSelectionMode.RECOMMENDED;
+		fields.groups = linkedGroups("first", first, "second", second);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void acceptsOptionalGroupThatConflictsWithARecommendedDefault() {
+		var fields = catalogue();
+		var recommended = group(file("a"));
+		recommended.selection = GroupSelectionMode.RECOMMENDED;
+		var optional = groupAt("mods/optional.jar", file("b"));
+		optional.conflicts = Set.of("recommended");
+		fields.groups = linkedGroups("recommended", recommended, "optional", optional);
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void acceptsOptionalWhoseAutomaticDependencyConflictsWithRecommended() {
+		var fields = catalogue();
+		var core = groupAt("mods/core.jar", file("a"));
+		core.selection = GroupSelectionMode.REQUIRED;
+		var engine = groupAt("mods/engine.jar", file("a"));
+		engine.selection = GroupSelectionMode.AUTOMATIC;
+		var recommended = groupAt("mods/recommended.jar", file("a"));
+		recommended.selection = GroupSelectionMode.RECOMMENDED;
+		recommended.conflicts = Set.of("engine");
+		var optional = groupAt("mods/optional.jar", file("b"));
+		optional.selection = GroupSelectionMode.OPTIONAL;
+		optional.requires = Set.of("engine");
+		fields.groups = linkedGroups("main", core, "engine", engine, "recommended", recommended, "optional", optional);
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

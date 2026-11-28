@@ -71,6 +71,16 @@ public final class TomlConfigs {
 			.field(ConfigPath.of("self-updater"), TomlValue.bool(false))
 			.field(ConfigPath.of("accepted-loaders"), TomlValue.array(), "extra loaders allowed to join; this server's loader is always accepted")
 			.field(ConfigPath.of("advertise-versions-to-sync"), TomlValue.bool(true), "tell clients the pack Minecraft and loader versions")
+			.comment(ConfigPath.of("modpack"),
+					"host-modpack/<id>/ is included in full. from-server pulls extra files from the server root. exclude and editable apply to every group; groups can extend or negate (!) them.")
+			.field(ConfigPath.of("modpack", "name"), TomlValue.str(""))
+			.field(ConfigPath.of("modpack", "auto-exclude-server-side-mods"), TomlValue.str(ServerSideModExclusion.METADATA.name()),
+					"DISABLED ships every jar. METADATA and PLATFORMS drop dedicated-server jars on a best-effort basis.")
+			.field(ConfigPath.of("modpack", "exclude"), stringArray(ServerConfigJsons.FACTORY_EXCLUDE))
+			.field(ConfigPath.of("modpack", "editable"), stringArray(ServerConfigJsons.FACTORY_EDITABLE))
+			.dynamicTable(ConfigPath.of("categories"))
+			.comment(ConfigPath.of("groups"), "Each group maps 1:1 to host-modpack/<id>/. selection: REQUIRED, RECOMMENDED, OPTIONAL, AUTOMATIC.")
+			.dynamicTable(ConfigPath.of("groups"))
 			.field(ConfigPath.of("network", "connection-mode"), TomlValue.str(ModpackConnectionMode.HOLEPUNCH.name()),
 					"HOLEPUNCH uses the Minecraft port. MAGIC can share it or use bind-port. HTTP uses bind-port.")
 			.field(ConfigPath.of("network", "bind-address"), TomlValue.str(""))
@@ -88,16 +98,6 @@ public final class TomlConfigs {
 			.field(ConfigPath.of("nag", "clickable-link"), TomlValue.str("https://modrinth.com/project/automodpack"))
 			.field(ConfigPath.of("export-http", "directory"), TomlValue.str(""))
 			.field(ConfigPath.of("export-http", "include-all"), TomlValue.bool(false))
-			.comment(ConfigPath.of("modpack"),
-					"host-modpack/<id>/ is included in full. from-server pulls extra files from the server root. exclude and editable apply to every group; groups can extend or negate (!) them.")
-			.field(ConfigPath.of("modpack", "name"), TomlValue.str(""))
-			.field(ConfigPath.of("modpack", "auto-exclude-server-side-mods"), TomlValue.str(ServerSideModExclusion.METADATA.name()),
-					"DISABLED ships every jar. METADATA and PLATFORMS drop dedicated-server jars on a best-effort basis.")
-			.field(ConfigPath.of("modpack", "exclude"), stringArray(ServerConfigJsons.FACTORY_EXCLUDE))
-			.field(ConfigPath.of("modpack", "editable"), stringArray(ServerConfigJsons.FACTORY_EDITABLE))
-			.dynamicTable(ConfigPath.of("categories"))
-			.comment(ConfigPath.of("groups"), "Each group maps 1:1 to host-modpack/<id>/. selection: REQUIRED, RECOMMENDED, OPTIONAL, AUTOMATIC.")
-			.dynamicTable(ConfigPath.of("groups"))
 			.build();
 
 	private static final TomlSchema CLIENT_SCHEMA = TomlSchema.builder()
@@ -296,6 +296,7 @@ public final class TomlConfigs {
 		g.selection = r.enumVal("selection", GroupSelectionMode.class, g.selection);
 		g.autoExcludeServerSideMods = r.enumVal("auto-exclude-server-side-mods", ServerSideModExclusion.class).orElse(null);
 		g.requires = r.stringSet("requires", g.requires);
+		g.conflicts = r.stringSet("conflicts", g.conflicts);
 		g.compatiblePlatforms = r.stringSet("compatible-platforms", g.compatiblePlatforms);
 		g.fromServer = r.stringSet("from-server", g.fromServer);
 		g.exclude = r.stringSet("exclude", g.exclude);
@@ -335,31 +336,6 @@ public final class TomlConfigs {
 		root.put("accepted-loaders", stringArray(c.acceptedLoaders));
 		root.put("advertise-versions-to-sync", TomlValue.bool(c.advertiseVersionsToSync));
 
-		ModpackConnectionMode mode = c.connectionMode != null ? c.connectionMode : ModpackConnectionMode.HOLEPUNCH;
-		root.put("network", TomlValue.table()
-				.put("connection-mode", TomlValue.str(mode.name()))
-				.put("bind-address", TomlValue.str(nonNull(c.bindAddress)))
-				.put("bind-port", TomlValue.integer(c.bindPort))
-				.put("advertised-host", TomlValue.str(nonNull(c.advertisedEndpointHost)))
-				.put("advertised-port", TomlValue.integer(c.advertisedEndpointPort))
-				.put("disable-internal-tls", TomlValue.bool(c.disableInternalTLS))
-				.put("accept-proxy-protocol", TomlValue.bool(c.acceptProxyProtocol))
-				.put("bandwidth-limit", TomlValue.integer(c.bandwidthLimit)));
-
-		root.put("secrets", TomlValue.table()
-				.put("validate", TomlValue.bool(c.validateSecrets))
-				.put("lifetime-hours", TomlValue.integer(c.secretLifetime)));
-
-		root.put("nag", TomlValue.table()
-				.put("enabled", TomlValue.bool(c.nagUnModdedClients))
-				.put("message", TomlValue.str(nonNull(c.nagMessage)))
-				.put("clickable-message", TomlValue.str(nonNull(c.nagClickableMessage)))
-				.put("clickable-link", TomlValue.str(nonNull(c.nagClickableLink))));
-
-		root.put("export-http", TomlValue.table()
-				.put("directory", TomlValue.str(nonNull(c.exportHttpDirectory)))
-				.put("include-all", TomlValue.bool(c.exportHttpIncludeAll)));
-
 		ModpackFields mp = c.modpack != null ? c.modpack : ModpackFields.withMainGroup();
 		ServerSideModExclusion packExclusion = mp.autoExcludeServerSideMods != null ? mp.autoExcludeServerSideMods : ServerSideModExclusion.METADATA;
 		root.put("modpack", TomlValue.table()
@@ -387,6 +363,31 @@ public final class TomlConfigs {
 			}
 			if (!groupsTable.members().isEmpty() || existingGroups != null) root.put("groups", groupsTable);
 		}
+
+		ModpackConnectionMode mode = c.connectionMode != null ? c.connectionMode : ModpackConnectionMode.HOLEPUNCH;
+		root.put("network", TomlValue.table()
+				.put("connection-mode", TomlValue.str(mode.name()))
+				.put("bind-address", TomlValue.str(nonNull(c.bindAddress)))
+				.put("bind-port", TomlValue.integer(c.bindPort))
+				.put("advertised-host", TomlValue.str(nonNull(c.advertisedEndpointHost)))
+				.put("advertised-port", TomlValue.integer(c.advertisedEndpointPort))
+				.put("disable-internal-tls", TomlValue.bool(c.disableInternalTLS))
+				.put("accept-proxy-protocol", TomlValue.bool(c.acceptProxyProtocol))
+				.put("bandwidth-limit", TomlValue.integer(c.bandwidthLimit)));
+
+		root.put("secrets", TomlValue.table()
+				.put("validate", TomlValue.bool(c.validateSecrets))
+				.put("lifetime-hours", TomlValue.integer(c.secretLifetime)));
+
+		root.put("nag", TomlValue.table()
+				.put("enabled", TomlValue.bool(c.nagUnModdedClients))
+				.put("message", TomlValue.str(nonNull(c.nagMessage)))
+				.put("clickable-message", TomlValue.str(nonNull(c.nagClickableMessage)))
+				.put("clickable-link", TomlValue.str(nonNull(c.nagClickableLink))));
+
+		root.put("export-http", TomlValue.table()
+				.put("directory", TomlValue.str(nonNull(c.exportHttpDirectory)))
+				.put("include-all", TomlValue.bool(c.exportHttpIncludeAll)));
 		return root;
 	}
 
@@ -407,6 +408,7 @@ public final class TomlConfigs {
 		if (hasKey(existing, "category") || !nonNull(g.category).isEmpty()) t.put("category", TomlValue.str(nonNull(g.category)));
 		if (g.autoExcludeServerSideMods != null) t.put("auto-exclude-server-side-mods", TomlValue.str(g.autoExcludeServerSideMods.name()));
 		if (hasKey(existing, "requires") || !isEmpty(g.requires)) t.put("requires", stringArray(g.requires));
+		if (hasKey(existing, "conflicts") || !isEmpty(g.conflicts)) t.put("conflicts", stringArray(g.conflicts));
 		if (hasKey(existing, "compatible-platforms") || !isEmpty(g.compatiblePlatforms)) t.put("compatible-platforms", stringArray(g.compatiblePlatforms));
 		if (hasKey(existing, "from-server") || !isEmpty(g.fromServer)) t.put("from-server", stringArray(g.fromServer));
 		if (hasKey(existing, "exclude") || !isEmpty(g.exclude)) t.put("exclude", stringArray(g.exclude));

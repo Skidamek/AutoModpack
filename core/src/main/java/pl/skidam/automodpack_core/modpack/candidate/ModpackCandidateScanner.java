@@ -188,6 +188,7 @@ public final class ModpackCandidateScanner {
 				group.category = declaration.category;
 				group.selection = declaration.selection;
 				group.requires = sortedSet(declaration.requires);
+				group.conflicts = sortedSet(declaration.conflicts);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
 				group.files = filesByGroup.get(entry.getKey());
 				groupFields.put(entry.getKey(), group);

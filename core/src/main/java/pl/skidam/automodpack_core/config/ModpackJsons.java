@@ -33,6 +33,7 @@ public class ModpackJsons {
 			public String category = "";
 			public GroupSelectionMode selection;
 			public Set<String> requires = Set.of();
+			public Set<String> conflicts = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();
 			public Map<String, GroupFileFields> files = Map.of();
 		}

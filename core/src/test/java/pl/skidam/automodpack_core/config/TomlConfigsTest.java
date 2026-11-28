@@ -47,11 +47,14 @@ class TomlConfigsTest {
 		assertFalse(text.contains("[modpack.groups"), text);
 		assertFalse(text.contains("[categories"), text);
 		assertTrue(text.contains("from-server = [\"mods/*.jar\", \"kubejs/**\", \"emotes/*\"]"), text);
-		assertTrue(text.contains("name = \"Core\""), text);
+		assertFalse(text.contains("name = \"Core\""), "the main group must not ship a name the admin never wrote:\n" + text);
 		assertTrue(text.contains("selection = \"REQUIRED\""), text);
+		assertTrue(text.indexOf("[modpack]") < text.indexOf("[groups.main]") && text.indexOf("[groups.main]") < text.indexOf("[network]"),
+				"sections must run [modpack], [groups.*], then [network]:\n" + text);
 		assertTrue(text.contains("auto-exclude-server-side-mods = \"METADATA\""), text);
 		assertFalse(text.contains("default-selected"), text);
 		assertEquals("", config.modpack.name);
+		assertEquals("", config.modpack.groups.get("main").name);
 		assertEquals(ServerSideModExclusion.METADATA, config.modpack.autoExcludeServerSideMods);
 		assertNull(config.modpack.groups.get("main").autoExcludeServerSideMods);
 	}
@@ -234,6 +237,23 @@ class TomlConfigsTest {
 		assertEquals(CategoryPickMode.AT_MOST_ONE, reread.modpack.categories.get("shaders").pick);
 		assertEquals(GroupSelectionMode.RECOMMENDED, reread.modpack.groups.get("bsl").selection);
 		assertNull(reread.modpack.groups.get("bsl").autoExcludeServerSideMods);
+	}
+
+	@Test
+	void groupConflictsRoundTripAndStayOmittedWhenEmpty() throws IOException {
+		ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration audio = new ServerConfigJsons.GroupDeclaration();
+		audio.selection = GroupSelectionMode.OPTIONAL;
+		audio.conflicts = Set.of("zoom");
+		config.modpack.groups.put("audio", audio);
+
+		TomlConfigs.save(serverConfig(), config, ServerConfigFieldsV3.class, ServerConfigFieldsV3::new);
+		String text = Files.readString(serverConfig(), StandardCharsets.UTF_8);
+		assertTrue(text.contains("conflicts = [\"zoom\"]"), text);
+		assertFalse(text.contains("[groups.main]\nselection = \"REQUIRED\"\nconflicts"), "an empty conflict list must stay omitted:\n" + text);
+		ServerConfigFieldsV3 reread = TomlConfigs.read(serverConfig(), ServerConfigFieldsV3.class).orElseThrow();
+		assertEquals(Set.of("zoom"), reread.modpack.groups.get("audio").conflicts);
+		assertTrue(reread.modpack.groups.get("main").conflicts.isEmpty());
 	}
 
 	@Test

@@ -53,6 +53,23 @@ public record GroupManifest(
 		return category == null || category.name().isBlank() ? categoryId : category.name();
 	}
 
+	/** Conflicts are declared on one side only; this is the one place that makes the relation symmetric. */
+	public boolean conflicts(String first, String second) {
+		Group group = groups.get(first);
+		Group other = groups.get(second);
+		if (group == null || other == null || first.equals(second)) return false;
+		return group.conflicts().contains(second) || other.conflicts().contains(first);
+	}
+
+	public Set<String> conflictsOf(String groupId) {
+		Set<String> conflicts = new TreeSet<>();
+		if (!groups.containsKey(groupId)) return conflicts;
+		conflicts.addAll(groups.get(groupId).conflicts());
+		for (var entry : groups.entrySet()) if (entry.getValue().conflicts().contains(groupId)) conflicts.add(entry.getKey());
+		conflicts.remove(groupId);
+		return conflicts;
+	}
+
 	public ModpackJsons.CompleteModpackContentFields toFields() {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
@@ -82,6 +99,7 @@ public record GroupManifest(
 			serialized.category = group.category();
 			serialized.selection = group.selection();
 			serialized.requires = new LinkedHashSet<>(group.requires());
+			serialized.conflicts = new LinkedHashSet<>(group.conflicts());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
 					.collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
 			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
@@ -136,7 +154,8 @@ public record GroupManifest(
 			GroupSelectionMode selection,
 			Set<String> requires,
 			Set<ClientPlatform> compatiblePlatforms,
-			Map<String, GroupFile> files) {
+			Map<String, GroupFile> files,
+			Set<String> conflicts) {
 		public Group {
 			name = name == null ? "" : name;
 			description = description == null ? "" : description;
@@ -145,6 +164,12 @@ public record GroupManifest(
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
+			conflicts = immutableSet(conflicts);
+		}
+
+		public Group(String name, String description, String category, GroupSelectionMode selection, Set<String> requires,
+				Set<ClientPlatform> compatiblePlatforms, Map<String, GroupFile> files) {
+			this(name, description, category, selection, requires, compatiblePlatforms, files, Set.of());
 		}
 
 		public boolean alwaysInstalled() {
@@ -163,7 +188,8 @@ public record GroupManifest(
 		public boolean hasSameMetadata(Group other) {
 			return other != null && Objects.equals(name, other.name) && Objects.equals(description, other.description)
 					&& Objects.equals(category, other.category) && selection == other.selection
-					&& Objects.equals(requires, other.requires) && Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
+					&& Objects.equals(requires, other.requires) && Objects.equals(compatiblePlatforms, other.compatiblePlatforms)
+					&& Objects.equals(conflicts, other.conflicts);
 		}
 	}
 

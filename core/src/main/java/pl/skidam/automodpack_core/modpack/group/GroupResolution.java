@@ -50,6 +50,7 @@ public record GroupResolution(String groupId, Status status, NavigableSet<Reason
 		EXPLICIT_ENABLE_UNAVAILABLE,
 		BLOCKED_BY_DEPENDENCY,
 		EXCLUSIVE_CONFLICT,
+		PAIRWISE_CONFLICT,
 		AUTOMATIC_UNUSED
 	}
 }

@@ -168,6 +168,96 @@ class GroupSelectionResolverTest {
 		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("windows").status());
 	}
 
+	@Test
+	void osScopedRequiredGroupInstallsOnlyOnItsPlatformWithoutError() {
+		GroupManifest.Group windowsCore = new GroupManifest.Group("Windows Runtime", "", "", GroupSelectionMode.REQUIRED, Set.of(), Set.of(ClientPlatform.WINDOWS), Map.of());
+		GroupManifest.Group core = group(GroupSelectionMode.REQUIRED, Set.of());
+		GroupManifest manifest = manifest(Map.of(), Map.of("main", core, "win-core", windowsCore));
+
+		ResolvedSelection windows = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.WINDOWS);
+		assertEquals(Set.of("main", "win-core"), windows.selectedGroups());
+		assertEquals(Set.of("main", "win-core"), windows.requiredGroups());
+
+		ResolvedSelection linux = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
+		assertEquals(Set.of("main"), linux.selectedGroups());
+		assertEquals(Set.of("main"), linux.requiredGroups());
+		assertEquals(GroupResolution.Status.UNAVAILABLE, linux.resolution("win-core").status());
+		assertTrue(linux.unavailableGroups().contains("win-core"));
+	}
+
+	@Test
+	void pairwiseConflictsAreSymmetricInResolutionAndPossibleToDeclareFromEitherSide() {
+		GroupManifest.Group audio = new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(), Set.of("zoom"));
+		GroupManifest.Group zoom = new GroupManifest.Group("", "", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(), Set.of());
+		GroupManifest manifest = manifest(Map.of(), Map.of("audio", audio, "zoom", zoom));
+
+		assertTrue(manifest.conflicts("audio", "zoom"));
+		assertTrue(manifest.conflicts("zoom", "audio"));
+		assertEquals(Set.of("zoom"), manifest.conflictsOf("audio"));
+		assertEquals(Set.of("audio"), manifest.conflictsOf("zoom"));
+
+		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
+				() -> GroupSelectionResolver.resolve(manifest, SelectionIntent.ofEnabled(Set.of("audio", "zoom")), ClientPlatform.LINUX));
+		assertTrue(failure.errors().contains("Groups 'audio' and 'zoom' conflict with each other"), failure.errors().toString());
+		for (String id : List.of("audio", "zoom")) {
+			assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().resolution(id).status());
+			assertTrue(failure.resolution().resolution(id).reasons().contains(GroupResolution.Reason.PAIRWISE_CONFLICT));
+		}
+		assertEquals(Set.of("zoom"), failure.resolution().resolution("audio").relatedGroups());
+		assertEquals(Set.of("audio"), failure.resolution().resolution("zoom").relatedGroups());
+	}
+
+	@Test
+	void enablingAGroupTurnsOffTheConflictingChoosableGroup() {
+		GroupManifest.Group audio = new GroupManifest.Group("Ambient Sounds", "", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(), Set.of("zoom"));
+		GroupManifest.Group zoom = new GroupManifest.Group("Zoomify", "", "", GroupSelectionMode.RECOMMENDED, Set.of(), Set.of(), Map.of());
+		GroupManifest manifest = manifest(Map.of(), Map.of("audio", audio, "zoom", zoom));
+
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
+		assertEquals(Set.of("zoom"), defaults.selectedGroups());
+
+		GroupSelectionResolver.SelectionUpdate enabled = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "audio", ClientPlatform.LINUX);
+		assertEquals("", enabled.error());
+		assertEquals(Set.of("audio"), enabled.resolution().selectedGroups());
+		assertEquals(Set.of("zoom"), enabled.intent().disabled());
+		assertEquals(Set.of("zoom"), enabled.turnedOff());
+	}
+
+	@Test
+	void conflictWithRequiredGroupRefusesTheToggleInsteadOfDroppingTheRequiredGroup() {
+		GroupManifest.Group core = group(GroupSelectionMode.REQUIRED, Set.of());
+		GroupManifest.Group audio = new GroupManifest.Group("Ambient Sounds", "", "", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(), Set.of("main"));
+		GroupManifest manifest = manifest(Map.of(), Map.of("main", core, "audio", audio));
+
+		GroupSelectionResolver.SelectionUpdate refused = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "audio", ClientPlatform.LINUX);
+		assertFalse(refused.error().isEmpty());
+		assertTrue(refused.error().contains("Ambient Sounds") && refused.error().contains("required"), refused.error());
+		assertEquals(SelectionIntent.DEFAULTS, refused.intent());
+		assertEquals(Set.of("main"), refused.resolution().selectedGroups());
+	}
+
+	@Test
+	void toggleDisablesDependentOfConflictingAutomaticAndSetCategoryAllClearsExternalConflict() {
+		GroupManifest.Group core = new GroupManifest.Group("Core", "", "", GroupSelectionMode.REQUIRED, Set.of(), Set.of(), Map.of(), Set.of());
+		GroupManifest.Group engine = new GroupManifest.Group("Engine", "", "", GroupSelectionMode.AUTOMATIC, Set.of(), Set.of(), Map.of(), Set.of());
+		GroupManifest.Group shaders = new GroupManifest.Group("Shaders", "", "", GroupSelectionMode.RECOMMENDED, Set.of("engine"), Set.of(), Map.of(), Set.of());
+		GroupManifest.Group lite = new GroupManifest.Group("Lite Mode", "", "extras", GroupSelectionMode.OPTIONAL, Set.of(), Set.of(), Map.of(), Set.of("engine"));
+		GroupManifest manifest = manifest(Map.of("extras", new GroupManifest.Category("Extras", "", CategoryPickMode.ANY)),
+				Map.of("main", core, "engine", engine, "shaders", shaders, "lite", lite));
+
+		GroupSelectionResolver.SelectionUpdate toggled = GroupSelectionResolver.toggleGroup(manifest, SelectionIntent.DEFAULTS, "lite", ClientPlatform.LINUX);
+		assertTrue(toggled.ok(), toggled.error());
+		assertEquals(Set.of("main", "lite"), toggled.resolution().selectedGroups());
+		assertEquals(Set.of("shaders"), toggled.turnedOff());
+		assertTrue(toggled.turnedOffByConflict());
+
+		GroupSelectionResolver.SelectionUpdate bulk = GroupSelectionResolver.setCategoryAll(manifest, SelectionIntent.DEFAULTS, "extras", true, ClientPlatform.LINUX);
+		assertTrue(bulk.ok(), bulk.error());
+		assertEquals(Set.of("main", "lite"), bulk.resolution().selectedGroups());
+		assertEquals(Set.of("shaders"), bulk.turnedOff());
+		assertTrue(bulk.turnedOffByConflict());
+	}
+
 	private static GroupManifest manifest(Map<String, GroupManifest.Category> categories, Map<String, GroupManifest.Group> groups) {
 		return new GroupManifest("abc1234", "", "", "", "", "", new LinkedHashMap<>(categories), new LinkedHashMap<>(groups));
 	}

@@ -5,11 +5,15 @@ import java.util.*;
 public final class GroupSelectionResolver {
 	private GroupSelectionResolver() {}
 
-	public record SelectionUpdate(SelectionIntent intent, ResolvedSelection resolution, NavigableSet<String> turnedOff, String error) {
+	public record SelectionUpdate(SelectionIntent intent, ResolvedSelection resolution, NavigableSet<String> turnedOff, String error, boolean turnedOffByConflict) {
 		public SelectionUpdate {
 			intent = Objects.requireNonNull(intent, "intent");
 			turnedOff = turnedOff == null ? Collections.emptyNavigableSet() : Collections.unmodifiableNavigableSet(new TreeSet<>(turnedOff));
 			error = error == null ? "" : error;
+		}
+
+		public SelectionUpdate(SelectionIntent intent, ResolvedSelection resolution, NavigableSet<String> turnedOff, String error) {
+			this(intent, resolution, turnedOff, error, false);
 		}
 
 		public boolean ok() {
@@ -58,15 +62,14 @@ public final class GroupSelectionResolver {
 			}
 		}
 
-		// Pass 1: REQUIRED groups always install.
+		// Pass 1: REQUIRED groups always install; one scoped to other platforms stays unavailable, not an error.
 		for (var entry : groups.entrySet()) {
 			String id = entry.getKey();
 			GroupManifest.Group group = entry.getValue();
 			if (group.selection() != GroupSelectionMode.REQUIRED) continue;
+			if (!group.supports(platform)) continue;
 			coreRoots.add(id);
-			if (!group.supports(platform)) {
-				errors.add("Required group '" + id + "' is not available on " + platformLabel(platform));
-			} else if (blockedBy.containsKey(id)) {
+			if (blockedBy.containsKey(id)) {
 				errors.add("Required group '" + id + "' requires incompatible groups on " + platformLabel(platform) + ": " + String.join(", ", blockedBy.get(id)));
 			} else {
 				selected.add(id);
@@ -224,16 +227,28 @@ public final class GroupSelectionResolver {
 			}
 		}
 
-		// Pass 5: Verify no exclusive category ended up with > 1 group after dependency expansion.
-		Map<String, List<String>> conflicts = new LinkedHashMap<>();
+		// Pass 5: Verify no exclusive category and no declared pair ended up with > 1 group after dependency expansion.
+		Map<String, List<String>> categoryConflicts = new LinkedHashMap<>();
 		for (var catEntry : exclusiveMembers.entrySet()) {
 			String catId = catEntry.getKey();
 			List<String> chosenInCat = new ArrayList<>();
 			for (String id : catEntry.getValue()) if (selected.contains(id)) chosenInCat.add(id);
 			if (chosenInCat.size() > 1) {
-				conflicts.put(catId, chosenInCat);
+				categoryConflicts.put(catId, chosenInCat);
 				errors.add("Exclusive category '" + catId + "' cannot install multiple groups together: " + String.join(", ", chosenInCat));
 			}
+		}
+
+		Set<String> pairwiseConflicts = new TreeSet<>();
+		for (String first : selected) for (String second : manifest.conflictsOf(first)) {
+			if (first.compareTo(second) >= 0 || !selected.contains(second)) continue;
+			pairwiseConflicts.add(first);
+			pairwiseConflicts.add(second);
+			reasons.get(first).add(GroupResolution.Reason.PAIRWISE_CONFLICT);
+			reasons.get(second).add(GroupResolution.Reason.PAIRWISE_CONFLICT);
+			related.get(first).add(second);
+			related.get(second).add(first);
+			errors.add("Groups '" + first + "' and '" + second + "' conflict with each other");
 		}
 
 		// Assemble per-group statuses.
@@ -242,10 +257,12 @@ public final class GroupSelectionResolver {
 			String id = entry.getKey();
 			GroupManifest.Group group = entry.getValue();
 			String catId = group.category();
-			List<String> catConflicts = catId.isEmpty() ? List.of() : conflicts.getOrDefault(catId, List.of());
+			List<String> catConflicts = catId.isEmpty() ? List.of() : categoryConflicts.getOrDefault(catId, List.of());
 
 			GroupResolution.Status status;
-			if (catConflicts.size() > 1 && catConflicts.contains(id)) {
+			if (pairwiseConflicts.contains(id)) {
+				status = GroupResolution.Status.CONFLICT;
+			} else if (catConflicts.size() > 1 && catConflicts.contains(id)) {
 				status = GroupResolution.Status.CONFLICT;
 				reasons.get(id).add(GroupResolution.Reason.EXCLUSIVE_CONFLICT);
 				for (String other : catConflicts) if (!other.equals(id)) related.get(id).add(other);
@@ -300,6 +317,7 @@ public final class GroupSelectionResolver {
 
 		Set<String> enabled = new TreeSet<>(current.enabled());
 		Set<String> disabled = new TreeSet<>(current.disabled());
+		boolean clearedConflicts = false;
 		if (currentlySelected) {
 			Set<String> cascade = selectedDependentsClosure(manifest, previous.selectedGroups(), groupId);
 			for (String off : cascade) {
@@ -319,10 +337,14 @@ public final class GroupSelectionResolver {
 		} else {
 			if (!group.supports(platform)) return failure(current, previous, "Not available on this platform");
 			enableGroupTree(manifest, groupId, enabled, disabled, platform);
+			Set<String> cleared = new LinkedHashSet<>();
+			String conflictError = clearConflictingSelection(manifest, previous, activationClosure(manifest, groupId), enabled, disabled, cleared);
+			if (!conflictError.isEmpty()) return failure(current, previous, conflictError);
+			clearedConflicts = !cleared.isEmpty();
 		}
 
 		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
-		return settleTransition(manifest, current, previous, nextIntent, Set.of(groupId), platform);
+		return settleTransition(manifest, current, previous, nextIntent, Set.of(groupId), platform, clearedConflicts);
 	}
 
 	public static SelectionUpdate pickInCategory(GroupManifest manifest, SelectionIntent current, String categoryId, String chosenGroupId, ClientPlatform platform) {
@@ -363,6 +385,7 @@ public final class GroupSelectionResolver {
 			disabled.remove(sibling);
 		}
 
+		boolean clearedConflicts = false;
 		if (chosenId == null) {
 			for (String sibling : members) {
 				GroupManifest.Group siblingGroup = manifest.groups().get(sibling);
@@ -370,6 +393,10 @@ public final class GroupSelectionResolver {
 			}
 		} else {
 			enableGroupTree(manifest, chosenId, enabled, disabled, platform);
+			Set<String> cleared = new LinkedHashSet<>();
+			String conflictError = clearConflictingSelection(manifest, previous, activationClosure(manifest, chosenId), enabled, disabled, cleared);
+			if (!conflictError.isEmpty()) return failure(current, previous, conflictError);
+			clearedConflicts = !cleared.isEmpty();
 			// Drop redundant enabled flag when the category's clean state already selects chosenId naturally.
 			Set<String> probeEnabled = new TreeSet<>(enabled);
 			probeEnabled.remove(chosenId);
@@ -382,7 +409,7 @@ public final class GroupSelectionResolver {
 
 		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
 		Set<String> suppressed = chosenId == null ? Set.copyOf(members) : Set.of(chosenId);
-		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform);
+		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform, clearedConflicts);
 	}
 
 	public static SelectionUpdate setCategoryAll(GroupManifest manifest, SelectionIntent current, String categoryId, boolean selectAll, ClientPlatform platform) {
@@ -398,12 +425,19 @@ public final class GroupSelectionResolver {
 		Set<String> disabled = new TreeSet<>(current.disabled());
 		List<String> members = categoryMembers(manifest, categoryId);
 
+		boolean clearedConflicts = false;
 		if (selectAll) {
+			Set<String> activating = new LinkedHashSet<>();
 			for (String id : members) {
 				GroupManifest.Group g = manifest.groups().get(id);
 				if (g == null || !g.selection().choosable() || !g.supports(platform)) continue;
 				enableGroupTree(manifest, id, enabled, disabled, platform);
+				activating.addAll(activationClosure(manifest, id));
 			}
+			Set<String> cleared = new LinkedHashSet<>();
+			String conflictError = clearConflictingSelection(manifest, previous, activating, enabled, disabled, cleared);
+			if (!conflictError.isEmpty()) return failure(current, previous, conflictError);
+			clearedConflicts = !cleared.isEmpty();
 		} else {
 			Set<String> toClear = new LinkedHashSet<>();
 			for (String id : members) {
@@ -428,7 +462,7 @@ public final class GroupSelectionResolver {
 
 		SelectionIntent nextIntent = new SelectionIntent(enabled, disabled, current.platform());
 		Set<String> suppressed = new HashSet<>(members);
-		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform);
+		return settleTransition(manifest, current, previous, nextIntent, suppressed, platform, clearedConflicts);
 	}
 
 	public static SelectionUpdate withPlatform(GroupManifest manifest, SelectionIntent current, ClientPlatform override, ClientPlatform effectivePlatform) {
@@ -452,7 +486,7 @@ public final class GroupSelectionResolver {
 	}
 
 	private static SelectionUpdate settleTransition(GroupManifest manifest, SelectionIntent previousIntent, ResolvedSelection previous,
-			SelectionIntent candidateIntent, Set<String> suppressFromNotice, ClientPlatform platform) {
+			SelectionIntent candidateIntent, Set<String> suppressFromNotice, ClientPlatform platform, boolean turnedOffByConflict) {
 		try {
 			ResolvedSelection next = resolve(manifest, candidateIntent, platform);
 			NavigableSet<String> turnedOff = new TreeSet<>();
@@ -461,7 +495,7 @@ public final class GroupSelectionResolver {
 				GroupManifest.Group g = manifest.groups().get(id);
 				if (g != null && !g.selection().automatic()) turnedOff.add(id);
 			}
-			return new SelectionUpdate(candidateIntent, next, turnedOff, "");
+			return new SelectionUpdate(candidateIntent, next, turnedOff, "", turnedOffByConflict && !turnedOff.isEmpty());
 		} catch (SelectionResolutionException e) {
 			String msg = e.errors().isEmpty() ? "Selection cannot be resolved" : e.errors().get(0);
 			return new SelectionUpdate(previousIntent, previous, Collections.emptyNavigableSet(), msg);
@@ -526,6 +560,47 @@ public final class GroupSelectionResolver {
 			}
 		}
 		return closure;
+	}
+
+	/** Everything the given group pulls in, itself included: the set a toggle actually activates. */
+	private static Set<String> activationClosure(GroupManifest manifest, String groupId) {
+		Set<String> closure = new LinkedHashSet<>();
+		ArrayDeque<String> queue = new ArrayDeque<>();
+		closure.add(groupId);
+		queue.addLast(groupId);
+		while (!queue.isEmpty()) {
+			GroupManifest.Group group = manifest.groups().get(queue.removeFirst());
+			if (group == null) continue;
+			for (String dependency : group.requires()) if (closure.add(dependency)) queue.addLast(dependency);
+		}
+		return closure;
+	}
+
+	/**
+	 * Turns off whichever selected groups conflict with the ones being activated, so the new selection resolves.
+	 * A conflicting group locked by a REQUIRED root is a refusal instead of a half-applied selection.
+	 */
+	private static String clearConflictingSelection(GroupManifest manifest, ResolvedSelection previous, Set<String> activating, Set<String> enabled, Set<String> disabled,
+			Set<String> cleared) {
+		for (String activated : activating) for (String conflicting : manifest.conflictsOf(activated)) {
+			if (!previous.selectedGroups().contains(conflicting)) continue;
+			GroupManifest.Group other = manifest.groups().get(conflicting);
+			if (other == null) continue;
+			if (previous.requiredGroups().contains(conflicting))
+				return "Cannot select '" + manifest.displayName(activated) + "' because '" + manifest.displayName(conflicting) + "' is required and conflicts with it";
+			for (String off : selectedDependentsClosure(manifest, previous.selectedGroups(), conflicting)) {
+				GroupManifest.Group offGroup = manifest.groups().get(off);
+				if (offGroup == null) continue;
+				if (previous.requiredGroups().contains(off))
+					return "Cannot select '" + manifest.displayName(activated) + "' because '" + manifest.displayName(off) + "' is required and depends on '" + manifest.displayName(conflicting) + "'";
+				if (!offGroup.selection().choosable()) continue;
+				enabled.remove(off);
+				GroupManifest.Category offCat = manifest.categoryOf(off);
+				if (offGroup.selection() == GroupSelectionMode.RECOMMENDED || (offCat != null && offCat.pick() == CategoryPickMode.EXACTLY_ONE)) disabled.add(off);
+				cleared.add(off);
+			}
+		}
+		return "";
 	}
 
 	private static SelectionUpdate failure(SelectionIntent current, ResolvedSelection fallback, String message) {

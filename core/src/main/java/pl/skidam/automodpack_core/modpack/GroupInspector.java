@@ -77,6 +77,7 @@ public final class GroupInspector {
 			lines.add("Selection: " + selectionLabel(publishedGroup.selection()));
 			addJoined(lines, "Platforms", platforms(publishedGroup));
 			addJoined(lines, "Requires", publishedGroup.requires());
+			addJoined(lines, "Conflicts", publishedGroup.conflicts());
 		} else {
 			String catSuffix = declaration.category == null || declaration.category.isBlank() ? "" : " (category " + declaration.category + ")";
 			lines.add("Group " + groupId + catSuffix);
@@ -86,6 +87,7 @@ public final class GroupInspector {
 			lines.add("Auto-exclude server mods: " + (declaration.autoExcludeServerSideMods != null ? declaration.autoExcludeServerSideMods : "inherited (" + modpack.autoExcludeServerSideMods + ")"));
 			addJoined(lines, "Platforms", declaration.compatiblePlatforms);
 			addJoined(lines, "Requires", declaration.requires);
+			addJoined(lines, "Conflicts", declaration.conflicts);
 			addRules(lines, "From server", declaration.fromServer);
 			addRules(lines, "Exclude", declaration.exclude);
 			addRules(lines, "Editable", declaration.editable);
