@@ -102,8 +102,8 @@ class ModpackCandidateScannerTest {
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
 		assertEquals("config/example.txt", provenance.selectedSource().logicalPath());
 		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().keySet().iterator().next());
-		assertEquals("General", candidate.manifest().groups().get("main").category());
-		assertEquals("main", candidate.manifest().toFields().categories.get("General").keySet().iterator().next());
+		assertEquals("", candidate.manifest().groups().get("main").category());
+		assertEquals("main", candidate.manifest().toFields().groups.keySet().iterator().next());
 	}
 
 	@Test
@@ -363,7 +363,11 @@ class ModpackCandidateScannerTest {
 				.historic("config/edited.txt", HashUtils.sha1("as the pack shipped it".getBytes(StandardCharsets.UTF_8)))
 				.historic("config/explicit.txt", HashUtils.sha1("from an installed pack".getBytes(StandardCharsets.UTF_8))).managed("config/managed.txt").build();
 
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", Map.of("main", group("/config/**"))), true,
+		var ownedModpack = new ServerConfigJsons.ModpackFields();
+		ownedModpack.exclude = Set.of();
+		ownedModpack.editable = Set.of();
+		ownedModpack.groups = Map.of("main", group("/config/**"));
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, ownedModpack, true,
 				tempDir.resolve("staging"), Runnable::run, null, null, null, true, owned);
 		ModpackCandidate candidate = new ModpackCandidateScanner(null).scan(request);
 
@@ -385,8 +389,17 @@ class ModpackCandidateScannerTest {
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean applyPlatformExclusions, PlatformSideVerdicts sideVerdicts)
 			throws Exception {
+		var modpack = new ServerConfigJsons.ModpackFields();
+		modpack.exclude = Set.of();
+		modpack.editable = Set.of();
+		modpack.groups = declarations;
+		return scan(server, groups, modpack, applyPlatformExclusions, sideVerdicts);
+	}
+
+	private ModpackCandidate scan(Path server, Path groups, ServerConfigJsons.ModpackFields modpack, boolean applyPlatformExclusions, PlatformSideVerdicts sideVerdicts)
+			throws Exception {
 		Executor direct = Runnable::run;
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, Map.of("General", declarations), applyPlatformExclusions, tempDir.resolve("staging"),
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, modpack, applyPlatformExclusions, tempDir.resolve("staging"),
 				direct, null, null, null, true, PackOwnedFiles.NONE);
 		return new ModpackCandidateScanner(sideVerdicts).scan(request);
 	}
@@ -544,7 +557,7 @@ class ModpackCandidateScannerTest {
 		Files.writeString(groups.resolve("main/config/.gitkeep"), "keep", StandardCharsets.UTF_8);
 		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
 
-		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack.categories.get("General"));
+		ModpackCandidate candidate = scan(server, groups, new ServerConfigJsons.ServerConfigFieldsV3().modpack, true, null);
 		var files = candidate.manifest().groups().get("main").files();
 
 		assertTrue(files.containsKey("config/kept.txt"));
@@ -755,6 +768,44 @@ class ModpackCandidateScannerTest {
 		assertFalse(candidate.manifest().groups().get("main").files().containsKey("dedicated.jar"));
 		assertEquals(1, candidate.exclusions().size());
 		assertEquals("modrinth environment dedicated_server_only", candidate.exclusions().get(0).message());
+	}
+
+	@Test
+	void packWideExcludeEditableAndServerExclusionApplyUnlessGroupNegatesOrOverrides() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.createDirectories(groups.resolve("extras/config"));
+		Files.writeString(groups.resolve("main/config/skip.txt"), "skip", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/client.txt"), "client", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("extras/config/skip.txt"), "keep-me", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("extras/config/extra-client.txt"), "locked", StandardCharsets.UTF_8);
+		writeModJar(groups.resolve("main/server.jar"), "server");
+		writeModJar(groups.resolve("extras/server.jar"), "server");
+
+		var modpack = new ServerConfigJsons.ModpackFields();
+		modpack.autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		modpack.exclude = new LinkedHashSet<>(List.of("config/skip.txt"));
+		modpack.editable = new LinkedHashSet<>(List.of("config/*.txt"));
+
+		ServerConfigJsons.GroupDeclaration main = group();
+		ServerConfigJsons.GroupDeclaration extras = group();
+		extras.autoExcludeServerSideMods = ServerSideModExclusion.DISABLED;
+		extras.exclude = new LinkedHashSet<>(List.of("!config/skip.txt"));
+		extras.editable = new LinkedHashSet<>(List.of("!config/extra-client.txt"));
+		modpack.groups = new LinkedHashMap<>(Map.of("main", main, "extras", extras));
+
+		ModpackCandidate candidate = scan(server, groups, modpack, true, null);
+		var mainFiles = candidate.manifest().groups().get("main").files();
+		var extrasFiles = candidate.manifest().groups().get("extras").files();
+
+		assertFalse(mainFiles.containsKey("config/skip.txt"));
+		assertFalse(mainFiles.containsKey("server.jar"));
+		assertTrue(mainFiles.get("config/client.txt").editable());
+
+		assertTrue(extrasFiles.containsKey("config/skip.txt"), "group ! negation overrides pack exclude");
+		assertTrue(extrasFiles.containsKey("server.jar"), "group override DISABLED beats pack METADATA");
+		assertFalse(extrasFiles.get("config/extra-client.txt").editable(), "group ! negation locks pack-editable file");
 	}
 
 	private static void writePlainJar(Path path) throws IOException {

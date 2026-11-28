@@ -21,6 +21,14 @@ public final class ListChrome {
 	public static final int SELECTION_INNER = 0xFF000000;
 	/** The hovered-row wash reads as "you can click this" without ever lightening the backdrop. */
 	public static final int HOVER = 0x33000000;
+	/** Flat dark card chrome: one fill and outline for the group cards and the small controls that sit beside them. */
+	public static final int CARD_FILL = 0xB8181A22;
+	public static final int CARD_FILL_SELECTED = 0xCC242836;
+	public static final int CARD_FILL_DISABLED = 0x8A181A22;
+	public static final int CARD_BORDER = 0xFF3E4556;
+	public static final int CARD_BORDER_HOVER = 0xFF637089;
+	public static final int CARD_BORDER_DISABLED = 0x8A3E4556;
+	public static final int CARD_TEXT_DISABLED = 0xFF9AA0AA;
 
 	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */
 	/*? if >=1.21.10 {*/
@@ -69,5 +77,16 @@ public final class ListChrome {
 
 	public static void drawHover(VersionedMatrices matrices, int x, int y, int width, int height) {
 		matrices.fill(x, y, x + width, y + height, HOVER);
+	}
+
+	/** One flat card: a selected or hovered frame lightens, an inactive one dims. */
+	public static void drawCard(VersionedMatrices matrices, int x, int y, int width, int height, boolean selected, boolean highlighted, boolean active) {
+		int fill = !active ? CARD_FILL_DISABLED : selected || highlighted ? CARD_FILL_SELECTED : CARD_FILL;
+		int border = !active ? CARD_BORDER_DISABLED : highlighted ? CARD_BORDER_HOVER : CARD_BORDER;
+		matrices.fill(x, y, x + width, y + height, fill);
+		matrices.fill(x, y, x + width, y + 1, border);
+		matrices.fill(x, y + height - 1, x + width, y + height, border);
+		matrices.fill(x, y + 1, x + 1, y + height - 1, border);
+		matrices.fill(x + width - 1, y + 1, x + width, y + height - 1, border);
 	}
 }

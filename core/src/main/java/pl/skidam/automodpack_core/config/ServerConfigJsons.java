@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.config;
 
-import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -8,37 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonSerializationContext;
-import com.google.gson.JsonSerializer;
 import com.google.gson.annotations.SerializedName;
-import com.google.gson.reflect.TypeToken;
 
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
-	static final String PACK_SECTION = "modpack";
-	private static final String PACK_NAME_KEY = "name";
-
-	/** Every group declaration under {@code modpack}; {@code name} is the pack's display name, not a category. */
-	static void forEachGroup(JsonObject document, GroupVisitor visitor) {
-		if (!(document.get(PACK_SECTION) instanceof JsonObject modpack)) return;
-		for (var category : modpack.entrySet()) {
-			if (category.getKey().equals(PACK_NAME_KEY) || !(category.getValue() instanceof JsonObject categoryObject)) continue;
-			for (var group : categoryObject.entrySet()) if (group.getValue() instanceof JsonObject groupObject) visitor.visit(category.getKey(), group.getKey(), groupObject);
-		}
-	}
-
-	@FunctionalInterface
-	interface GroupVisitor {
-		void visit(String category, String group, JsonObject declaration);
-	}
 
 	public static class ServerConfigFieldsV3 {
 		@SerializedName("modpack-host")
@@ -106,94 +82,52 @@ public class ServerConfigJsons {
 
 	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
-		declaration.description = "Core modpack files";
 		declaration.selection = GroupSelectionMode.REQUIRED;
 		declaration.fromServer = new LinkedHashSet<>(FACTORY_FROM_SERVER);
-		declaration.exclude = new LinkedHashSet<>(FACTORY_EXCLUDE);
-		declaration.editable = new LinkedHashSet<>(FACTORY_EDITABLE);
 		return declaration;
 	}
 
-	/**
-	 * The pack section: the reserved {@code name} key is the pack's display name, every other member is a category of
-	 * groups. The reserved key is what makes this a typed object instead of a bare map - a {@code name} member that is
-	 * not a string fails the parse with a clear message instead of being silently swallowed as an unread category.
-	 */
 	public static class ModpackFields {
 		public String name = "";
-		public Map<String, Map<String, GroupDeclaration>> categories = new LinkedHashMap<>();
-
-		private static final Type GROUPS_TYPE = new TypeToken<Map<String, GroupDeclaration>>() {
-		}.getType();
+		@SerializedName("auto-exclude-server-side-mods")
+		public ServerSideModExclusion autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		public Set<String> exclude = Set.of();
+		public Set<String> editable = Set.of();
+		public Map<String, CategoryDeclaration> categories = new LinkedHashMap<>();
+		public Map<String, GroupDeclaration> groups = new LinkedHashMap<>();
 
 		public static ModpackFields withMainGroup() {
 			ModpackFields fields = new ModpackFields();
-			fields.categories = new LinkedHashMap<>(Map.of("General", new LinkedHashMap<>(Map.of("main", mainGroupDeclaration()))));
+			fields.exclude = new LinkedHashSet<>(FACTORY_EXCLUDE);
+			fields.editable = new LinkedHashSet<>(FACTORY_EDITABLE);
+			fields.groups = new LinkedHashMap<>(Map.of("main", mainGroupDeclaration()));
 			return fields;
 		}
 
 		public static ModpackFields withStandaloneMain() {
 			ModpackFields fields = withMainGroup();
-			fields.categories.get("General").get("main").fromServer = Set.of();
+			fields.groups.get("main").fromServer = Set.of();
 			return fields;
-		}
-
-		/** Serializes {@code name} plus every category into one flat object and reads the same shape back. */
-		public static final class Adapter implements JsonSerializer<ModpackFields>, JsonDeserializer<ModpackFields>, ConfigTools.UnknownKeyScanner {
-			@Override
-			public JsonElement serialize(ModpackFields src, Type type, JsonSerializationContext context) {
-				JsonObject object = new JsonObject();
-				object.addProperty(PACK_NAME_KEY, src.name);
-				for (var entry : src.categories.entrySet()) object.add(entry.getKey(), context.serialize(entry.getValue()));
-				return object;
-			}
-
-			@Override
-			public ModpackFields deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
-				if (json == null || !json.isJsonObject()) throw new JsonParseException("modpack must hold the pack name and its categories: modpack { name: \"\", <category> { <group> { ... } } }");
-				ModpackFields fields = new ModpackFields();
-				for (var entry : json.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals(PACK_NAME_KEY)) {
-						if (entry.getValue() == null || !entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString())
-							throw new JsonParseException("modpack.name must be a string; the name key is reserved and cannot be a category");
-						fields.name = entry.getValue().getAsString();
-					} else {
-						fields.categories.put(entry.getKey(), context.deserialize(entry.getValue(), GROUPS_TYPE));
-					}
-				}
-				return fields;
-			}
-
-			@Override
-			public void collectUnknownKeys(JsonElement element, String prefix, List<String> unknown) {
-				for (var entry : element.getAsJsonObject().entrySet()) {
-					if (entry.getKey().equals(PACK_NAME_KEY)) continue;
-					String categoryPath = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
-					ConfigTools.collectUnknownKeys(entry.getValue(), GROUPS_TYPE, categoryPath, unknown);
-				}
-			}
 		}
 	}
 
-	public static class GroupDeclaration {
-		@SerializedName("display-name")
-		public String displayName = "";
+	public static class CategoryDeclaration {
+		public String name = "";
 		public String description = "";
+		public CategoryPickMode pick = CategoryPickMode.ANY;
+	}
+
+	public static class GroupDeclaration {
+		public String name = "";
+		public String description = "";
+		public String category = "";
 		public GroupSelectionMode selection = GroupSelectionMode.OPTIONAL;
 		@SerializedName("auto-exclude-server-side-mods")
-		public ServerSideModExclusion autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
-
-		@SerializedName("breaks-with")
-		public Set<String> breaksWith = Set.of();
+		public ServerSideModExclusion autoExcludeServerSideMods;
 		public Set<String> requires = Set.of();
+		public Set<String> conflicts = Set.of();
 		@SerializedName("compatible-platforms")
 		public Set<String> compatiblePlatforms = Set.of();
-
-		/**
-		 * File rules scoped to this group. Two postures: the group's directory under host-modpack is included in full
-		 * and {@code exclude} is the only way to leave content out of it, while nothing is synced from the server
-		 * directory unless a {@code from-server} rule includes it - exclude carves exceptions out of either.
-		 */
 		@SerializedName("from-server")
 		public Set<String> fromServer = Set.of();
 		public Set<String> exclude = Set.of();

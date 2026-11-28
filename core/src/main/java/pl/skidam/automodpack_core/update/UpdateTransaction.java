@@ -2,14 +2,14 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -24,21 +24,15 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * execution phase is not part of it: {@link UpdateJournal} owns that, one file, one carrier.
  */
 public final class UpdateTransaction {
-	public static final int CURRENT_SCHEMA_VERSION = 2;
+	public static final int CURRENT_SCHEMA_VERSION = 3;
 
 	public int schemaVersion;
 	public String transactionId;
 	public Purpose purpose;
 	/** The durable plan. A class tree, not records: the Gson shipped in Minecraft 1.18 cannot deserialize records. */
 	public UpdatePlan plan;
-	public String targetPlatform;
-	public boolean expectedPriorSelectionPresent;
-	public List<String> expectedPriorRequestedGroups;
-	public List<String> expectedPriorRequestedCategories;
-	public List<String> expectedPriorExcludedGroups;
-	public List<String> requestedGroups;
-	public List<String> requestedCategories;
-	public List<String> excludedGroups;
+	public SelectionJsons.SelectionFields expectedPriorSelection;
+	public SelectionJsons.SelectionFields targetSelection;
 	public String overlayDigest;
 	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public String expectedSelectedModpackId;
@@ -75,14 +69,9 @@ public final class UpdateTransaction {
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
-		transaction.targetPlatform = target.platform() == null ? null : target.platform().id();
-		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
-		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
-		transaction.expectedPriorRequestedCategories = intentValues(target.expectedPriorIntent(), IntentPart.CATEGORIES);
-		transaction.expectedPriorExcludedGroups = intentValues(target.expectedPriorIntent(), IntentPart.EXCLUDED);
-		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
-		transaction.requestedCategories = new ArrayList<>(target.selection().intent().requestedCategories());
-		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
+		transaction.expectedPriorSelection = SelectionJsons.SelectionFields.from(target.expectedPriorIntent());
+		SelectionIntent targetIntent = target.selection().intent().withPlatform(target.platform());
+		transaction.targetSelection = SelectionJsons.SelectionFields.from(targetIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -106,14 +95,8 @@ public final class UpdateTransaction {
 		OwnershipLedger ledger = OwnershipLedger.fromFields(Objects.requireNonNull(plannedAgainst.installedLedger(), "plannedAgainst.installedLedger"));
 		UpdateTransaction transaction = base(purpose);
 		fillGeneration(transaction, plan.packTarget(), ledger);
-		transaction.targetPlatform = platform == null ? null : platform.id();
-		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
-		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
-		transaction.expectedPriorRequestedCategories = intentValues(expectedPriorIntent, IntentPart.CATEGORIES);
-		transaction.expectedPriorExcludedGroups = intentValues(expectedPriorIntent, IntentPart.EXCLUDED);
-		transaction.requestedGroups = List.of();
-		transaction.requestedCategories = List.of();
-		transaction.excludedGroups = List.of();
+		transaction.expectedPriorSelection = SelectionJsons.SelectionFields.from(expectedPriorIntent);
+		transaction.targetSelection = SelectionJsons.SelectionFields.from(new SelectionIntent(Set.of(), Set.of(), platform));
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = plannedAgainst.clientConfig();
 		transaction.expectedSelectedModpackId = plannedAgainst.selectedModpackId();
@@ -137,19 +120,6 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	private enum IntentPart {
-		GROUPS, CATEGORIES, EXCLUDED
-	}
-
-	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
-		if (intent == null) return List.of();
-		return switch (part) {
-			case GROUPS -> new ArrayList<>(intent.requestedGroups());
-			case CATEGORIES -> new ArrayList<>(intent.requestedCategories());
-			case EXCLUDED -> new ArrayList<>(intent.excludedGroups());
-		};
-	}
-
 	public UpdatePlan plan() {
 		return plan;
 	}
@@ -163,7 +133,7 @@ public final class UpdateTransaction {
 	}
 
 	public ClientPlatform platform() {
-		return targetPlatform == null ? null : ClientPlatform.parse(targetPlatform);
+		return targetSelection == null || targetSelection.platform == null ? null : ClientPlatform.parse(targetSelection.platform);
 	}
 
 	/** The installed projection this plan was planned against, or null when the plan saw no installed generation. */
@@ -172,12 +142,12 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedCategories, expectedPriorExcludedGroups) : null;
+		return expectedPriorSelection == null ? null : expectedPriorSelection.toIntent();
 	}
 
 	/** The target selection carrying the platform this transaction resolved under, so the commit pins the exact resolution. */
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups, platform());
+		return targetSelection.toIntent();
 	}
 
 	/** The selection the transaction plans for; generated-copy state is keyed by it. */
@@ -188,10 +158,9 @@ public final class UpdateTransaction {
 	public static String digest(SelectionIntent intent) {
 		if (intent == null) return "";
 		MessageDigest digest = HashUtils.newSha1Digest();
-		digest.update("automodpack-selection-v2\n".getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.requestedCategories().stream().sorted().toList()) digest.update(("category=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		digest.update("automodpack-selection-v3\n".getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.enabled().stream().sorted().toList()) digest.update(("enabled=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.disabled().stream().sorted().toList()) digest.update(("disabled=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
 	}
 

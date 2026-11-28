@@ -11,17 +11,18 @@ import org.junit.jupiter.api.Test;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 
 class GenerationDiffTest {
 	@Test
 	void reportsAllFileClassesMetadataAndCanonicalOrder() {
 		GroupManifest parent = manifest("parent", Map.of("z-removed", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
 				"b-modified", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-category",
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "",
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
 		GroupManifest child = manifest("child", Map.of("a-added", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
 				"b-modified", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-category",
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "",
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
@@ -41,12 +42,14 @@ class GenerationDiffTest {
 	}
 
 	@Test
-	void reportsGroupCategoryMetadataChanges() {
-		GroupManifest parent = categorizedManifest("old-category");
-		GroupManifest child = categorizedManifest("new-category");
+	void reportsGroupCategoryMetadataAndCategoryDefinitionChanges() {
+		GroupManifest parent = categorizedManifest("cat-a", "Old Category");
+		GroupManifest child = categorizedManifest("cat-b", "New Category");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
 
+		assertEquals(List.of("cat-a"), diff.categoryMetadata().removed());
+		assertEquals(List.of("cat-b"), diff.categoryMetadata().added());
 		assertEquals(List.of("main"), diff.groupMetadata().modified());
 		assertFalse(diff.isEmpty());
 	}
@@ -75,14 +78,17 @@ class GenerationDiffTest {
 		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
 	}
 
-	private static GroupManifest categorizedManifest(String category) {
+	private static GroupManifest categorizedManifest(String categoryId, String categoryName) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
+		var cat = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+		cat.name = categoryName;
+		fields.categories = Map.of(categoryId, cat);
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
+		group.category = categoryId;
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.files = Map.of();
-		fields.categories = Map.of(category, Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 
@@ -101,15 +107,16 @@ class GenerationDiffTest {
 		fields.modpackId = "abc1234";
 		fields.modpackName = id;
 		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
+		if (!category.isEmpty()) fields.categories = Map.of(category, new ModpackJsons.CompleteModpackContentFields.CategoryFields());
 		for (var entry : groups.entrySet()) {
 			var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			group.required = false;
-			group.defaultSelected = false;
+			group.selection = GroupSelectionMode.OPTIONAL;
+			group.category = category;
 			group.description = entry.getKey().equals("main") ? description : "";
 			group.files = entry.getValue();
 			declarations.put(entry.getKey(), group);
 		}
-		fields.categories = Map.of(category.isEmpty() ? "General" : category, declarations);
+		fields.groups = declarations;
 		return GroupManifestValidator.validate(fields);
 	}
 

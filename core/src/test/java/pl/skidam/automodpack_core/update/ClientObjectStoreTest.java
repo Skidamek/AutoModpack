@@ -397,7 +397,7 @@ class ClientObjectStoreTest {
 
 	private static GroupManifest manifest(String modpackId, String hash, long size) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/test.jar", file)));
-		return new GroupManifest(modpackId, "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/test.jar", file)));
+		return new GroupManifest(modpackId, "", "", "", "", "", Map.of(), new TreeMap<>(Map.of("main", group)));
 	}
 }

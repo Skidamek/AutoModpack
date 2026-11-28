@@ -45,8 +45,7 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 public final class ConfigTools {
 	/** The custom JSON shapes registered on {@link #GSON}; the same set defines which types key-reflection may not inspect. */
 	private static final Map<Class<?>, Object> CUSTOM_JSON_ADAPTERS = Map.of(InetSocketAddress.class, new InetSocketAddressTypeAdapter(), ConnectionJsons.ConnectionInfo.class,
-			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter(), ServerConfigJsons.ModpackFields.class,
-			new ServerConfigJsons.ModpackFields.Adapter());
+			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter());
 
 	/**
 	 * Stream-reader strictness for the integral types, registered because Gson 2.8.9 deserializing from a parsed tree

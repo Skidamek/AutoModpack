@@ -40,6 +40,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -64,7 +65,7 @@ class StackedInGameActionsTest {
 	private static final String ADDED = "config/added.toml";
 	private static final String FABRIC = "net.fabricmc.fabric-loader";
 	private static final String INSTALLED_LOADER = "0.16.0";
-	private static final SelectionIntent MAIN = new SelectionIntent(Set.of("main"));
+	private static final SelectionIntent MAIN = SelectionIntent.ofEnabled(Set.of("main"));
 
 	@TempDir
 	Path temporaryDirectory;
@@ -370,10 +371,9 @@ class StackedInGameActionsTest {
 		fields.loaderVersion = parts[0];
 		fields.mcVersion = parts[1];
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = files;
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		PackDocument document = parent == null ? TestPacks.document(manifest) : TestPacks.document(manifest, parent.document().ownershipLedger(), TestPacks.CREATED.plusSeconds(version));
 		TestPacks.stageGeneration(storage, document);

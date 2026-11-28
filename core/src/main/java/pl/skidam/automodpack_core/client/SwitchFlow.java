@@ -8,7 +8,6 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.screen.FailureCategory;
@@ -57,7 +56,7 @@ public final class SwitchFlow {
 				PackDocument record = new ClientGenerationStore(storage).document(modpackId, entry);
 				SelectionIntent appliedSelection = new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null);
 				SelectionIntent desiredSelection = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
-				SelectionIntent targetSelection = desiredSelection == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : desiredSelection;
+				SelectionIntent targetSelection = desiredSelection == null ? SelectionIntent.DEFAULTS : desiredSelection;
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, appliedSelection, targetSelection, ClientPlatform.effective(targetSelection));
 				updater = new ModpackUpdater(target, null, null, storage, modpackLoader);
 				if (updater.requiresSelectedTargetDownload())

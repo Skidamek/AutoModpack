@@ -78,25 +78,22 @@ public final class HostAdvertisement {
 			}
 		} catch (RuntimeException e) {
 			Map<String, Long> uniqueFiles = new HashMap<>();
-			if (policy.categories != null) {
-				for (var category : policy.categories.values()) {
-					if (category == null) continue;
-					for (var group : category.values()) {
-						if (group == null || group.files == null) continue;
-						if (!group.required && !group.defaultSelected) continue;
-						for (var entry : group.files.entrySet()) {
-							String path = entry.getKey();
-							var file = entry.getValue();
-							if (path == null || file == null) continue;
-							long size = 0L;
-							if (file.size != null && !file.size.isBlank()) {
-								try {
-									size = Long.parseLong(file.size);
-								} catch (NumberFormatException ignored) {
-								}
+			if (policy.groups != null) {
+				for (var group : policy.groups.values()) {
+					if (group == null || group.files == null) continue;
+					if (group.selection == null || !group.selection.arrivesSelected()) continue;
+					for (var entry : group.files.entrySet()) {
+						String path = entry.getKey();
+						var file = entry.getValue();
+						if (path == null || file == null) continue;
+						long size = 0L;
+						if (file.size != null && !file.size.isBlank()) {
+							try {
+								size = Long.parseLong(file.size);
+							} catch (NumberFormatException ignored) {
 							}
-							uniqueFiles.putIfAbsent(path, Math.max(0L, size));
 						}
+						uniqueFiles.putIfAbsent(path, Math.max(0L, size));
 					}
 				}
 			}

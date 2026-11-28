@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,16 +48,17 @@ class HumanConfigMigrationTest {
 
 		ServerConfigJsons.ServerConfigFieldsV3 config = TomlConfigs.read(toml, ServerConfigJsons.ServerConfigFieldsV3.class).orElseThrow();
 		assertEquals("My Pack", config.modpack.name);
-		assertEquals(Set.of("mods/*.jar", "kubejs/**", "!kubejs/server_scripts/**"), config.modpack.categories.get("General").get("main").fromServer);
-		assertTrue(config.modpack.categories.get("General").get("main").fromServer.contains("!kubejs/server_scripts/**"));
-		assertEquals(Set.of("options.txt", "config/**"), config.modpack.categories.get("General").get("main").editable);
+		assertEquals("Core", config.modpack.groups.get("main").name);
+		assertEquals(Set.of("mods/*.jar", "kubejs/**", "!kubejs/server_scripts/**"), config.modpack.groups.get("main").fromServer);
+		assertTrue(config.modpack.groups.get("main").fromServer.contains("!kubejs/server_scripts/**"));
+		assertEquals(Set.of("options.txt", "config/**"), config.modpack.editable);
 		assertTrue(config.requireModpack);
 		assertEquals("play.example.com", config.advertisedEndpointHost);
 		assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
-		assertTrue(config.modpack.categories.get("General").get("main").exclude.contains("**/.*"));
-		assertFalse(config.modpack.categories.get("General").get("main").exclude.contains("kubejs/server_scripts/**"));
-		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection, "the migrated core group must stay required");
-		assertEquals(ServerSideModExclusion.METADATA, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
+		assertTrue(config.modpack.exclude.contains("**/.*"));
+		assertFalse(config.modpack.exclude.contains("kubejs/server_scripts/**"));
+		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.groups.get("main").selection, "the migrated core group must stay required");
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.autoExcludeServerSideMods);
 		assertTrue(Files.isRegularFile(toml));
 		assertTrue(Files.isRegularFile(dir.resolve("automodpack-server.json.backup")));
 		assertFalse(Files.exists(json));
@@ -107,11 +109,13 @@ class HumanConfigMigrationTest {
 		assertEquals(ModpackConnectionMode.HTTP, config.connectionMode);
 		assertFalse(config.validateSecrets);
 		assertEquals(Set.of("fabric", "neoforge"), config.acceptedLoaders);
-		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.categories.get("General").get("main").selection);
-		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
-		assertEquals(Set.of("mods/*.jar", "kubejs/**"), config.modpack.categories.get("General").get("main").fromServer);
-		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.categories.get("General").get("extras").selection);
-		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.categories.get("General").get("extras").autoExcludeServerSideMods);
+		assertEquals(GroupSelectionMode.REQUIRED, config.modpack.groups.get("main").selection);
+		assertNull(config.modpack.groups.get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.autoExcludeServerSideMods);
+		assertEquals(Set.of("mods/*.jar", "kubejs/**"), config.modpack.groups.get("main").fromServer);
+		assertEquals(GroupSelectionMode.RECOMMENDED, config.modpack.groups.get("extras").selection);
+		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.groups.get("extras").autoExcludeServerSideMods);
+		assertTrue(config.modpack.categories.isEmpty(), "lone legacy General category flattens into top-level groups");
 		assertTrue(Files.isRegularFile(toml));
 		assertTrue(Files.isRegularFile(dir.resolve("server.conf.backup")));
 		assertFalse(Files.exists(conf));
@@ -121,8 +125,28 @@ class HumanConfigMigrationTest {
 		assertEquals("RC Pack", reread.modpack.name);
 		assertEquals(25570, reread.bindPort);
 		assertEquals(ModpackConnectionMode.HTTP, reread.connectionMode);
-		assertEquals(ServerSideModExclusion.DISABLED, reread.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
-		assertEquals(ServerSideModExclusion.PLATFORMS, reread.modpack.categories.get("General").get("extras").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.DISABLED, reread.modpack.autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.PLATFORMS, reread.modpack.groups.get("extras").autoExcludeServerSideMods);
+	}
+
+	@Test
+	void legacyCustomCategorySlugifiesOrFlattensAllRequiredCategories() {
+		ServerConfigJsons.ServerConfigFieldsV3 migrated = HumanConfigMigration.mapServer(JsonParser.parseString("""
+				{
+				  "modpack": {
+				    "Core Mods": {
+				      "main": { "selection": "REQUIRED" }
+				    },
+				    "Visual Extras!": {
+				      "shaders": { "selection": "OPTIONAL", "breaks-with": ["old"] }
+				    }
+				  }
+				}
+				""").getAsJsonObject());
+		assertEquals("", migrated.modpack.groups.get("main").category, "all-REQUIRED legacy category flattens to uncategorized");
+		assertFalse(migrated.modpack.categories.containsKey("core-mods"));
+		assertEquals("visual-extras", migrated.modpack.groups.get("shaders").category);
+		assertEquals("Visual Extras!", migrated.modpack.categories.get("visual-extras").name);
 	}
 
 	@Test
@@ -196,7 +220,6 @@ class HumanConfigMigrationTest {
 	void legacyGroupBooleansMapOntoTheSelectionEnum() {
 		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true, \"default-selected\": true")), "(true, true) is the required core group");
 		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true, \"default-selected\": false")), "the one pair with no mode of its own collapses to required");
-		assertTrue(GroupSelectionMode.collapsed(true, false));
 		assertEquals(GroupSelectionMode.REQUIRED, selectionOf(mappedGroup("\"required\": true")), "required alone still wins over a missing flag");
 		assertEquals(GroupSelectionMode.RECOMMENDED, selectionOf(mappedGroup("\"defaultSelected\": true")));
 		assertEquals(GroupSelectionMode.OPTIONAL, selectionOf(mappedGroup("\"required\": false, \"default-selected\": false")));
@@ -222,19 +245,21 @@ class HumanConfigMigrationTest {
 	}
 
 	@Test
-	void packLevelServerSideExclusionFalseDisablesGroupsThatOmitTheKey() {
+	void packLevelServerSideExclusionFalseSetsPackDefaultAndPreservesGroupOverride() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = HumanConfigMigration.mapServer(JsonParser.parseString("""
 				{"autoExcludeServerSideMods": false, "modpack": {"General": {"main": {}, "kept": {"auto-exclude-server-side-mods": "PLATFORMS"}}}}
 				""").getAsJsonObject());
-		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.categories.get("General").get("main").autoExcludeServerSideMods);
-		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.categories.get("General").get("kept").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.DISABLED, config.modpack.autoExcludeServerSideMods);
+		assertNull(config.modpack.groups.get("main").autoExcludeServerSideMods);
+		assertEquals(ServerSideModExclusion.PLATFORMS, config.modpack.groups.get("kept").autoExcludeServerSideMods);
 	}
 
 	@Test
-	void packLevelServerSideExclusionTrueLeavesGroupsAtMetadata() {
-		assertEquals(ServerSideModExclusion.METADATA,
-				HumanConfigMigration.mapServer(JsonParser.parseString("{\"auto-exclude-server-side-mods\": true, \"modpack\": {\"General\": {\"main\": {}}}}").getAsJsonObject()).modpack.categories.get("General")
-						.get("main").autoExcludeServerSideMods);
+	void packLevelServerSideExclusionTrueLeavesPackAtMetadata() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = HumanConfigMigration
+				.mapServer(JsonParser.parseString("{\"auto-exclude-server-side-mods\": true, \"modpack\": {\"General\": {\"main\": {}}}}").getAsJsonObject());
+		assertEquals(ServerSideModExclusion.METADATA, config.modpack.autoExcludeServerSideMods);
+		assertNull(config.modpack.groups.get("main").autoExcludeServerSideMods);
 	}
 
 	private static ServerConfigJsons.ServerConfigFieldsV3 mappedGroup(String members) {
@@ -242,6 +267,6 @@ class HumanConfigMigrationTest {
 	}
 
 	private static GroupSelectionMode selectionOf(ServerConfigJsons.ServerConfigFieldsV3 config) {
-		return config.modpack.categories.get("General").get("main").selection;
+		return config.modpack.groups.get("main").selection;
 	}
 }

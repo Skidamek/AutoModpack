@@ -17,10 +17,9 @@ class PlayerRuntimePathTest {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = Map.of("crash-reports/old.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields("4", false, "1".repeat(40), "0"));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 
 		GroupValidationException refused = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validateForPublish(fields));
 		assertTrue(refused.getMessage().contains("crash-reports/old.txt"));

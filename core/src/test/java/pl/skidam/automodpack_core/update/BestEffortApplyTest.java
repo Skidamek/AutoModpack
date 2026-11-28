@@ -40,6 +40,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
@@ -346,7 +347,7 @@ class BestEffortApplyTest {
 		assertNull(ProjectionAvailability.stateStanding(storage.gameDirectory()).reason());
 	}
 
-	/** No markers: the journals this engine writes carry only the fields rc.5 already reads, so a downgrade replays them. */
+	/** No unexpected marker fields: the v3 journals this engine writes carry only the documented selection and result schema. */
 	@Test
 	void anOwedJournalSpeaksOnlyTheReleaseCandidateSchema() throws Exception {
 		ClientStorage storage = UpdateTestFixtures.storage(temporaryDirectory);
@@ -360,12 +361,14 @@ class BestEffortApplyTest {
 			try (var fixture = BestEffortApplyTest.class.getResourceAsStream("journals/" + release)) {
 				released.addAll(keys(JsonParser.parseString(new String(fixture.readAllBytes(), StandardCharsets.UTF_8)), ""));
 			}
-		// rc.5's UpdateTransaction declares both result fields; its fixtures only happen to leave them null.
-		released.addAll(Set.of("resultOperation", "resultPath"));
+		// rc.5's UpdateTransaction declares both result fields; its fixtures leave them null, and v3 replaced requested*/excluded* with SelectionFields.
+		released.addAll(Set.of("resultOperation", "resultPath",
+				"targetSelection", "targetSelection.enabled", "targetSelection.disabled", "targetSelection.platform",
+				"expectedPriorSelection", "expectedPriorSelection.enabled", "expectedPriorSelection.disabled", "expectedPriorSelection.platform"));
 
 		Set<String> unknown = new TreeSet<>(written);
 		unknown.removeAll(released);
-		assertTrue(unknown.isEmpty(), "keys rc.5 never wrote: " + unknown);
+		assertTrue(unknown.isEmpty(), "unexpected UpdateTransaction keys written: " + unknown);
 		UpdateJournal.Cursor owed = new UpdateJournal(storage).read();
 		assertTrue(Set.of(UpdateTransaction.Phase.PLANNED, UpdateTransaction.Phase.PREPARING).contains(owed.phase()));
 		assertEquals(UpdateTransaction.Status.DEFERRED_LOCKED, owed.transaction().resultStatus);
@@ -429,8 +432,7 @@ class BestEffortApplyTest {
 		fields.modpackId = PACK;
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> groupFiles = new LinkedHashMap<>();
 		for (var entry : files.entrySet()) {
 			String hash = UpdateTestFixtures.store(storage, entry.getValue());
@@ -438,9 +440,9 @@ class BestEffortApplyTest {
 					entry.getKey().equals(EDITABLE), hash, "0"));
 		}
 		group.files = groupFiles;
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
-		SelectionIntent main = new SelectionIntent(Set.of("main"));
+		SelectionIntent main = SelectionIntent.ofEnabled(Set.of("main"));
 		PackDocument document = parent == null
 				? TestPacks.document(manifest)
 				: PackDocument.create(manifest, TestPacks.policySha1(manifest), Instant.parse("2026-01-01T00:00:00Z").plusSeconds(version), parent.target.document().ownershipLedger());
@@ -489,7 +491,7 @@ class BestEffortApplyTest {
 		var manifest = GroupManifestValidator.validate(UpdateTestFixtures.fields(CONFIG, "config", true, lf, LF.length));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, oldTarget.document().ownershipLedger());
 		TestPacks.stageGeneration(storage, document);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, new SelectionIntent(Set.of("main")), new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(document, SelectionIntent.ofEnabled(Set.of("main")), SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		String baseline = HashUtils.sha1(CRLF);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, List.of(new Operation(Root.PROJECTION, CONFIG, OperationType.INSTALL_OBJECT, lf, LF.length, null),
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.DELETE, null, -1, old), new Operation(Root.GAME_DIR, CONFIG, OperationType.INSTALL_OBJECT, lf, LF.length, baseline))

@@ -47,39 +47,41 @@ server:
 
 automodpack:
   config:
-    modpackHost: true
-    generateModpackOnStart: true
+    modpack-host: true
+    generate-modpack-on-start: true
+    require-modpack: true
+    self-updater: false
+    nag:
+      enabled: false
+    network:
+      connection-mode: HOLEPUNCH
+      bind-address: ""
+      bind-port: -1
+      advertised-host: ""
+      advertised-port: -1
+      disable-internal-tls: false
+      bandwidth-limit: 0
+    secrets:
+      validate: true
+      lifetime-hours: 336
     modpack:
-      General:
-        main:
-          required: true
-          default-selected: true
-          from-server:
-            - "mods/*.jar"
-            - "config/**"
-            - "kubejs/**"
-            - "!kubejs/server_scripts/**"
-            - "emotes/*"
-          exclude:
-            - "**/.*"
-            - "**/.*/**"
-            - "**/*.{tmp,disabled,bak}"
-            - "kubejs/server_scripts/**"
-          editable:
-            - "config/**"
-    autoExcludeServerSideMods: true
-    requireModpack: true
-    nagUnModdedClients: false
-    bindAddress: ""
-    bindPort: -1
-    advertisedEndpointHost: ""
-    advertisedEndpointPort: -1
-    disableInternalTLS: false
-    connectionMode: HOLEPUNCH
-    bandwidthLimit: 0
-    validateSecrets: true
-    secretLifetime: 336
-    selfUpdater: false
+      auto-exclude-server-side-mods: METADATA
+    groups:
+      main:
+        selection: REQUIRED
+        from-server:
+          - "mods/*.jar"
+          - "config/**"
+          - "kubejs/**"
+          - "!kubejs/server_scripts/**"
+          - "emotes/*"
+        exclude:
+          - "**/.*"
+          - "**/.*/**"
+          - "**/*.{tmp,disabled,bak}"
+          - "kubejs/server_scripts/**"
+        editable:
+          - "config/**"
 
 windowsVm:
   # Default location for the KVM/QEMU golden image and live snapshot.

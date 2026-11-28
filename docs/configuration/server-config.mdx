@@ -21,23 +21,33 @@ Apply changes with `/automodpack config reload` or a restart. When the reload ch
 
 ## Groups
 
-The `[modpack]` section holds `name` (the display name players see), and `[modpack.groups.<category>.<id>]` tables declare the groups under each category. The factory config contains one category, `General`, holding a single group `main`, which is required and selected by default. Extra groups become optional parts that players pick in the in-game "Group Selection" screen, listed under their categories. Group content comes from two sources: the directory `automodpack/host-modpack/<id>/` is included in full, and `from-server` pulls in files from the server root. The full picture is in [building the modpack](../pack-content).
+`[modpack]` holds pack-wide settings (`name`, `auto-exclude-server-side-mods`, `exclude`, `editable`). Optional `[categories.<id>]` sections define display headers and pick modes (`ANY`, `AT_MOST_ONE`, `EXACTLY_ONE`). Top-level `[groups.<id>]` sections define pack groups, where `<id>` maps 1:1 to `automodpack/host-modpack/<id>/`. The factory configuration declares `[groups.main]` with `selection = "REQUIRED"` and no display name, so a fresh file only carries the choice and the sync rules. You can put files in new folders under `automodpack/host-modpack/<id>/` and run `/automodpack groups import` to create their `[groups.<id>]` blocks in `server.toml`. See [building the modpack](../pack-content).
 
-Both keys are identities, so treat them as permanent. The group id is the slug used by `requires` and `breaks-with`, by players' saved selections, and as the folder name under `automodpack/host-modpack/<id>/`; renaming it strands saved selections, breaks references from other groups, and requires renaming the folder. Renaming a category strands players' saved category choices. `display-name` is the always-safe rename, so keep anything volatile (versions, dates) out of ids and category names. A group with a blank `display-name` shows its id instead.
+Category IDs and group IDs are stable keys (`[a-z0-9][a-z0-9_-]{0,63}`, not a Windows reserved device name). The group ID links `requires`, saved player selections, and `automodpack/host-modpack/<id>/`. Changing `name` on a category or group updates what players see without breaking saved selections, `requires`, or folders. If `name` is blank, the UI shows the ID.
 
 ### Categories
 
-Category names are player-facing display strings, not ids: they render verbatim as the section headers of the Group Selection screen. A name must be non-blank, carry no leading or trailing whitespace or control characters, and be at most 64 characters long, and names must be unique case-insensitively. An empty category or a group id declared twice is a validation error that fails `/automodpack generate` with the reasons in the log. Categories and their groups appear in the client in declared order, not alphabetically.
+Define `[categories.<id>]` when you want groups organized under named sections or restricted to exclusive radio choices:
+
+| Setting | Default | Description |
+|---|---|---|
+| `categories.<id>.name` | `""` | Section header shown on the Group Selection screen. Blank falls back to `<id>`. |
+| `categories.<id>.description` | `""` | Short description shown under the category header. |
+| `categories.<id>.pick` | `"ANY"` | `ANY` lets players toggle each group independently (checkboxes). `AT_MOST_ONE` shows radio buttons with a `None` option. `EXACTLY_ONE` shows radio buttons and requires one active choice. `REQUIRED` and `AUTOMATIC` groups cannot sit inside an exclusive category. |
+
+Categories and uncategorized groups appear in the UI in declared order. Groups without a `category` render outside named categories (or under an "Other" heading if categories exist).
 
 ### Rule lists
 
-Each group carries three rule lists, relative to the server root.
+All three glob lists are path patterns relative to the game root (forward slashes `/`, leading `!` to negate). Trailing `/**` matches everything underneath cleanly.
 
-| Setting | Factory value for `main` | Description |
+| Setting | Factory default | Description |
 |---|---|---|
-| `modpack.groups.<category>.<id>.from-server` | `mods/*.jar`, `kubejs/**`, `emotes/*` | Extra paths pulled from the server root into the pack. The server root contributes only what a rule matches. |
-| `modpack.groups.<category>.<id>.exclude` | `**/.*`, `**/.*/**`, `**/*.{tmp,disabled,bak}`, `kubejs/server_scripts/**` | Files kept out of the pack from every source. This is the only way to exclude something from the group directory, and it also carves exceptions out of `from-server`. These rules do not add files. |
-| `modpack.groups.<category>.<id>.editable` | `options.txt`, `config/**` | Pack files that players may edit locally, mods included: editable mod jars live in the player's `mods` folder, replaceable and removable. Listing a path here does not add it to the pack. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
+| `modpack.exclude` | `["**/.*", "**/.*/**", "**/*.{tmp,disabled,bak}"]` | Pack-wide exclusion rules applied to every group unless a group negates a pattern with `!`. These rules do not add files. |
+| `modpack.editable` | `["options.txt", "config/**"]` | Pack-wide editable file rules applied to every group unless a group negates a pattern with `!`. Listing a path does not add it to the pack. Local edits survive updates until the server changes the file; see [client updates](../how-it-works/client-updates#editable-files). |
+| `groups.<id>.from-server` | `["mods/*.jar", "kubejs/**", "emotes/*"]` on `main` | Extra paths pulled from the server root into this group. |
+| `groups.<id>.exclude` | `["kubejs/server_scripts/**"]` on `main` | Additional exclusions or `!` exceptions over `modpack.exclude` for this group. |
+| `groups.<id>.editable` | `[]` | Additional editable rules or `!` exceptions over `modpack.editable` for this group. |
 
 ### Globbing wildcards
 
@@ -55,13 +65,14 @@ Read more about glob syntax on the [Globbing Wikipedia article](https://wikipedi
 
 | Setting | Default | Description |
 |---|---|---|
-| `modpack.groups.<category>.<id>.display-name` | `""` | Name shown to players in the Group Selection screen and the file browsers; blank shows the group id. The table key is the id used by rules and by `requires` and `breaks-with`. |
-| `modpack.groups.<category>.<id>.description` | `""` | Short player-facing description of the group. |
-| `modpack.groups.<category>.<id>.selection` | `"OPTIONAL"` | One of `REQUIRED`, `RECOMMENDED` or `OPTIONAL` (any case). `REQUIRED` is always installed and cannot be deselected; `RECOMMENDED` arrives preselected and players can opt out; `OPTIONAL` starts unchecked. The factory `main` group sets `REQUIRED`. |
-| `modpack.groups.<category>.<id>.auto-exclude-server-side-mods` | `"METADATA"` | One of `DISABLED`, `METADATA` or `PLATFORMS` (any case). Best-effort drop of dedicated-server jars. `DISABLED` ships every jar. See [Dedicated-server jars](../pack-content#dedicated-server-jars). |
-| `modpack.groups.<category>.<id>.requires` | `[]` | Group ids that must also be selected for this group to make sense, for example a shader config pack that needs its shader pack. |
-| `modpack.groups.<category>.<id>.breaks-with` | `[]` | Group ids that cannot be selected alongside this one, for example two mods that replace the same files. |
-| `modpack.groups.<category>.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. See platforms below. |
+| `groups.<id>.name` | `""` | Display name shown to players in the UI; blank shows the group ID. |
+| `groups.<id>.description` | `""` | Short player-facing description of the group. |
+| `groups.<id>.category` | `""` | Optional ID of a `[categories.<id>]` section to group this entry under. |
+| `groups.<id>.selection` | `"OPTIONAL"` (`"REQUIRED"` on factory `main`) | One of `REQUIRED`, `RECOMMENDED`, `OPTIONAL`, or `AUTOMATIC`. `REQUIRED` always installs and is listed under `Included automatically` instead of as a choice. `RECOMMENDED` starts selected and lets players opt out. `OPTIONAL` starts unselected. `AUTOMATIC` stays hidden and installs only while a selected group requires it. |
+| `groups.<id>.auto-exclude-server-side-mods` | inherits `modpack.auto-exclude-server-side-mods` (`"METADATA"`) | Optional per-group override (`DISABLED`, `METADATA`, or `PLATFORMS`). Omit to follow `[modpack]`. See [Dedicated-server jars](../pack-content#dedicated-server-jars). |
+| `groups.<id>.requires` | `[]` | Group IDs that install automatically whenever this group is selected. |
+| `groups.<id>.conflicts` | `[]` | Group IDs that can never be installed together with this group. Declaring the pair on one side is enough. Selecting one turns the other off, a selection that would need a `REQUIRED` group turned off is refused, and two conflicting defaults (`REQUIRED` or `RECOMMENDED`) make the pack invalid. |
+| `groups.<id>.compatible-platforms` | `[]` | Restricts the group to matching platforms, for example a group of Windows-only mods. Empty allows every platform. A `REQUIRED` group restricted to other platforms is skipped on the client, not an error. |
 
 ### Migrating from `server.conf` or v4 JSON
 

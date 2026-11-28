@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.Environment;
+import pl.skidam.automodpack_core.modpack.group.ServerSideModExclusion;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
@@ -61,19 +62,21 @@ public class ConfigUtils {
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
+		if (config.modpack == null) return;
+		if (config.modpack.autoExcludeServerSideMods == null) config.modpack.autoExcludeServerSideMods = ServerSideModExclusion.METADATA;
+		config.modpack.exclude = normalizeRuleSet(config.modpack.exclude, "modpack.exclude", "", null, false);
+		config.modpack.editable = normalizeRuleSet(config.modpack.editable, "modpack.editable", "", null, false);
 
-		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
 		for (var categoryEntry : config.modpack.categories.entrySet()) {
-			var category = categoryEntry.getValue();
-			if (category == null) throw new ConfigTools.ConfigParseException("Category '" + categoryEntry.getKey() + "' is null; declare its groups or remove the category");
-			for (var groupEntry : category.entrySet()) {
-				var group = groupEntry.getValue();
-				if (group == null) throw new ConfigTools.ConfigParseException("Group '" + groupEntry.getKey() + "' in category '" + categoryEntry.getKey() + "' is null; declare it or remove the entry");
-				Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
-				group.fromServer = normalizeRuleSet(group.fromServer, "from-server", groupEntry.getKey(), ownGroupPrefix, true);
-				group.exclude = normalizeRuleSet(group.exclude, "exclude", groupEntry.getKey(), ownGroupPrefix, false);
-				group.editable = normalizeRuleSet(group.editable, "editable", groupEntry.getKey(), ownGroupPrefix, false);
-			}
+			if (categoryEntry.getValue() == null) throw new ConfigTools.ConfigParseException("Category '" + categoryEntry.getKey() + "' is null; declare it or remove the entry");
+		}
+		for (var groupEntry : config.modpack.groups.entrySet()) {
+			var group = groupEntry.getValue();
+			if (group == null) throw new ConfigTools.ConfigParseException("Group '" + groupEntry.getKey() + "' is null; declare it or remove the entry");
+			Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
+			group.fromServer = normalizeRuleSet(group.fromServer, "from-server", groupEntry.getKey(), ownGroupPrefix, true);
+			group.exclude = normalizeRuleSet(group.exclude, "exclude", groupEntry.getKey(), ownGroupPrefix, false);
+			group.editable = normalizeRuleSet(group.editable, "editable", groupEntry.getKey(), ownGroupPrefix, false);
 		}
 	}
 
@@ -93,7 +96,7 @@ public class ConfigUtils {
 			String body = negated ? path.substring(1) : path;
 			while (body.startsWith("/")) body = body.substring(1);
 			if (body.startsWith("automodpack/host-modpack/")) {
-				if (ownGroupPrefix.matcher(body).find()) {
+				if (ownGroupPrefix != null && ownGroupPrefix.matcher(body).find()) {
 					if (dropOwnGroupPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
 					else {
 						String remainder = ownGroupPrefix.matcher(body).replaceFirst("");
@@ -107,7 +110,8 @@ public class ConfigUtils {
 				} else {
 					// Another group's directory cannot be spelled in this group's relative space; stripping it would
 					// silently rebind the rule to this group's files. Keep it verbatim and tell the server owner.
-					LOGGER.warn("Kept {} entry '{}' verbatim: host-modpack rules must name their own group '{}'.", configKey, rule, groupId);
+					String target = groupId.isEmpty() ? "pack-level rules must stay group-relative" : "host-modpack rules must name their own group '" + groupId + "'";
+					LOGGER.warn("Kept {} entry '{}' verbatim: {}.", configKey, rule, target);
 					normalized.add((negated ? "!" : "") + body);
 				}
 				continue;

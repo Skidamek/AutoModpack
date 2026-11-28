@@ -157,7 +157,13 @@ class ConfigToolsTest {
 				{
 				  "syncedfile": "typo",
 				  "modpack": {
-				    "General": {
+				    "unknown-pack-opt": true,
+				    "categories": {
+				      "shaders": {
+				        "bogus-cat": 1
+				      }
+				    },
+				    "groups": {
 				      "main": {"syncedfile": "typo"},
 				      "extra": {"displayName": "Extra", "bogus": true}
 				    }
@@ -165,8 +171,8 @@ class ConfigToolsTest {
 				}
 				""";
 
-		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.displayName", "modpack.General.extra.bogus"),
-				ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
+		assertEquals(List.of("syncedfile", "modpack.unknown-pack-opt", "modpack.categories.shaders.bogus-cat", "modpack.groups.main.syncedfile",
+				"modpack.groups.extra.displayName", "modpack.groups.extra.bogus"), ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class));
 	}
 
 	@Test
@@ -175,7 +181,7 @@ class ConfigToolsTest {
 				{
 				  "syncedfile": "typo",
 				  "modpack": {
-				    "General": {
+				    "groups": {
 				      "main": {"syncedfile": "typo"},
 				      "extra": {"displayName": "Extra", "bogus": true}
 				    }
@@ -185,7 +191,7 @@ class ConfigToolsTest {
 
 		List<String> first = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
 		List<String> second = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
-		assertEquals(List.of("syncedfile", "modpack.General.main.syncedfile", "modpack.General.extra.displayName", "modpack.General.extra.bogus"), first);
+		assertEquals(List.of("syncedfile", "modpack.groups.main.syncedfile", "modpack.groups.extra.displayName", "modpack.groups.extra.bogus"), first);
 		assertEquals(first, second);
 	}
 

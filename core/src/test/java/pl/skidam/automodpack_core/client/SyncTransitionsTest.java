@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -49,7 +50,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * earlier pack left behind.
  */
 class SyncTransitionsTest {
-	private static final SelectionIntent MAIN = new SelectionIntent(Set.of("main"));
+	private static final SelectionIntent MAIN = SelectionIntent.ofEnabled(Set.of("main"));
 	private static final String F = "config/shared.toml";
 	private static final String E = "config/editable.toml";
 	private static final String G = "config/other.toml";
@@ -836,8 +837,7 @@ class SyncTransitionsTest {
 				files.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length), entry.getValue().editable(), HashUtils.sha1(content), "0"));
 			}
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields fields = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			fields.required = groupEntry.getValue().required();
-			fields.defaultSelected = groupEntry.getValue().required();
+			fields.selection = groupEntry.getValue().required() ? GroupSelectionMode.REQUIRED : GroupSelectionMode.OPTIONAL;
 			fields.compatiblePlatforms = groupEntry.getValue().platforms();
 			fields.files = files;
 			groupFields.put(groupEntry.getKey(), fields);
@@ -848,11 +848,11 @@ class SyncTransitionsTest {
 		fields.loader = "";
 		fields.loaderVersion = "";
 		fields.mcVersion = "";
-		fields.categories = Map.of("General", groupFields);
+		fields.groups = groupFields;
 		var manifest = GroupManifestValidator.validate(fields);
 		PackDocument document = parent == null ? TestPacks.document(manifest) : TestPacks.document(manifest, parent.document().ownershipLedger(), TestPacks.CREATED.plusSeconds(version));
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent intent = new SelectionIntent(requested);
+		SelectionIntent intent = SelectionIntent.ofEnabled(requested);
 		return SelectedModpackTarget.prepare(document, parent == null ? null : parent.selection().intent(), intent, ClientPlatform.current());
 	}
 
@@ -947,18 +947,16 @@ class SyncTransitionsTest {
 		fields.loaderVersion = "";
 		fields.mcVersion = "";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = files;
 		if (linuxOnly) {
 			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields linux = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-			linux.required = false;
-			linux.defaultSelected = true;
+			linux.selection = GroupSelectionMode.RECOMMENDED;
 			linux.compatiblePlatforms = Set.of(ClientPlatform.LINUX.id());
 			linux.files = files;
 			group.files = Map.of();
-			fields.categories = Map.of("General", Map.of("main", group, "linux", linux));
-		} else fields.categories = Map.of("General", Map.of("main", group));
+			fields.groups = Map.of("main", group, "linux", linux);
+		} else fields.groups = Map.of("main", group);
 		var manifest = GroupManifestValidator.validate(fields);
 		PackDocument document = parent == null ? TestPacks.document(manifest) : TestPacks.document(manifest, parent.document().ownershipLedger(), TestPacks.CREATED.plusSeconds(version));
 		TestPacks.stageGeneration(storage, document);
@@ -967,7 +965,7 @@ class SyncTransitionsTest {
 			Journal journal = Journal.open(storage.historyJournalFile(modpackId));
 			journal.append(new JournalEntry(journal.head().seq() + 1, document.contentToken(), document.policySha1(), document.createdAt(), "", JournalEntry.NO_RESTORE, List.of()));
 		}
-		SelectionIntent intent = linuxOnly ? new SelectionIntent(Set.of("main", "linux")) : MAIN;
+		SelectionIntent intent = linuxOnly ? SelectionIntent.ofEnabled(Set.of("main", "linux")) : MAIN;
 		return SelectedModpackTarget.prepare(document, parent == null ? null : intent, intent, ClientPlatform.current());
 	}
 }

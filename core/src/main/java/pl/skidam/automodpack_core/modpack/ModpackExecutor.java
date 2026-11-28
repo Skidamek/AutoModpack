@@ -8,16 +8,22 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.WAITING_MUSIC_FILE
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,10 +46,12 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.platforms.PlatformSideVerdicts;
 import pl.skidam.automodpack_core.platforms.PlatformSourceLookup;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -392,6 +400,7 @@ public class ModpackExecutor {
 			throws IOException, CandidateBuildException {
 		validateConfiguration(serverConfig);
 		prepareDirectories(serverConfig);
+		warnUndeclaredGroupFolders(serverConfig);
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
 		try (ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			// Unadvertised versions leave the manifest fields empty, so clients see a files-only pack instead of a
@@ -401,7 +410,7 @@ public class ModpackExecutor {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpack.name, Environment.current().modVersion(),
 					advertiseVersions ? Environment.current().loader() : null, advertiseVersions ? Environment.current().loaderVersion() : null, advertiseVersions ? Environment.current().mcVersion() : null, serverRoot,
 					groupRoot,
-					serverConfig.modpack.categories, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
+					serverConfig.modpack, materializeMissingObjects, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()),
 					creationExecutor, generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects, ownedElsewhere.read());
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
@@ -437,21 +446,49 @@ public class ModpackExecutor {
 		if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 			return new PackAbsence(Kind.NOTHING_FOUND, "Nothing to sync: the published generation holds no files for any of the " + manifest.groups().size()
 					+ " configured groups (" + String.join(", ", manifest.groups().keySet()) + ").");
-		if (manifest.groups().values().stream().noneMatch(group -> group.selection() != GroupSelectionMode.OPTIONAL && !group.files().isEmpty()))
+		Set<String> defaultActive = defaultSelectedGroups(manifest);
+		boolean anyDefaultHasFiles = defaultActive.stream().anyMatch(id -> !manifest.groups().get(id).files().isEmpty());
+		if (!anyDefaultHasFiles)
 			return new PackAbsence(Kind.NOTHING_SELECTED, "Nothing to sync: the modpack holds " + fileCount(manifest)
-					+ " files, but no group that is required or recommended carries any of them. Mark a group that carries files required or recommended.");
+					+ " files, but no group selected by default carries any of them. Mark a group that carries files REQUIRED or RECOMMENDED.");
 		return null;
 	}
 
-	/**
-	 * A group that is required or recommended and carries no files is dead configuration: every default client
-	 * is handed it and receives nothing through it. It is a receipt, not a refusal, because the operator may be
-	 * mid-edit and other groups may still carry the pack.
-	 */
+	private static Set<String> defaultSelectedGroups(GroupManifest manifest) {
+		Set<ClientPlatform> platforms = new TreeSet<>(ClientPlatform.builtIns());
+		platforms.addAll(manifest.declaredPlatforms());
+		Set<String> active = new HashSet<>();
+		for (ClientPlatform platform : platforms) {
+			try {
+				active.addAll(GroupSelectionResolver.resolveDefault(manifest, platform).selectedGroups());
+			} catch (SelectionResolutionException ignored) {
+			}
+		}
+		return active;
+	}
+
 	private static void warnUnusableSelectedGroups(GroupManifest manifest) {
-		for (var entry : manifest.groups().entrySet())
-			if (entry.getValue().files().isEmpty() && entry.getValue().selection() != GroupSelectionMode.OPTIONAL)
-				LOGGER.warn("Group '{}' is required or recommended but carries no files; a default client receives nothing through it", entry.getKey());
+		Set<String> reachableFromSelectable = new HashSet<>();
+		for (var entry : manifest.groups().entrySet()) {
+			if (entry.getValue().selection().automatic()) continue;
+			ArrayDeque<String> queue = new ArrayDeque<>();
+			queue.add(entry.getKey());
+			while (!queue.isEmpty()) {
+				String id = queue.removeFirst();
+				if (!reachableFromSelectable.add(id)) continue;
+				GroupManifest.Group group = manifest.groups().get(id);
+				if (group != null) queue.addAll(group.requires());
+			}
+		}
+		for (var entry : manifest.groups().entrySet()) {
+			GroupManifest.Group group = entry.getValue();
+			if (group.selection().automatic() && !reachableFromSelectable.contains(entry.getKey())) {
+				LOGGER.warn("Group '{}' is AUTOMATIC but no other group requires it; it will never be installed", entry.getKey());
+			} else if (group.arrivesSelected() && group.files().isEmpty()) {
+				LOGGER.warn("Group '{}' is {} but carries no files; a default client receives nothing through it", entry.getKey(),
+						group.selection().name().toLowerCase(Locale.ROOT));
+			}
+		}
 	}
 
 	private static int fileCount(GroupManifest manifest) {
@@ -509,33 +546,36 @@ public class ModpackExecutor {
 	}
 
 	private void validateConfiguration(ServerConfigJsons.ServerConfigFieldsV3 serverConfig) throws CandidateBuildException {
-		if (serverConfig == null || serverConfig.modpack.categories.isEmpty())
+		if (serverConfig == null || serverConfig.modpack == null || serverConfig.modpack.groups == null || serverConfig.modpack.groups.isEmpty())
 			throw new CandidateBuildException("Server group configuration is missing");
-		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
-			var category = categoryEntry.getValue();
-			if (category == null) throw new CandidateBuildException("Category '" + categoryEntry.getKey() + "' has no declaration");
-			for (var entry : category.entrySet()) {
+		if (serverConfig.modpack.categories != null) {
+			for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
 				try {
-					GroupManifestValidator.requireIdentifier(entry.getKey());
+					GroupManifestValidator.requireIdentifier(categoryEntry.getKey());
 				} catch (IllegalArgumentException e) {
-					throw new CandidateBuildException(e.getMessage(), e);
+					throw new CandidateBuildException("Invalid category ID: " + categoryEntry.getKey(), e);
 				}
-				if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
+				if (categoryEntry.getValue() == null) throw new CandidateBuildException("Category '" + categoryEntry.getKey() + "' has no declaration");
 			}
+		}
+		for (var entry : serverConfig.modpack.groups.entrySet()) {
+			try {
+				GroupManifestValidator.requireIdentifier(entry.getKey());
+			} catch (IllegalArgumentException e) {
+				throw new CandidateBuildException("Invalid group ID: " + entry.getKey(), e);
+			}
+			if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
 		}
 	}
 
 	private void prepareDirectories(ServerConfigJsons.ServerConfigFieldsV3 serverConfig) throws IOException, CandidateBuildException {
 		Map<String, Path> groupDirectories = new TreeMap<>();
-		for (var categoryEntry : serverConfig.modpack.categories.entrySet()) {
-			if (categoryEntry.getValue() == null) continue;
-			for (String groupId : categoryEntry.getValue().keySet()) {
-				Path groupDirectory = groupRoot.resolve(groupId).normalize();
-				if (!groupDirectory.startsWith(groupRoot)) throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
-				if (groupDirectory.startsWith(generationRoot) || generationRoot.startsWith(groupDirectory))
-					throw new CandidateBuildException("Group directory overlaps managed generation store: " + groupId);
-				groupDirectories.put(groupId, groupDirectory);
-			}
+		for (String groupId : serverConfig.modpack.groups.keySet()) {
+			Path groupDirectory = groupRoot.resolve(groupId).normalize();
+			if (!groupDirectory.startsWith(groupRoot)) throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
+			if (groupDirectory.startsWith(generationRoot) || generationRoot.startsWith(groupDirectory))
+				throw new CandidateBuildException("Group directory overlaps managed generation store: " + groupId);
+			groupDirectories.put(groupId, groupDirectory);
 		}
 		Files.createDirectories(groupRoot);
 		GenerationPatchNotes.ensurePresent(patchNotesFile);
@@ -546,6 +586,29 @@ public class ModpackExecutor {
 		Files.createDirectories(main.resolve(ModpackPathPolicy.CONFIG_ROOT));
 		Files.createDirectories(main.resolve(ModpackPathPolicy.SHADERPACKS_ROOT));
 		Files.createDirectories(main.resolve(ModpackPathPolicy.RESOURCEPACKS_ROOT));
+	}
+
+	private void warnUndeclaredGroupFolders(ServerConfigJsons.ServerConfigFieldsV3 serverConfig) {
+		if (!Files.isDirectory(groupRoot)) return;
+		try (Stream<Path> children = Files.list(groupRoot)) {
+			for (Path child : children.toList()) {
+				if (!Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS)) continue;
+				String folder = child.getFileName().toString();
+				if (serverConfig.modpack.groups.containsKey(folder)) continue;
+				if (!isDirectoryEmpty(child)) {
+					LOGGER.warn("Folder '{}' under host-modpack/ has files but is not declared in server.toml; run '/automodpack groups import {}' or add [groups.{}] to include it",
+							folder, folder, folder);
+				}
+			}
+		} catch (IOException e) {
+			LOGGER.warn("Failed to check for undeclared group folders under {}", groupRoot, e);
+		}
+	}
+
+	private static boolean isDirectoryEmpty(Path directory) throws IOException {
+		try (Stream<Path> walk = Files.walk(directory)) {
+			return walk.noneMatch(Files::isRegularFile);
+		}
 	}
 
 	public boolean isGenerating() {

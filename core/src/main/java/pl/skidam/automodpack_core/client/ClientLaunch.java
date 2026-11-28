@@ -116,9 +116,10 @@ public final class ClientLaunch {
 		try {
 			String modpackId = ModpackId.requireValid(manifestResult.content().policy.modpackId);
 			SelectionIntent desired = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
+			ClientPlatform platform = ClientPlatform.effective(desired);
 			selectedTarget = desired == null
-					? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.current())
-					: SelectedModpackTarget.prepare(manifestResult.content(), new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null), desired, ClientPlatform.current());
+					? SelectedModpackTarget.prepareDefault(manifestResult.content(), platform)
+					: SelectedModpackTarget.prepare(manifestResult.content(), new ClientGenerationStore(storage).appliedSelection(modpackId).orElse(null), desired, platform);
 		} catch (RuntimeException e) {
 			LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
 			transport.close();

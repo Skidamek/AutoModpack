@@ -11,8 +11,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ContentTreeTest {
@@ -49,19 +51,22 @@ class ContentTreeTest {
 	}
 
 	private static GroupManifest exclusive(String performanceContent, String fantasyContent) {
-		var performance = group(performanceContent, "fantasy");
-		var fantasy = group(fantasyContent, "performance");
+		var cat = new ModpackJsons.CompleteModpackContentFields.CategoryFields();
+		cat.name = "Variant";
+		cat.pick = CategoryPickMode.AT_MOST_ONE;
+		var performance = group(performanceContent);
+		var fantasy = group(fantasyContent);
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.categories = Map.of("General", Map.of("performance", performance, "fantasy", fantasy));
+		fields.categories = Map.of("variant", cat);
+		fields.groups = Map.of("performance", performance, "fantasy", fantasy);
 		return GroupManifestValidator.validate(fields);
 	}
 
-	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group(String content, String breaksWith) {
+	private static ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group(String content) {
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = false;
-		group.defaultSelected = false;
-		group.breaksWith = Set.of(breaksWith);
+		group.category = "variant";
+		group.selection = GroupSelectionMode.OPTIONAL;
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), false, sha1(content), null));
 		return group;
 	}

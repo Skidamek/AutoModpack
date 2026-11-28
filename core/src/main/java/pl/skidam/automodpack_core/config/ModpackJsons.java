@@ -5,9 +5,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import pl.skidam.automodpack_core.modpack.group.CategoryPickMode;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
+
 public class ModpackJsons {
 
-	/** The immutable policy document of one generation: pack metadata and every group's files and rules. */
+	/** The immutable policy document of one generation: pack metadata, categories, and every group's files and rules. */
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -15,16 +18,22 @@ public class ModpackJsons {
 		public String loader = "";
 		public String loaderVersion = "";
 		public String mcVersion = "";
-		// Category name -> group id -> group fields. The group id is referenced by requires/breaksWith and by the client's saved selection; the category name is the player-facing section label.
-		public Map<String, Map<String, ModpackGroupFields>> categories = Map.of();
+		public Map<String, CategoryFields> categories = Map.of();
+		public Map<String, ModpackGroupFields> groups = Map.of();
+
+		public static class CategoryFields {
+			public String name = "";
+			public String description = "";
+			public CategoryPickMode pick = CategoryPickMode.ANY;
+		}
 
 		public static class ModpackGroupFields {
-			public String displayName = "";
+			public String name = "";
 			public String description = "";
-			public Boolean required;
-			public Boolean defaultSelected;
-			public Set<String> breaksWith = Set.of();
+			public String category = "";
+			public GroupSelectionMode selection;
 			public Set<String> requires = Set.of();
+			public Set<String> conflicts = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();
 			public Map<String, GroupFileFields> files = Map.of();
 		}

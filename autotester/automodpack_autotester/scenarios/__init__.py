@@ -93,7 +93,7 @@ def list_scenarios() -> list[ScenarioSpec]:
 
 
 def _load_all() -> None:
-    from . import compat, edge, faults, gate, offline, release, transport  # noqa: F401
+    from . import compat, edge, faults, gate, groups, offline, release, transport  # noqa: F401
 
 
 # --- Shared AutoModpack UI / sync flow helpers ---

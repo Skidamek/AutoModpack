@@ -1,41 +1,29 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-/** How a player receives a group: REQUIRED is always installed, RECOMMENDED arrives preselected, OPTIONAL starts unchecked. */
+/** How a player receives a group: REQUIRED is always installed, RECOMMENDED arrives preselected, OPTIONAL starts unchecked, AUTOMATIC installs only when required by a selected group. */
 public enum GroupSelectionMode {
 	REQUIRED,
 	RECOMMENDED,
-	OPTIONAL;
+	OPTIONAL,
+	AUTOMATIC;
 
-	/** Always installed, independent of the player's request. */
+	/** Always installed, independent of the player's selection. */
 	public boolean alwaysInstalled() {
 		return this == REQUIRED;
 	}
 
-	/** Arrives selected: required groups and recommended ones. */
+	/** Arrives selected by default before any player customization. */
 	public boolean arrivesSelected() {
-		return this != OPTIONAL;
+		return this == REQUIRED || this == RECOMMENDED;
 	}
 
-	/** The policy document's required flag. */
-	public boolean policyRequired() {
-		return alwaysInstalled();
+	/** Directly toggleable or pickable by the player in the group selection UI. */
+	public boolean choosable() {
+		return this == RECOMMENDED || this == OPTIONAL;
 	}
 
-	/** The policy document's default-selected flag. */
-	public boolean policyDefaultSelected() {
-		return arrivesSelected();
-	}
-
-	/**
-	 * The mode a legacy flag pair means. One combination has no mode of its own: required together with
-	 * not-preselected. It collapses to REQUIRED, whose preselection is the part no player could ever act on anyway.
-	 */
-	public static GroupSelectionMode of(boolean required, boolean defaultSelected) {
-		return required ? REQUIRED : defaultSelected ? RECOMMENDED : OPTIONAL;
-	}
-
-	/** Whether {@link #of} had to collapse such a pair, so the migration says so instead of quietly rewriting the operator's words. */
-	public static boolean collapsed(boolean required, boolean defaultSelected) {
-		return required && !defaultSelected;
+	/** Hidden dependency-only group installed only while a selected group requires it. */
+	public boolean automatic() {
+		return this == AUTOMATIC;
 	}
 }

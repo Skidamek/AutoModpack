@@ -296,9 +296,8 @@ public final class ClientGenerationStore {
 	private Optional<SelectionIntent> appliedSelection(ClientStorageJsons.ClientGenerationStateFields state, String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (state == null || !normalizedModpackId.equals(state.modpackId)) return Optional.empty();
-		if (state.selectedGroups == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
-		return Optional.of(new SelectionIntent(state.selectedGroups, state.selectedCategories, state.excludedGroups,
-				state.selectedPlatform == null ? null : ClientPlatform.parse(state.selectedPlatform)));
+		if (state.selection == null) return new ClientSelectionStore(storage.selectionFile()).get(normalizedModpackId);
+		return Optional.of(state.selection.toIntent());
 	}
 
 	private SelectedModpackTarget resolveActive(ClientStorageJsons.ClientGenerationStateFields state, ClientPlatform platform) throws IOException {
@@ -578,9 +577,7 @@ public final class ClientGenerationStore {
 		}
 		SelectionIntent applied = appliedSelection(identity, modpackId);
 		if (current != null && modpackId.equals(current.modpackId) && document.contentToken().equals(current.contentToken) && current.detached
-				&& Objects.equals(current.selectedGroups, List.copyOf(applied.requestedGroups()))
-				&& Objects.equals(current.selectedCategories, List.copyOf(applied.requestedCategories()))
-				&& Objects.equals(current.excludedGroups, List.copyOf(applied.excludedGroups())))
+				&& current.selection != null && current.selection.toIntent().equals(applied))
 			return false;
 		storage.writeActiveState(document, applied, true);
 		makeProjectionEditable();
@@ -612,7 +609,7 @@ public final class ClientGenerationStore {
 	private SelectionIntent appliedSelection(InstanceTree.LiveIdentity identity, String modpackId) {
 		SelectionIntent stored = new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
 		SelectionIntent applied = identity.selection() == null ? stored : identity.selection();
-		if (applied == null) return new SelectionIntent(Set.of());
+		if (applied == null) return SelectionIntent.DEFAULTS;
 		return stored == null ? applied : applied.withPlatform(stored.platform());
 	}
 

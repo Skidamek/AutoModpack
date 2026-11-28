@@ -53,7 +53,7 @@ class BootRecoveryStaleReviewTest {
 			GroupManifest manifest = TestPacks.manifest("test pack", "config/a.txt", "hello");
 			String modpackId = manifest.modpackId();
 			TestPacks.stageGeneration(storage, TestPacks.document(manifest));
-			SelectionIntent selected = new SelectionIntent(Set.of("main"));
+			SelectionIntent selected = SelectionIntent.ofEnabled(Set.of("main"));
 			new ClientSelectionStore(storage.selectionFile()).put(modpackId, selected);
 			SelectedModpackTarget target = SelectedModpackTarget.prepare(TestPacks.document(manifest), selected, selected, ClientPlatform.LINUX);
 			String hash = HashUtils.sha1("hello".getBytes(StandardCharsets.UTF_8));

@@ -84,8 +84,13 @@ public final class VersionedIconButton extends Button {
 	}
 	*//*?}*/
 
-	private Identifier texture() {
+	/** Our icons are plain files under the mod's own assets, never a sprite a server pack could stand in for. */
+	public static Identifier spriteTexture(String sprite) {
 		return Common.id("textures/gui/sprites/" + sprite + ".png");
+	}
+
+	private Identifier texture() {
+		return spriteTexture(sprite);
 	}
 
 	// Positions are read live: lists build rows at 0,0 and move the widgets during layout.

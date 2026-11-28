@@ -45,14 +45,11 @@ public class ClientStorageJsons {
 		 */
 		public String createdAt = "";
 		/**
-		 * The group selection this pointer was committed under: the applied answer to "what is installed". Null lists
-		 * mean a pointer written before the selection was recorded; readers fall back to the selection store, which
+		 * The group selection this pointer was committed under: the applied answer to "what is installed". Null
+		 * means a pointer written before the selection was recorded; readers fall back to the selection store, which
 		 * was the applied record before the store became the player's desired state.
 		 */
-		public List<String> selectedGroups = null;
-		public List<String> selectedCategories = null;
-		public List<String> excludedGroups = null;
-		public String selectedPlatform = null;
+		public SelectionJsons.SelectionFields selection = null;
 		/**
 		 * Local sovereignty of the active pack. Exactly two transition kinds exist, both explicit: declared true by
 		 * declining a reviewed update, rolling back to an older generation, or the details screen's stop-syncing
@@ -78,9 +75,7 @@ public class ClientStorageJsons {
 		public String activeModpackId = "";
 		public String contentToken = "";
 		public boolean detached;
-		public List<String> requestedGroups = List.of();
-		public List<String> requestedCategories = List.of();
-		public List<String> excludedGroups = List.of();
+		public SelectionJsons.SelectionFields selection = null;
 		public List<TombstoneFields> tombstones = List.of();
 		public List<FileFields> files = List.of();
 

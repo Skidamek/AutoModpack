@@ -24,22 +24,28 @@ _FABRIC_META = "https://meta.fabricmc.net/v2"
 _NEOFORGE_MAVEN = "https://maven.neoforged.net/releases/net/neoforged/neoforge"
 _FORGE_MAVEN = "https://maven.minecraftforge.net/net/minecraftforge/forge"
 _SEED_SKIP_ON_COPY = frozenset({"logs", "crash-reports", "mods", "automodpack", _SEED_MARKER})
+_USER_AGENT = "automodpack-autotester"
 
 
 def server_cache_dir(target: Target) -> Path:
     return shared_cache_root() / "servers" / target.id
 
 
+def _urlopen(url: str, *, timeout: float):
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
 def _download(url: str, dest: Path, timeout: float = 180.0) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".tmp")
-    with urllib.request.urlopen(url, timeout=timeout) as resp, tmp.open("wb") as out:
+    with _urlopen(url, timeout=timeout) as resp, tmp.open("wb") as out:
         shutil.copyfileobj(resp, out)
     tmp.replace(dest)
 
 
 def _latest_fabric_installer() -> str:
-    with urllib.request.urlopen(f"{_FABRIC_META}/versions/installer", timeout=30) as resp:
+    with _urlopen(f"{_FABRIC_META}/versions/installer", timeout=30) as resp:
         items = json.loads(resp.read().decode("utf-8"))
     stable = [i["version"] for i in items if i.get("stable")]
     return stable[0] if stable else items[0]["version"]

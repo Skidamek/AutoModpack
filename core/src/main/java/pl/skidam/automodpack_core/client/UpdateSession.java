@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -403,10 +404,11 @@ final class UpdateSession implements UpdateAttempt {
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
 		SelectionIntent desired = selections.get(record.manifest().modpackId()).orElse(null);
 		SelectionIntent applied = new ClientGenerationStore(storage).appliedSelection(record.manifest().modpackId()).orElse(null);
-		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(desired, pending.targetIntent()))
+		ClientPlatform effective = desired != null && desired.platform() != null ? desired.platform() : pending.platform();
+		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(desired, pending.targetIntent()) && Objects.equals(effective, pending.platform()))
 			return SelectedModpackTarget.prepare(record, applied, pending.targetIntent(), pending.platform());
-		if (desired == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
-		return SelectedModpackTarget.prepare(record, applied, desired, pending.platform());
+		if (desired == null) return SelectedModpackTarget.prepareDefault(record, effective);
+		return SelectedModpackTarget.prepare(record, applied, desired, effective);
 	}
 
 	private static PackDocument newest(ClientGenerationStore generations, String modpackId) throws IOException {

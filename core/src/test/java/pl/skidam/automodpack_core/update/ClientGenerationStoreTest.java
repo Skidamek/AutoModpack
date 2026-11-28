@@ -65,12 +65,12 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "projection-object");
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		storage.writeActiveState(document, new SelectionIntent(Set.of("main")));
+		storage.writeActiveState(document, SelectionIntent.ofEnabled(Set.of("main")));
 
 		ClientStorageJsons.ClientGenerationStateFields read = storage.readActiveState();
 		read.contentToken = "0".repeat(40);
 		read.detached = true;
-		read.selectedGroups = List.of("tampered");
+		read.selection.enabled = List.of("tampered");
 		read.manifest = null;
 		read.ownershipLedger = null;
 
@@ -78,7 +78,7 @@ class ClientGenerationStoreTest {
 		assertEquals(document.contentToken(), next.contentToken, "the parse is cached, the document it hands out is not");
 		assertFalse(next.detached);
 		assertNotNull(next.manifest);
-		assertEquals(List.of("main"), next.selectedGroups);
+		assertEquals(List.of("main"), next.selection.enabled);
 		assertEquals(document.contentToken(), new ClientGenerationStore(storage).activeDocument().orElseThrow().contentToken());
 	}
 
@@ -92,11 +92,11 @@ class ClientGenerationStoreTest {
 		assertTrue(new ClientGenerationStore(storage).activeDocument().isEmpty());
 
 		storage.writeActiveState(document);
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
 		assertEquals(document, target.document());
-		assertEquals(new SelectionIntent(Set.of("main")), target.selection().intent());
+		assertEquals(SelectionIntent.ofEnabled(Set.of("main")), target.selection().intent());
 		assertEquals(document.contentToken(), target.flatTarget().contentToken);
 		assertEquals(document.ownershipLedger(), target.document().ownershipLedger());
 	}
@@ -107,7 +107,7 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "pack-jar");
 		PackDocument document = republished(FIRST_PACK, "mods/test.jar", hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 		String fetched = store(storage, "fetched-only");
 		TestPacks.stageGeneration(storage, republished(SECOND_PACK, "mods/fetched.jar", fetched, 12, TestPacks.CREATED));
 
@@ -154,17 +154,17 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "projection-object");
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, document);
-		SelectionIntent applied = new SelectionIntent(Set.of("main"));
+		SelectionIntent applied = SelectionIntent.ofEnabled(Set.of("main"));
 		storage.writeActiveState(document, applied);
 
 		// The pointer carries the applied answer even when the store's desire has already moved ahead of it.
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main", "extra")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main", "extra")));
 		assertEquals(applied, new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
 		assertEquals(applied, new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow().selection().intent());
 
 		// A pointer written before the split falls back to the store, which was the applied record then.
 		storage.writeActiveState(document);
-		assertEquals(new SelectionIntent(Set.of("main", "extra")), new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
+		assertEquals(SelectionIntent.ofEnabled(Set.of("main", "extra")), new ClientGenerationStore(storage).appliedSelection(FIRST_PACK).orElseThrow());
 	}
 
 	@Test
@@ -278,7 +278,7 @@ class ClientGenerationStoreTest {
 		appendEntry(storage, second);
 
 		storage.writeActiveState(second);
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.LINUX).orElseThrow();
 
 		assertEquals(second.policySha1(), target.document().policySha1());
@@ -312,7 +312,7 @@ class ClientGenerationStoreTest {
 		GroupManifest manifest = GroupManifestValidator.validate(UpdateTestFixtures.fields(config, "config", true, pack, 11));
 		PackDocument next = PackDocument.create(manifest, TestPacks.policySha1(manifest), TestPacks.CREATED, null);
 		TestPacks.stageGeneration(storage, next);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(next, new SelectionIntent(Set.of("main")), new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(next, SelectionIntent.ofEnabled(Set.of("main")), SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, List.of(new UpdatePlan.Operation(UpdatePlan.Root.GAME_DIR, config, UpdatePlan.OperationType.INSTALL_OBJECT, pack, 11, null),
 				new UpdatePlan.Operation(UpdatePlan.Root.PROJECTION, config, UpdatePlan.OperationType.INSTALL_OBJECT, pack, 11, null)).stream().sorted(UpdatePlan.Operation.ORDER).toList(),
 				List.of(new UpdatePlan.ProjectedFile(UpdatePlan.Root.PROJECTION, config, true, pack, 11), new UpdatePlan.ProjectedFile(UpdatePlan.Root.GAME_DIR, config, true, pack, 11)));
@@ -387,13 +387,13 @@ class ClientGenerationStoreTest {
 		TreeMap<String, GroupManifest.Group> groups = new TreeMap<>();
 		groups.put("main", group(GroupSelectionMode.REQUIRED, main));
 		if (!extra.isEmpty()) groups.put("extra", group(GroupSelectionMode.OPTIONAL, extra));
-		return new GroupManifest(modpackId, "Test optional groups", "", "", "", "", groups);
+		return new GroupManifest(modpackId, "Test optional groups", "", "", "", "", Map.of(), groups);
 	}
 
 	private static GroupManifest.Group group(GroupSelectionMode mode, Map<String, String> contents) {
 		TreeMap<String, GroupManifest.GroupFile> files = new TreeMap<>();
 		contents.forEach((path, content) -> files.put(path, new GroupManifest.GroupFile(content.length(), false, sha1(content), null)));
-		return new GroupManifest.Group("", "", "General", mode, new TreeSet<>(), new TreeSet<>(), Set.of(), files);
+		return new GroupManifest.Group("", "", "", mode, new TreeSet<>(), Set.of(), files);
 	}
 
 	private static String sha1(String content) {
@@ -406,9 +406,9 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument republished(String modpackId, String path, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of(path, file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test republished", "", "", "", "", Map.of(), new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
 	}
 
@@ -508,7 +508,7 @@ class ClientGenerationStoreTest {
 		appendEntry(storage, second);
 
 		storage.writeActiveState(second);
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 
 		// The mirror now holds two generations under one token. The pointer names one of them, and the answer has to
 		// be that one: pairing its manifest with the other entry's policy hash would be a document that never existed.
@@ -562,9 +562,9 @@ class ClientGenerationStoreTest {
 		Path pointer = storage.stateFile();
 		JsonObject written = JsonParser.parseString(Files.readString(pointer, StandardCharsets.UTF_8)).getAsJsonObject();
 		GroupManifest.GroupFile other = new GroupManifest.GroupFile(size, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/other.jar", other)));
-		written.add("manifest", ConfigTools.GSON.toJsonTree(new GroupManifest(FIRST_PACK, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)))));
+		written.add("manifest", ConfigTools.GSON.toJsonTree(new GroupManifest(FIRST_PACK, "Test", "", "", "", "", Map.of(), new TreeMap<>(Map.of("main", group)))));
 		Files.writeString(pointer, written.toString(), StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, storage::readActiveState);
@@ -580,7 +580,7 @@ class ClientGenerationStoreTest {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(FIRST_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 		storage.writeActiveState(second);
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
 		Files.createDirectories(overlay.getParent());
@@ -617,7 +617,7 @@ class ClientGenerationStoreTest {
 		Files.delete(storage.objectFile(first.policySha1()));
 		assertThrows(IOException.class, () -> generations.newestDocument(FIRST_PACK));
 
-		new ClientSelectionStore(storage.selectionFile()).put(SECOND_PACK, new SelectionIntent(Set.of("main")));
+		new ClientSelectionStore(storage.selectionFile()).put(SECOND_PACK, SelectionIntent.ofEnabled(Set.of("main")));
 		assertEquals(List.of(SECOND_PACK), new ClientGenerationStore(storage).installedPackIds());
 		assertEquals(second, new ClientGenerationStore(storage).newestDocument(SECOND_PACK));
 	}
@@ -877,7 +877,7 @@ class ClientGenerationStoreTest {
 		PackDocument installed = document(FIRST_PACK, installedHash, Files.size(storage.objectFile(installedHash)), Instant.parse("2026-01-01T00:00:00Z"));
 		TestPacks.stageGeneration(storage, installed);
 		writeHead(storage, FIRST_PACK, installed);
-		storage.writeActiveState(installed, new SelectionIntent(Set.of("main")));
+		storage.writeActiveState(installed, SelectionIntent.ofEnabled(Set.of("main")));
 
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		assertNotNull(generations.hosting(FIRST_PACK), "the matching head and pointer host the active generation");
@@ -979,17 +979,17 @@ class ClientGenerationStoreTest {
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", Map.of(), new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, null);
 	}
 
 	private static PackDocument document(String modpackId, String hash, long size, Instant createdAt, PackDocument parent) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "General", GroupSelectionMode.REQUIRED, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", GroupSelectionMode.REQUIRED, new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
-		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
+		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", Map.of(), new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent.ownershipLedger());
 	}
 

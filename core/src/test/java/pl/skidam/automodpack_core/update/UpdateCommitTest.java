@@ -43,6 +43,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionMode;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
@@ -98,7 +99,7 @@ class UpdateCommitTest {
 		// The server reorganized the policy without touching the served bytes: same content token, new policy document.
 		GroupManifest reorganized = GroupManifestValidator.validate(reorganizedFields(hash, bytes.length));
 		PackDocument advanced = PackDocument.create(reorganized, TestPacks.policySha1(reorganized), TestPacks.CREATED, null);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(advanced, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(advanced, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		assertEquals(installed.packTarget().contentToken(), target.packTarget().contentToken());
 		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
@@ -124,7 +125,7 @@ class UpdateCommitTest {
 		// The mirror only witnessed the generation the old policy came with; the head advanced the policy without a journal sync.
 		GroupManifest advanced = GroupManifestValidator.validate(reorganizedFields(hash, bytes.length));
 		PackDocument advancedDocument = PackDocument.create(advanced, TestPacks.policySha1(advanced), TestPacks.CREATED, null);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(advancedDocument, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(advancedDocument, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		assertEquals(installed.packTarget().contentToken(), target.packTarget().contentToken());
 		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
@@ -881,7 +882,7 @@ class UpdateCommitTest {
 		fields.modpackId = "def5678";
 		PackDocument record = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, record);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(record, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(record, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		UpdatePlan plan = UpdateTestFixtures.plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
@@ -1131,7 +1132,7 @@ class UpdateCommitTest {
 		targetFields.modpackId = "def5678";
 		PackDocument switchedDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
 		TestPacks.stageGeneration(storage, switchedDocument);
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(switchedDocument, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(switchedDocument, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
@@ -1302,7 +1303,7 @@ class UpdateCommitTest {
 
 	private static ModpackJsons.CompleteModpackContentFields reorganizedFields(String hash, long size) {
 		ModpackJsons.CompleteModpackContentFields fields = UpdateTestFixtures.fields("mods/new.jar", "mod", false, hash, size);
-		fields.categories.get("General").get("main").description = "reorganized";
+		fields.groups.get("main").description = "reorganized";
 		return fields;
 	}
 
@@ -1337,13 +1338,12 @@ class UpdateCommitTest {
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
 		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.required = true;
-		group.defaultSelected = true;
+		group.selection = GroupSelectionMode.REQUIRED;
 		group.files = Map.of(pathA, file(pathA, hashA, sizeA), pathB, file(pathB, hashB, sizeB));
-		fields.categories = Map.of("General", Map.of("main", group));
+		fields.groups = Map.of("main", group);
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		TestPacks.stageGeneration(storage, document);
-		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		return SelectedModpackTarget.prepare(document, null, SelectionIntent.ofEnabled(Set.of("main")), ClientPlatform.LINUX);
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String path, String hash, long size) {

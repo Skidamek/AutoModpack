@@ -5,12 +5,12 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.SelectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -140,11 +140,7 @@ final class ActivePackPointer {
 	}
 
 	private void write(SelectionIntent applied, ClientStorageJsons.ClientGenerationStateFields state) throws IOException {
-		SelectionIntent selection = Objects.requireNonNull(applied, "applied selection");
-		state.selectedGroups = List.copyOf(selection.requestedGroups());
-		state.selectedCategories = List.copyOf(selection.requestedCategories());
-		state.excludedGroups = List.copyOf(selection.excludedGroups());
-		state.selectedPlatform = selection.platform() == null ? null : selection.platform().id();
+		state.selection = SelectionJsons.SelectionFields.from(Objects.requireNonNull(applied, "applied selection"));
 		publish(state);
 	}
 
@@ -179,10 +175,7 @@ final class ActivePackPointer {
 		copy.manifest = state.manifest;
 		copy.manifestSha1 = state.manifestSha1;
 		copy.createdAt = state.createdAt;
-		copy.selectedGroups = state.selectedGroups;
-		copy.selectedCategories = state.selectedCategories;
-		copy.excludedGroups = state.excludedGroups;
-		copy.selectedPlatform = state.selectedPlatform;
+		copy.selection = state.selection == null ? null : state.selection.copy();
 		copy.detached = state.detached;
 		return copy;
 	}

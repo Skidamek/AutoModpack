@@ -10,6 +10,7 @@ import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.screen.SourceCounts;
@@ -76,8 +77,8 @@ final class PackConfirmCopy {
 	}
 
 	static String requestedGroups(SelectedModpackTarget target) {
-		if (target.selection().intent().requestedGroups().isEmpty()) return "";
-		return VersionedText.str("automodpack.firstConnect.requestedGroups", groupNames(target.manifest(), target.selection().intent().requestedGroups()));
+		if (target.selection().intent().enabled().isEmpty()) return "";
+		return VersionedText.str("automodpack.firstConnect.requestedGroups", groupNames(target.manifest(), target.selection().intent().enabled()));
 	}
 
 	static String includedGroups(SelectedModpackTarget target) {
@@ -91,8 +92,8 @@ final class PackConfirmCopy {
 	}
 
 	static String staleRequestedGroups(SelectedModpackTarget target) {
-		if (target.selection().staleRequestedGroups().isEmpty()) return "";
-		return VersionedText.str("automodpack.firstConnect.unavailableOldChoices", groupNames(target.manifest(), target.selection().staleRequestedGroups()));
+		if (target.selection().staleGroups().isEmpty()) return "";
+		return VersionedText.str("automodpack.firstConnect.unavailableOldChoices", groupNames(target.manifest(), target.selection().staleGroups()));
 	}
 
 	static String existingMods(boolean keep, int count) {
@@ -102,10 +103,7 @@ final class PackConfirmCopy {
 
 	private static String groupNames(GroupManifest manifest, Iterable<String> ids) {
 		List<String> names = new ArrayList<>();
-		for (String id : ids) {
-			GroupManifest.Group group = manifest.groups().get(id);
-			names.add(group == null || group.displayName().isBlank() ? id : group.displayName());
-		}
+		for (String id : ids) names.add(manifest.displayName(id));
 		return String.join(", ", names);
 	}
 
@@ -147,7 +145,9 @@ final class PackConfirmCopy {
 	}
 
 	static boolean canCustomize(GroupManifest manifest) {
-		return manifest.groups().values().stream().anyMatch(group -> !group.alwaysInstalled());
+		if (manifest.hasChoosableGroups()) return true;
+		// Without a detected platform an OS-scoped pack is still tunable: the player picks the OS in the group screen.
+		return ClientPlatform.current() == null && manifest.hasDeclaredPlatforms();
 	}
 
 	static Component leftoverLabel(int count) {

@@ -30,6 +30,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
+import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
 import pl.skidam.automodpack_core.text.L10n;
@@ -673,7 +674,10 @@ public final class AutoTestBridge {
 		if (listener instanceof RowViewport viewport) {
 			rowViewports.add(viewport);
 			if (listener instanceof ContainerEventHandler container) {
-				for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+				viewport.syncLayout();
+				int top = viewport.viewportTop();
+				int bottom = viewport.viewportBottom();
+				for (GuiEventListener child : container.children()) collectRowButtons(child, widgets, top, bottom);
 			}
 			return;
 		}
@@ -681,15 +685,25 @@ public final class AutoTestBridge {
 		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets, rowViewports);
 	}
 
-	private static void collectRowButtons(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+	private static void collectRowButtons(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets, int viewportTop, int viewportBottom) {
 		if (listener instanceof ContainerEventHandler container) {
-			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets, viewportTop, viewportBottom);
 			return;
 		}
 		if (!(listener instanceof AbstractWidget widget)) return;
-		// The row's checkbox is represented by the row element itself; exposing it again as a bare widget would duplicate every row.
-		if (listener instanceof CheckboxWidget) return;
+		// The row's primary control (checkbox/card) is represented by the row element itself; exposing it again as a bare widget would duplicate every row.
+		if (listener instanceof CheckboxWidget || listener instanceof GroupSelectionList.RowPrimaryControl) return;
+		int y = widgetY(widget);
+		if (y < viewportTop || y + widget.getHeight() > viewportBottom) return;
 		widgets.add(widget);
+	}
+
+	private static int widgetY(AbstractWidget widget) {
+		/*? if >= 1.19.4 {*/
+		return widget.getY();
+		/*?} else {*/
+		/*return widget.y;
+		*//*?}*/
 	}
 
 	private static JsonArray elementsJson(List<GuiElement> elements) {
